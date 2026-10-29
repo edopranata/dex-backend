@@ -1,0 +1,118 @@
+# DEX Simulator: production stack. Run from this folder on the server:
+#   docker compose up -d --build        (deploy/deploy.sh does this for you)
+#
+# Expects the frontend repository next to this one (../frontend); the build context is the parent folder.
+# Settings come from .env in this folder (copy .env.docker.example; never commit it).
+#
+# Access:
+#   now     http://SERVER_IP:WEB_PORT (default 8080)
+#   later   Cloudflare Tunnel on the shared "edge" network -> http://dexsim:80 (see deploy/edge)
+
+name: dex
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: backend/docker/Dockerfile
+    target: app
+  image: dex-app:latest
+  env_file: .env
+  restart: unless-stopped
+  logging: *logging
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  web:
+    build:
+      context: ..
+      dockerfile: backend/docker/Dockerfile
+      target: web
+    image: dex-web:latest
+    restart: unless-stopped
+    ports:
+      # Set WEB_BIND=127.0.0.1 once traffic goes through Cloudflare Tunnel.
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-8080}:80"
+    networks:
+      default:
+      edge:
+        aliases:
+          - dexsim
+    depends_on:
+      - app
+    logging: *logging
+
+  # Runs database migrations once per deploy, before the app containers start.
+  migrate:
+    <<: *app
+    command: ["php", "artisan", "migrate", "--force"]
+    restart: "no"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  app:
+    <<: *app
+
+  queue:
+    <<: *app
+    command: ["php", "artisan", "queue:work", "redis", "--sleep=3", "--tries=2", "--timeout=600", "--max-time=3600"]
+    stop_grace_period: 620s
+
+  scheduler:
+    <<: *app
+    command: ["php", "artisan", "schedule:work"]
+
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    command: ["--innodb-buffer-pool-size=${MYSQL_BUFFER_POOL:-512M}", "--max-connections=60"]
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    logging: *logging
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *logging
+
+networks:
+  # Shared with other apps on this server and the Cloudflare Tunnel (deploy/edge).
+  edge:
+    external: true
+
+volumes:
+  mysql-data:
+  redis-data:

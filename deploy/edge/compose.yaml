@@ -1,0 +1,28 @@
+# Shared Cloudflare Tunnel for every app on this server (domain.com, dexsim.domain.com, ...).
+# Lives at /opt/edge on the server, independent of any single app:
+#   echo "CLOUDFLARE_TUNNEL_TOKEN=eyJ..." > /opt/edge/.env && docker compose -f /opt/edge/compose.yaml up -d
+#
+# Cloudflare Zero Trust > Networks > Tunnels > Public hostnames:
+#   dexsim.domain.com  ->  http://dexsim:80     (alias of the DEX Simulator web container)
+#   domain.com         ->  http://<alias>:80    (any other app attached to the "edge" network)
+
+name: edge
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN in /opt/edge/.env}
+    networks:
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  edge:
+    external: true
