@@ -43,13 +43,23 @@ main() {
     if curl -fsS -m 10 -o /dev/null "$url" 2>/dev/null; then
         log "pulih"
         rm -f "$state"
+        notify "Watchdog: layanan sempat mati" "Health check /up gagal ${failures}× berturut-turut, sudah dipulihkan otomatis."
     else
         log "BELUM pulih, cek manual: docker compose ps && docker compose logs --tail=100 app web"
+        # First failed recovery, then every ~30 minutes while it stays down.
+        if [ "$failures" -eq 2 ] || [ $(( failures % 15 )) -eq 0 ]; then
+            notify "Watchdog: layanan BELUM pulih" "Health check /up gagal ${failures}×. Cek: docker compose ps && docker compose logs --tail=100 app web"
+        fi
     fi
 }
 
 log() {
     echo "$(date '+%F %T') $*"
+}
+
+# Best effort: needs the app container, which is exactly what may be down.
+notify() {
+    timeout 60 docker compose exec -T app php artisan app:telegram-notify "$1" "$2" </dev/null >/dev/null 2>&1 || true
 }
 
 main

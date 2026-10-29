@@ -69,8 +69,8 @@ Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 
 - [ ] Rotate Gemini API key lama, isi key baru di Admin → Pengaturan → AI, klik *Tes koneksi AI*
 - [x] Uji pemulihan: reboot VPS sekali, pastikan semua layanan kembali sendiri — **29 Okt 2026: online lagi ±60 detik setelah reboot, semua container, scheduler & queue pulih; watchdog memulihkan app yang dihentikan dalam ±22 detik**
-- [ ] **Notifikasi Telegram**: sinyal Buy baru, TP/SL tercapai, peringatan rug pull, token masuk/keluar Market
-- [ ] Notifikasi Telegram untuk operasional: watchdog memulihkan layanan, backup gagal, job gagal
+- [x] **Notifikasi Telegram**: sinyal Buy baru, TP/SL tercapai, peringatan rug pull, token masuk/keluar Market, ringkasan harian, jam tenang — **29 Okt 2026: diatur dari Admin → Pengaturan → Telegram**
+- [x] Notifikasi Telegram untuk operasional: watchdog memulihkan layanan, backup gagal, job/jadwal gagal, AI dijeda lama
 - [ ] Monitor uptime eksternal gratis (mis. UptimeRobot / Healthchecks.io) ke `/up`, kirim ke Telegram
 - [ ] Salinan backup ke luar VPS (mis. Google Drive / Cloudflare R2), uji restore sekali
 

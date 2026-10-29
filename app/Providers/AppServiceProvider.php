@@ -2,12 +2,15 @@
 
 namespace App\Providers;
 
+use App\Jobs\SendTelegramMessage;
 use App\Models\User;
 use App\Services\Admin\SettingsStore;
 use App\Services\Admin\TaskRecorder;
+use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
@@ -39,5 +42,13 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(ScheduledTaskFinished::class, [TaskRecorder::class, 'finished']);
         Event::listen(ScheduledTaskFailed::class, [TaskRecorder::class, 'failed']);
         Event::listen(ScheduledTaskSkipped::class, [TaskRecorder::class, 'skipped']);
+
+        Queue::failing(function (JobFailed $event): void {
+            $name = class_basename($event->job->resolveName());
+
+            if ($name !== class_basename(SendTelegramMessage::class)) {
+                app(TelegramNotifier::class)->system("Job gagal: {$name}", $event->exception->getMessage(), "job:{$name}", 30);
+            }
+        });
     }
 }

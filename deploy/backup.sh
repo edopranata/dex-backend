@@ -13,6 +13,12 @@ BACKUP_DIR="${BACKUP_DIR:-/var/backups/dex}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 APP_UID=82
 
+notify_failure() {
+    timeout 60 docker compose exec -T app php artisan app:telegram-notify "Backup database gagal" \
+        "backup.sh berhenti di baris $1 ($(date '+%F %T')). Cek /var/log/dex-backup.log" </dev/null >/dev/null 2>&1 || true
+}
+trap 'notify_failure $LINENO' ERR
+
 mkdir -p "$BACKUP_DIR"
 
 FILE="$BACKUP_DIR/dex-$(date +%F-%H%M%S).sql.gz"

@@ -2,6 +2,7 @@
 
 namespace App\Services\Ai;
 
+use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
@@ -187,7 +188,13 @@ class AiClient
     {
         Cache::put(self::PAUSE_KEY, ['until' => $until->toIso8601String(), 'reason' => $reason], $until);
 
-        Log::warning("AI dijeda sampai {$until->copy()->setTimezone('Asia/Jakarta')->format('d M H:i')} WIB: {$reason}");
+        $message = "AI dijeda sampai {$until->copy()->setTimezone('Asia/Jakarta')->format('d M H:i')} WIB: {$reason}";
+        Log::warning($message);
+
+        // Short pauses (per-minute limit, busy server) recover by themselves; only long ones need attention.
+        if ($until->gt(now()->addMinutes(30))) {
+            app(TelegramNotifier::class)->system('AI dijeda', $message.' Analisis tetap jalan memakai lexicon/template.', 'ai-pause', 360);
+        }
     }
 
     /**

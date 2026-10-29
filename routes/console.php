@@ -31,5 +31,7 @@ Schedule::command('market:watchlist')->hourlyAt(40)->withoutOverlapping();
 
 Schedule::command('market:analyze')->cron('3,18,33,48 * * * *')->withoutOverlapping();
 
+Schedule::command('app:telegram-daily-summary')->hourlyAt(0);
+
 Schedule::command('model:prune')->dailyAt('03:00');
 Schedule::command('queue:prune-failed --hours=168')->dailyAt('03:30');

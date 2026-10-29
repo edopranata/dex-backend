@@ -7,6 +7,7 @@ use App\Enums\SignalStatus;
 use App\Models\Analysis;
 use App\Models\Candle;
 use App\Models\Token;
+use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Support\Collection;
 
 /**
@@ -21,6 +22,7 @@ class SignalEngine
         private SentimentAnalyzer $sentiment,
         private FundamentalAnalyzer $fundamental,
         private AnalysisSummarizer $summarizer,
+        private TelegramNotifier $notifier,
     ) {}
 
     public function analyze(Token $token): ?Analysis
@@ -101,6 +103,10 @@ class SignalEngine
             'summary' => $summary['summary'],
             'summary_provider' => $summary['provider'],
         ]);
+
+        if ($onchain['rug_alert'] || $onchain['is_honeypot']) {
+            $this->notifier->riskAlert($token, $onchain['reasons']);
+        }
 
         if ($levels !== [] && ! $token->signals()->open()->exists()) {
             $token->signals()->create([

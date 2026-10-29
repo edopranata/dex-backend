@@ -205,6 +205,29 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    /*
+    | Notifikasi Telegram. Bot token & chat ID biasanya diisi dari Admin → Pengaturan → Telegram.
+    */
+    'telegram' => [
+        'enabled' => (bool) env('TELEGRAM_ENABLED', false),
+        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'chat_id' => env('TELEGRAM_CHAT_ID'),
+        // BUY = Buy & Strong Buy, STRONG_BUY = hanya Strong Buy.
+        'signal_min' => env('TELEGRAM_SIGNAL_MIN', 'BUY'),
+        'notify' => [
+            'signals' => true,
+            'signal_updates' => true,
+            'risk' => true,
+            'watchlist' => true,
+            'system' => true,
+            'daily_summary' => true,
+        ],
+        'daily_summary_hour' => 21,
+        // Jam tenang (WIB): pesan non-darurat masuk tanpa bunyi. Sama = nonaktif.
+        'quiet_start_hour' => 23,
+        'quiet_end_hour' => 6,
+    ],
+
     'analysis' => [
         'timeframe' => '1h',
         'trend_timeframe' => '4h',

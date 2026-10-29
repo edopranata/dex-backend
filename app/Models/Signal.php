@@ -4,8 +4,10 @@ namespace App\Models;
 
 use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
+use App\Observers\SignalObserver;
 use Database\Factories\SignalFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -16,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'take_profit_1', 'take_profit_2', 'take_profit_3', 'entry_price', 'exit_price', 'max_tp_hit',
     'result_r', 'entered_at', 'closed_at',
 ])]
+#[ObservedBy(SignalObserver::class)]
 class Signal extends Model
 {
     /** @use HasFactory<SignalFactory> */

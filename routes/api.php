@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Admin\LogController;
 use App\Http\Controllers\Api\Admin\SettingsController;
 use App\Http\Controllers\Api\Admin\SystemController;
 use App\Http\Controllers\Api\Admin\TaskController;
+use App\Http\Controllers\Api\Admin\TelegramController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DiscoveryController;
@@ -69,6 +70,9 @@ Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.'
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
     Route::post('settings/test-ai', [SettingsController::class, 'testAi'])->middleware('throttle:10,1')->name('settings.test-ai');
+
+    Route::post('telegram/chats', [TelegramController::class, 'chats'])->middleware('throttle:10,1')->name('telegram.chats');
+    Route::post('telegram/test', [TelegramController::class, 'test'])->middleware('throttle:10,1')->name('telegram.test');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');

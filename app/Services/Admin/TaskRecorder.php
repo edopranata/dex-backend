@@ -3,6 +3,7 @@
 namespace App\Services\Admin;
 
 use App\Models\TaskRun;
+use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -49,6 +50,11 @@ class TaskRecorder
 
     private function record(Event $task, string $status, ?int $durationMs, ?string $output = null): void
     {
+        if ($status === 'failed') {
+            $command = self::commandName($task);
+            app(TelegramNotifier::class)->system("Jadwal gagal: {$command}", $output ?? "Exit code {$task->exitCode}", "task:{$command}");
+        }
+
         try {
             TaskRun::create([
                 'command' => mb_substr(self::commandName($task), 0, 191),
