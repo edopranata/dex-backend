@@ -3,6 +3,9 @@
 # Restore: gunzip -c FILE.sql.gz | docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
 set -euo pipefail
 
+# Dumps include password hashes: readable by the deploy user only.
+umask 077
+
 cd "$(dirname "$0")/.."
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/dex}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
