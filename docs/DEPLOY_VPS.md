@@ -139,6 +139,26 @@ Deploy menarik **kedua** repo, membangun ulang image, menjalankan migrasi, mengg
 
 Aktifkan AI: isi `AI_PROVIDER=gemini` dan `GEMINI_API_KEY=...` di `.env`, lalu `docker compose up -d`.
 
+## 6b. Pemulihan otomatis (server mati / reboot)
+
+Tiga lapis, dipasang oleh `deploy/server-setup.sh`:
+
+| Lapis | Apa yang dilakukan |
+|---|---|
+| Docker `restart: unless-stopped` | Container yang crash langsung dijalankan ulang oleh Docker. |
+| `dex.service` (systemd) | Saat boot menjalankan `docker compose up -d` (urutan MySQL/Redis → migrate → app/queue/scheduler → web) plus Cloudflare Tunnel jika ada; saat shutdown menghentikan container dengan rapi. |
+| Watchdog (cron tiap 2 menit) | Cek `http://127.0.0.1:8080/up`; gagal 2× berturut-turut → `docker compose up -d`, lalu restart web & app bila perlu. Tidak berjalan saat deploy. Log: `/var/log/dex-watchdog.log`. |
+
+Update keamanan yang membutuhkan reboot dijalankan otomatis pukul 04:00 WIB (matikan dengan `AUTO_REBOOT=0` saat menjalankan setup).
+
+Perintah berguna:
+
+```bash
+systemctl status dex                  # status service
+tail -f /var/log/dex-watchdog.log     # riwayat pemulihan
+sudo reboot                           # uji: setelah ±1–2 menit semua layanan harus kembali
+```
+
 ## 7. Pindah ke domain dengan Cloudflare Tunnel
 
 Satu tunnel dipakai bersama oleh semua aplikasi di VPS ini.

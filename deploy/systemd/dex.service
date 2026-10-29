@@ -1,0 +1,22 @@
+# Starts the DEX Simulator stack (and the shared Cloudflare Tunnel, if configured) when the server boots,
+# and stops it gracefully on shutdown. Installed by deploy/server-setup.sh to /etc/systemd/system/dex.service.
+[Unit]
+Description=DEX Simulator (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/dex/backend
+# compose honours depends_on: mysql/redis healthy -> migrate -> app, queue, scheduler -> web.
+ExecStart=/usr/bin/docker compose up -d --remove-orphans
+ExecStart=/bin/sh -c 'if [ -f /opt/edge/compose.yaml ]; then /usr/bin/docker compose -f /opt/edge/compose.yaml up -d; fi'
+ExecStop=/usr/bin/docker compose stop
+TimeoutStartSec=600
+# The queue worker may finish a running job (up to 600 s) before stopping.
+TimeoutStopSec=660
+
+[Install]
+WantedBy=multi-user.target

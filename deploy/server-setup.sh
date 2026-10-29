@@ -11,6 +11,7 @@
 #   BASE_ONLY=1     hanya konfigurasi dasar server (Docker, firewall, swap, user), tanpa aplikasi
 #   HARDEN_SSH=0    jangan matikan login SSH dengan password (default: dimatikan jika root sudah punya key)
 #   TIMEZONE        zona waktu server (default Asia/Jakarta)
+#   AUTO_REBOOT=0   jangan reboot otomatis untuk update keamanan (default: 04:00 WIB bila diperlukan)
 #
 # Aman dijalankan ulang: langkah yang sudah selesai dilewati, .env yang sudah ada tidak ditimpa.
 # Catatan: skrip ini dibaca dari stdin, jadi setiap perintah yang bisa membaca stdin diberi </dev/null.
@@ -29,6 +30,7 @@ SWAP_SIZE="${SWAP_SIZE:-2G}"
 BASE_ONLY="${BASE_ONLY:-0}"
 HARDEN_SSH="${HARDEN_SSH:-1}"
 TIMEZONE="${TIMEZONE:-Asia/Jakarta}"
+AUTO_REBOOT="${AUTO_REBOOT:-1}"
 
 step() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
 warn() { printf '\033[1;33m[!] %s\033[0m\n' "$*"; }
@@ -202,6 +204,19 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     chmod 600 /opt/edge/.env
     docker compose -f /opt/edge/compose.yaml up -d </dev/null
     ok "cloudflared berjalan; atur public hostname di dashboard Cloudflare -> http://dexsim:80"
+fi
+
+step "Auto-start saat boot & watchdog"
+install -m 644 "$APP_ROOT/backend/deploy/systemd/dex.service" /etc/systemd/system/dex.service
+systemctl daemon-reload
+systemctl enable dex.service >/dev/null 2>&1
+systemctl start dex.service
+echo "*/2 * * * * root $APP_ROOT/backend/deploy/watchdog.sh >> /var/log/dex-watchdog.log 2>&1" > /etc/cron.d/dex-watchdog
+ok "dex.service aktif saat boot; watchdog cek /up tiap 2 menit"
+
+if [ "$AUTO_REBOOT" = "1" ]; then
+    printf 'Unattended-Upgrade::Automatic-Reboot "true";\nUnattended-Upgrade::Automatic-Reboot-Time "04:00";\n' > /etc/apt/apt.conf.d/52dex-auto-reboot
+    ok "Reboot otomatis 04:00 WIB hanya jika update keamanan membutuhkannya"
 fi
 
 step "Backup database harian (02:30 WIB, cron root)"
