@@ -154,6 +154,8 @@ return [
     'backup' => [
         'path' => env('BACKUP_PATH', storage_path('app/backups')),
         'manual_cooldown_minutes' => (int) env('BACKUP_COOLDOWN_MINUTES', 60),
+        // Zona waktu nama file (sama dengan cron di host).
+        'timezone' => env('BACKUP_TIMEZONE', 'Asia/Jakarta'),
     ],
 
     /*

@@ -79,7 +79,8 @@ class BackupService
             throw new RuntimeException('Backup hanya didukung untuk MySQL/MariaDB.');
         }
 
-        $name = 'dex-'.now()->format('Y-m-d-His').'.sql.gz';
+        // Same local time as the host cron (deploy/backup.sh) so file names sort and read consistently.
+        $name = 'dex-'.now()->setTimezone(config('market.backup.timezone'))->format('Y-m-d-His').'.sql.gz';
         $path = $this->directory().'/'.$name;
 
         $process = Process::fromShellCommandline(
