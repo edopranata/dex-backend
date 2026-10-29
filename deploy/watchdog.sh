@@ -19,7 +19,7 @@ main() {
     url="http://127.0.0.1:${port:-8080}/up"
     state=/run/dex-watchdog.failures
 
-    if curl -fsS -m 10 -o /dev/null "$url"; then
+    if curl -fsS -m 10 -o /dev/null "$url" 2>/dev/null; then
         rm -f "$state"
         exit 0
     fi
@@ -34,13 +34,13 @@ main() {
     docker compose up -d --remove-orphans >/dev/null 2>&1
     sleep 20
 
-    if ! curl -fsS -m 10 -o /dev/null "$url"; then
+    if ! curl -fsS -m 10 -o /dev/null "$url" 2>/dev/null; then
         log "masih gagal: restart web & app"
         docker compose restart web app >/dev/null 2>&1
         sleep 15
     fi
 
-    if curl -fsS -m 10 -o /dev/null "$url"; then
+    if curl -fsS -m 10 -o /dev/null "$url" 2>/dev/null; then
         log "pulih"
         rm -f "$state"
     else
