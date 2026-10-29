@@ -61,7 +61,7 @@ class TelegramNotifier
 
         $lines[] = $this->link($token);
 
-        $this->sendTo($recipients, 'signals', implode("\n", $lines));
+        $this->sendTo($recipients, 'signals', implode("\n", $lines), replyMarkup: TelegramBuyFlow::keyboard($signal));
     }
 
     /**
@@ -73,7 +73,15 @@ class TelegramNotifier
         $message = $recipients->isEmpty() ? null : $this->progressMessage($signal, $previousStatus, $previousTpHit);
 
         if ($message !== null) {
-            $this->sendTo($recipients, $signal->status === SignalStatus::StopLoss ? 'stop_loss' : 'signal_updates', $message."\n".$this->link($signal->token));
+            // Entering the zone is the moment to buy, so that message carries the buy buttons.
+            $entered = $signal->status === SignalStatus::Active && $previousStatus === SignalStatus::Pending;
+
+            $this->sendTo(
+                $recipients,
+                $signal->status === SignalStatus::StopLoss ? 'stop_loss' : 'signal_updates',
+                $message."\n".$this->link($signal->token),
+                replyMarkup: $entered ? TelegramBuyFlow::keyboard($signal) : null,
+            );
         }
     }
 
@@ -341,25 +349,29 @@ class TelegramNotifier
 
     /**
      * @param  Collection<int, User>  $recipients
+     * @param  array<string, mixed>|null  $replyMarkup
      */
-    private function sendTo(Collection $recipients, string $type, string $html, bool $sync = false): void
+    private function sendTo(Collection $recipients, string $type, string $html, bool $sync = false, ?array $replyMarkup = null): void
     {
         foreach ($recipients as $user) {
-            $this->send($user, $type, $html, $sync);
+            $this->send($user, $type, $html, $sync, $replyMarkup);
         }
     }
 
     /**
      * Never let a notification problem (e.g. Redis down) break the pipeline that triggered it.
      */
-    private function send(User $user, string $type, string $html, bool $sync = false): void
+    /**
+     * @param  array<string, mixed>|null  $replyMarkup
+     */
+    private function send(User $user, string $type, string $html, bool $sync = false, ?array $replyMarkup = null): void
     {
         $silent = ! in_array($type, self::URGENT, true) && $this->isQuietTime($user);
 
         try {
             $sync
-                ? SendTelegramMessage::dispatchSync($user->telegram_chat_id, $html, $silent)
-                : SendTelegramMessage::dispatch($user->telegram_chat_id, $html, $silent);
+                ? SendTelegramMessage::dispatchSync($user->telegram_chat_id, $html, $silent, $replyMarkup)
+                : SendTelegramMessage::dispatch($user->telegram_chat_id, $html, $silent, $replyMarkup);
         } catch (Throwable $e) {
             Log::warning("Notifikasi Telegram gagal diantrikan: {$e->getMessage()}");
         }

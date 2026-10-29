@@ -1,7 +1,9 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\OrderType;
 use App\Models\Order;
+use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
 use App\Services\Trading\TradingService;
@@ -155,4 +157,73 @@ test('the order api accepts tp and sl on buys only', function () {
     $this->actingAs($this->user)->postJson('/api/orders', [
         'token_id' => $this->token->id, 'side' => 'sell', 'type' => 'market', 'quantity' => 1, 'stop_loss_price' => 1.9,
     ])->assertJsonValidationErrors('stop_loss_price');
+});
+
+test('following a signal with a limit fills at once when the price is already in the entry zone', function () {
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+
+    $orders = $this->trading->followSignal($this->user, $signal, 300, limit: true);
+    $buy = array_shift($orders);
+    $exits = $orders;
+
+    expect($buy->type)->toBe(OrderType::Limit)
+        ->and($buy->trigger_price)->toEqual(2.05)
+        ->and($buy->status)->toBe(OrderStatus::Filled)
+        ->and($exits)->toHaveCount(4)
+        ->and(collect($exits)->where('type', OrderType::StopLoss)->first()->quantity)->toEqualWithDelta($buy->filled_quantity, 1e-9)
+        ->and(collect($exits)->where('type', OrderType::TakeProfit)->sum('quantity'))->toEqualWithDelta($buy->filled_quantity, 1e-9);
+});
+
+test('a signal limit above the market waits and places its exits only when filled', function () {
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7, 'take_profit_1' => 2.1, 'take_profit_2' => 2.3, 'take_profit_3' => 2.6]);
+
+    [$buy] = $this->trading->followSignal($this->user, $signal, 300, limit: true);
+
+    expect($buy->status)->toBe(OrderStatus::Pending)
+        ->and(Order::where('parent_id', $buy->id)->count())->toBe(0);
+
+    $this->token->update(['price_usd' => 1.89]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect($buy->refresh()->status)->toBe(OrderStatus::Filled)
+        ->and(Order::where('parent_id', $buy->id)->where('status', OrderStatus::Pending)->count())->toBe(4);
+});
+
+test('after the first target the stop moves to the entry price for what is left, and the stop cancels the rest', function () {
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    [$buy] = $this->trading->followSignal($this->user, $signal, 300, limit: true);
+    $stop = Order::firstWhere(['parent_id' => $buy->id, 'type' => 'stop_loss']);
+
+    $this->token->update(['price_usd' => 2.31]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect($stop->refresh()->status)->toBe(OrderStatus::Pending)
+        ->and($stop->trigger_price)->toEqualWithDelta($buy->filled_price, 1e-9)
+        ->and($stop->quantity)->toEqualWithDelta($buy->filled_quantity * 2 / 3, 1e-9);
+
+    $this->token->update(['price_usd' => 1.99]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect($stop->refresh()->status)->toBe(OrderStatus::Filled)
+        ->and(Order::where('parent_id', $buy->id)->where('status', OrderStatus::Pending)->count())->toBe(0)
+        ->and($this->user->positions()->first()->quantity)->toEqual(0);
+});
+
+test('the last target cancels the remaining stop', function () {
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    [$buy] = $this->trading->followSignal($this->user, $signal, 300, limit: true);
+
+    $this->token->update(['price_usd' => 2.9]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect(Order::where('parent_id', $buy->id)->where('type', 'take_profit')->where('status', OrderStatus::Filled)->count())->toBe(3)
+        ->and(Order::firstWhere(['parent_id' => $buy->id, 'type' => 'stop_loss'])->status)->toBe(OrderStatus::Cancelled);
+});
+
+test('a closed signal or a price below its stop cannot be followed', function () {
+    $closed = Signal::factory()->for($this->token)->create(['status' => 'stop_loss', 'closed_at' => now()]);
+    $broken = Signal::factory()->for($this->token)->create(['stop_loss' => 2.1, 'entry_high' => 2.2, 'take_profit_1' => 2.5, 'take_profit_2' => 2.6, 'take_profit_3' => 2.7]);
+
+    expect(fn () => $this->trading->followSignal($this->user, $closed, 100, limit: true))->toThrow(ValidationException::class, 'sudah ditutup')
+        ->and(fn () => $this->trading->followSignal($this->user, $broken, 100, limit: true))->toThrow(ValidationException::class, 'di bawah stop loss');
 });

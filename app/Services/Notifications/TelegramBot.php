@@ -11,14 +11,20 @@ use Illuminate\Support\Facades\RateLimiter;
  */
 class TelegramBot
 {
-    public function __construct(private TelegramLinker $linker, private TelegramNotifier $notifier) {}
+    public function __construct(private TelegramLinker $linker, private TelegramNotifier $notifier, private TelegramBuyFlow $buyFlow) {}
 
     /**
      * @param  array<string, mixed>  $update
-     * @return array{chat_id: string, text: string}|null
+     * @return array{chat_id: string, text: string, reply_markup?: array<string, mixed>}|null
      */
     public function handle(array $update): ?array
     {
+        if (is_array($update['callback_query'] ?? null)) {
+            $this->buyFlow->handleCallback($update['callback_query']);
+
+            return null;
+        }
+
         $message = $update['message'] ?? null;
 
         if (! is_array($message) || ! isset($message['chat']['id'], $message['text'])) {
@@ -26,6 +32,12 @@ class TelegramBot
         }
 
         $chatId = (string) $message['chat']['id'];
+
+        // An amount typed after "Nominal lain" (commands still work and cancel nothing).
+        if (! str_starts_with(trim((string) $message['text']), '/') && ($reply = $this->buyFlow->handleAmount($chatId, (string) $message['text'])) !== null) {
+            return $reply;
+        }
+
         $username = $message['from']['username'] ?? null;
         [$command, $argument] = $this->parse((string) $message['text']);
 

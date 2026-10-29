@@ -217,6 +217,8 @@ return [
         'enabled' => (bool) env('TELEGRAM_ENABLED', false),
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
         'link_code_ttl_minutes' => 15,
+        // Tombol nominal (USD) di bawah pesan sinyal untuk beli langsung dari Telegram.
+        'buy_presets' => [25, 50, 100],
         // Bawaan preferensi tiap pengguna (bisa diubah sendiri di Profil → Notifikasi).
         'defaults' => [
             'signals' => true,

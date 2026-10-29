@@ -19,19 +19,56 @@ class TelegramClient
     }
 
     /**
-     * Send an HTML-formatted message to a chat.
+     * Send an HTML-formatted message to a chat, optionally with buttons.
+     *
+     * @param  array<string, mixed>|null  $replyMarkup
+     * @return array<string, mixed> The sent message.
      *
      * @throws TelegramException
      */
-    public function send(string $chatId, string $html, bool $silent = false): void
+    public function send(string $chatId, string $html, bool $silent = false, ?array $replyMarkup = null): array
     {
-        $this->call('sendMessage', [
+        return (array) $this->call('sendMessage', array_filter([
             'chat_id' => $chatId,
             'text' => mb_substr($html, 0, 4000),
             'parse_mode' => 'HTML',
             'link_preview_options' => ['is_disabled' => true],
             'disable_notification' => $silent,
-        ]);
+            'reply_markup' => $replyMarkup,
+        ], fn ($value): bool => $value !== null));
+    }
+
+    /**
+     * Replace the text (and buttons) of a message the bot sent earlier.
+     *
+     * @param  array<string, mixed>|null  $replyMarkup  Null removes the buttons.
+     *
+     * @throws TelegramException
+     */
+    public function edit(string $chatId, int $messageId, string $html, ?array $replyMarkup = null): void
+    {
+        $this->call('editMessageText', array_filter([
+            'chat_id' => $chatId,
+            'message_id' => $messageId,
+            'text' => mb_substr($html, 0, 4000),
+            'parse_mode' => 'HTML',
+            'link_preview_options' => ['is_disabled' => true],
+            'reply_markup' => $replyMarkup,
+        ], fn ($value): bool => $value !== null));
+    }
+
+    /**
+     * Stop the loading spinner on a tapped button, optionally with a short toast or alert.
+     *
+     * @throws TelegramException
+     */
+    public function answerCallback(string $callbackId, ?string $text = null, bool $alert = false): void
+    {
+        $this->call('answerCallbackQuery', array_filter([
+            'callback_query_id' => $callbackId,
+            'text' => $text,
+            'show_alert' => $alert ?: null,
+        ], fn ($value): bool => $value !== null));
     }
 
     /**
@@ -66,7 +103,7 @@ class TelegramClient
         $this->call('setWebhook', [
             'url' => $this->webhookUrl(),
             'secret_token' => $this->webhookSecret(),
-            'allowed_updates' => ['message'],
+            'allowed_updates' => ['message', 'callback_query'],
             'drop_pending_updates' => true,
         ]);
     }
@@ -80,11 +117,13 @@ class TelegramClient
     {
         $info = $this->call('getWebhookInfo');
         $url = (string) ($info['url'] ?? '');
+        // Button taps (callback_query) must be delivered too; an empty list means "all default types".
+        $receivesButtons = empty($info['allowed_updates']) || in_array('callback_query', $info['allowed_updates'], true);
 
         return [
             'url' => $url,
             'expected_url' => $this->webhookUrl(),
-            'connected' => $url === $this->webhookUrl(),
+            'connected' => $url === $this->webhookUrl() && $receivesButtons,
             'pending' => (int) ($info['pending_update_count'] ?? 0),
             'last_error' => $info['last_error_message'] ?? null,
             'last_error_at' => isset($info['last_error_date']) ? Carbon::createFromTimestamp($info['last_error_date'])->toIso8601String() : null,

@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'user_id', 'token_id', 'signal_id', 'parent_id', 'side', 'type', 'status', 'amount_usd', 'quantity',
-    'trigger_price', 'take_profit_price', 'stop_loss_price', 'filled_price', 'filled_quantity', 'total_usd', 'fee_usd', 'slippage_pct',
+    'trigger_price', 'take_profit_price', 'stop_loss_price', 'exit_plan', 'filled_price', 'filled_quantity', 'total_usd', 'fee_usd', 'slippage_pct',
     'realized_pnl', 'note', 'filled_at',
 ])]
 class Order extends Model

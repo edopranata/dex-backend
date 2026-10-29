@@ -32,7 +32,7 @@ class TradingService
      * A buy may carry a take profit and/or stop loss: once it fills, both are placed for the
      * filled quantity as a one-cancels-the-other pair (like TP/SL on Binance or Bybit).
      *
-     * @param  array{side: string, type: string, amount_usd?: float|null, quantity?: float|null, trigger_price?: float|null, take_profit_price?: float|null, stop_loss_price?: float|null, note?: string|null}  $data
+     * @param  array{side: string, type: string, amount_usd?: float|null, quantity?: float|null, trigger_price?: float|null, take_profit_price?: float|null, stop_loss_price?: float|null, exit_plan?: string|null, note?: string|null}  $data
      *
      * @throws ValidationException
      */
@@ -66,8 +66,14 @@ class TradingService
             'trigger_price' => $type === OrderType::Market ? null : $data['trigger_price'],
             'take_profit_price' => $takeProfit,
             'stop_loss_price' => $stopLoss,
+            'exit_plan' => $side === OrderSide::Buy ? ($data['exit_plan'] ?? null) : null,
             'note' => $data['note'] ?? null,
         ]);
+
+        // A limit buy at or above the current price is marketable: fill it now, like an exchange would.
+        if ($type === OrderType::Limit && $token->price_usd !== null && $type->isTriggered($side, (float) $order->trigger_price, $token->price_usd)) {
+            $this->execute($order, $token->price_usd);
+        }
 
         if ($type === OrderType::Market) {
             $this->prices->ensureFresh($token);
@@ -106,7 +112,7 @@ class TradingService
                 $this->placeExits($order);
             } else {
                 $this->fillSell($order, $user, $position, $token, $marketPrice);
-                $this->cancelSiblings($order);
+                $this->afterExitFill($order);
             }
 
             return $order;
@@ -150,34 +156,46 @@ class TradingService
     }
 
     /**
-     * Market buy now, then a stop loss for the whole position and a take profit for a third at each target.
+     * Buy into a signal (market, or limit at the top of its entry zone). Once the buy fills, the
+     * position is managed like the signal tracker does: a stop loss for everything, a third sold at
+     * each target, and the stop moved to the entry price after the first target.
      *
-     * @return list<Order>
+     * @return list<Order> The buy first, then any exit orders already placed.
      *
      * @throws ValidationException
      */
-    public function followSignal(User $user, Signal $signal, float $amountUsd): array
+    public function followSignal(User $user, Signal $signal, float $amountUsd, bool $limit = false): array
     {
         $token = $signal->token;
-        $buy = $this->place($user, $token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => $amountUsd, 'note' => "Ikuti sinyal #{$signal->id}"], $signal);
 
-        if ($buy->status !== OrderStatus::Filled) {
+        if (! $signal->status->isOpen()) {
+            throw ValidationException::withMessages(['signal' => 'Sinyal ini sudah ditutup.']);
+        }
+
+        $this->prices->ensureFresh($token);
+
+        if ($token->price_usd !== null && $token->price_usd <= $signal->stop_loss) {
+            throw ValidationException::withMessages(['signal' => 'Harga sudah di bawah stop loss sinyal.']);
+        }
+
+        if ($user->balance_usd < $amountUsd) {
+            throw ValidationException::withMessages(['amount_usd' => 'Saldo USD tidak cukup.']);
+        }
+
+        $buy = $this->place($user, $token, [
+            'side' => 'buy',
+            'type' => $limit ? 'limit' : 'market',
+            'amount_usd' => $amountUsd,
+            'trigger_price' => $limit ? $signal->entry_high : null,
+            'exit_plan' => 'signal',
+            'note' => "Ikuti sinyal #{$signal->id}",
+        ], $signal);
+
+        if (in_array($buy->status, [OrderStatus::Rejected, OrderStatus::Cancelled], true)) {
             throw ValidationException::withMessages(['amount_usd' => $buy->note ?? 'Order beli gagal.']);
         }
 
-        $orders = [$buy];
-        $quantity = $buy->filled_quantity;
-        $orders[] = $this->place($user, $token, [
-            'side' => 'sell', 'type' => 'stop_loss', 'quantity' => $quantity, 'trigger_price' => $signal->stop_loss, 'note' => "SL sinyal #{$signal->id}",
-        ], $signal);
-
-        foreach ($signal->takeProfits() as $index => $target) {
-            $orders[] = $this->place($user, $token, [
-                'side' => 'sell', 'type' => 'take_profit', 'quantity' => $quantity / 3, 'trigger_price' => $target, 'note' => 'TP'.($index + 1)." sinyal #{$signal->id}",
-            ], $signal);
-        }
-
-        return $orders;
+        return [$buy, ...Order::query()->where('parent_id', $buy->id)->orderBy('id')->get()->all()];
     }
 
     /**
@@ -323,7 +341,17 @@ class TradingService
      */
     private function placeExits(Order $order): void
     {
-        if ($order->status !== OrderStatus::Filled || ($order->take_profit_price === null && $order->stop_loss_price === null)) {
+        if ($order->status !== OrderStatus::Filled) {
+            return;
+        }
+
+        if ($order->exit_plan === 'signal' && $order->signal !== null) {
+            $this->placeSignalExits($order, $order->signal);
+
+            return;
+        }
+
+        if ($order->take_profit_price === null && $order->stop_loss_price === null) {
             return;
         }
 
@@ -349,19 +377,63 @@ class TradingService
     }
 
     /**
-     * One-cancels-the-other: when the TP or SL of a buy fills, the other one is no longer needed.
+     * Stop loss for the whole filled quantity and a third of it at each of the signal's targets.
      */
-    private function cancelSiblings(Order $order): void
+    private function placeSignalExits(Order $order, Signal $signal): void
+    {
+        $exits = [[OrderType::StopLoss, $signal->stop_loss, $order->filled_quantity, "SL sinyal #{$signal->id} (order #{$order->id})"]];
+
+        foreach ($signal->takeProfits() as $index => $target) {
+            $exits[] = [OrderType::TakeProfit, $target, $order->filled_quantity / 3, 'TP'.($index + 1)." sinyal #{$signal->id} (order #{$order->id})"];
+        }
+
+        foreach ($exits as [$type, $price, $quantity, $note]) {
+            Order::create([
+                'user_id' => $order->user_id,
+                'token_id' => $order->token_id,
+                'signal_id' => $signal->id,
+                'parent_id' => $order->id,
+                'side' => OrderSide::Sell,
+                'type' => $type,
+                'status' => OrderStatus::Pending,
+                'quantity' => $quantity,
+                'trigger_price' => $price,
+                'note' => $note,
+            ]);
+        }
+    }
+
+    /**
+     * After an exit of a buy fills. A plain TP/SL pair is one-cancels-the-other. A signal plan keeps
+     * its remaining targets and moves the stop to the entry price for the quantity still held.
+     */
+    private function afterExitFill(Order $order): void
     {
         if ($order->parent_id === null || $order->status !== OrderStatus::Filled) {
             return;
         }
 
-        Order::query()
-            ->where('parent_id', $order->parent_id)
-            ->whereKeyNot($order->id)
-            ->where('status', OrderStatus::Pending)
-            ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis (OCO): pasangannya #{$order->id} sudah terisi."]);
+        $parent = Order::query()->find($order->parent_id);
+        $pending = fn () => Order::query()->where('parent_id', $order->parent_id)->whereKeyNot($order->id)->where('status', OrderStatus::Pending);
+
+        if ($parent?->exit_plan === 'signal' && $order->type === OrderType::TakeProfit) {
+            $remaining = (float) $pending()->where('type', OrderType::TakeProfit)->sum('quantity');
+            $stop = $pending()->where('type', OrderType::StopLoss)->first();
+
+            if ($remaining <= self::DUST) {
+                $stop?->update(['status' => OrderStatus::Cancelled, 'note' => 'Dibatalkan otomatis: semua target tercapai.']);
+            } else {
+                $stop?->update([
+                    'trigger_price' => max((float) $stop->trigger_price, (float) $parent->filled_price),
+                    'quantity' => $remaining,
+                    'note' => "SL dipindah ke harga entry (breakeven) setelah #{$order->id} terisi.",
+                ]);
+            }
+
+            return;
+        }
+
+        $pending()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis (OCO): pasangannya #{$order->id} sudah terisi."]);
     }
 
     private function reject(Order $order, string $reason): void

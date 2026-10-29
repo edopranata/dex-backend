@@ -20,8 +20,9 @@ class SendTelegramMessage implements ShouldQueue
 
     /**
      * @param  bool  $silent  Deliver without sound (quiet hours).
+     * @param  array<string, mixed>|null  $replyMarkup  Inline buttons, e.g. the buy buttons under a signal.
      */
-    public function __construct(public string $chatId, public string $html, public bool $silent = false) {}
+    public function __construct(public string $chatId, public string $html, public bool $silent = false, public ?array $replyMarkup = null) {}
 
     /**
      * @return list<int>
@@ -38,7 +39,7 @@ class SendTelegramMessage implements ShouldQueue
         }
 
         try {
-            $telegram->send($this->chatId, $this->html, $this->silent);
+            $telegram->send($this->chatId, $this->html, $this->silent, $this->replyMarkup);
         } catch (TelegramException $e) {
             if ($e->retryAfter !== null) {
                 $this->release($e->retryAfter + 1);
