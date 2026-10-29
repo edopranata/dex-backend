@@ -19,7 +19,10 @@ class SyncTokenCandles implements ShouldBeUnique, ShouldQueue
     /**
      * @param  list<string>  $timeframes
      */
-    public function __construct(public Token $token, public array $timeframes) {}
+    public function __construct(public Token $token, public array $timeframes)
+    {
+        $this->onQueue(config('market.market_data_queue'));
+    }
 
     public function uniqueId(): string
     {

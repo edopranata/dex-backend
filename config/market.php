@@ -50,6 +50,10 @@ return [
     // API publik GeckoTerminal dibatasi per IP; naikkan jika memakai paket berbayar.
     'geckoterminal_requests_per_minute' => (int) env('GECKOTERMINAL_RPM', 10),
 
+    // Jobs that call GeckoTerminal run on their own queue (worker "queue-market"), so analysis
+    // and Telegram notifications on the default queue never wait behind the API rate limit.
+    'market_data_queue' => 'market-data',
+
     // Pair dengan likuiditas di bawah ini disembunyikan dari hasil pencarian (banyak token spam).
     'min_search_liquidity_usd' => 20000,
 

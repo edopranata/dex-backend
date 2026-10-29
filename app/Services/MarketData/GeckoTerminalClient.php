@@ -5,19 +5,27 @@ namespace App\Services\MarketData;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 use InvalidArgumentException;
 use RuntimeException;
 use Throwable;
 
 /**
- * OHLCV candles and recent trades for DEX pools. The free public API is rate limited
- * per IP, so requests are throttled across every worker through the cache-backed limiter.
+ * OHLCV candles and recent trades for DEX pools. The free public API is rate limited per IP
+ * and rejects bursts, so requests are spaced evenly across every worker (one every
+ * 60 / limit seconds) and a 429 pauses all of them.
  */
 class GeckoTerminalClient
 {
     private const MAX_429_RETRIES = 3;
+
+    /**
+     * Unix time (float) before which no request may start.
+     */
+    private const NEXT_SLOT_KEY = 'geckoterminal:next-slot';
 
     /**
      * @var array<string, array{0: string, 1: int, 2: int}>
@@ -115,15 +123,21 @@ class GeckoTerminalClient
     private function get(string $path, array $query): Response
     {
         for ($attempt = 0; ; $attempt++) {
-            $this->waitForRateLimit();
+            $this->waitForTurn();
 
             $response = $this->request()->get($path, $query);
 
-            if ($response->status() !== 429 || $attempt >= self::MAX_429_RETRIES) {
+            if ($response->status() !== 429) {
                 break;
             }
 
-            sleep(20 * ($attempt + 1));
+            $pause = max(20 * ($attempt + 1), (int) $response->header('Retry-After'));
+            Cache::put(self::NEXT_SLOT_KEY, $this->clock() + $pause, 600);
+            Log::warning(sprintf('GeckoTerminal 429 (%s): semua request dijeda %d detik, percobaan %d/%d.', strtok($path, '?'), $pause, $attempt + 1, self::MAX_429_RETRIES + 1));
+
+            if ($attempt >= self::MAX_429_RETRIES) {
+                break;
+            }
         }
 
         if ($response->status() === 404) {
@@ -133,18 +147,47 @@ class GeckoTerminalClient
         return $response->throw();
     }
 
-    private function waitForRateLimit(): void
+    /**
+     * Claim the next free request slot, waiting until it comes up. The slot is shared through
+     * the cache, so web requests and every worker together stay under the limit.
+     */
+    private function waitForTurn(): void
     {
-        $deadline = time() + 120;
-        $perMinute = config('market.geckoterminal_requests_per_minute');
+        $interval = 60 / max(1, (int) config('market.geckoterminal_requests_per_minute'));
+        $deadline = $this->clock() + 180;
 
-        while (! RateLimiter::attempt('geckoterminal', $perMinute, fn (): bool => true, 60)) {
-            if (time() > $deadline) {
+        while (true) {
+            $wait = Cache::lock('geckoterminal:slot-lock', 5)->block(5, function () use ($interval): float {
+                $now = $this->clock();
+                $next = (float) Cache::get(self::NEXT_SLOT_KEY, 0);
+
+                if ($now < $next) {
+                    return $next - $now;
+                }
+
+                Cache::put(self::NEXT_SLOT_KEY, $now + $interval, 600);
+
+                return 0.0;
+            });
+
+            if ($wait <= 0) {
+                return;
+            }
+
+            if ($this->clock() + $wait > $deadline) {
                 throw new RuntimeException('GeckoTerminal rate limit wait timed out.');
             }
 
-            sleep(2);
+            Sleep::usleep((int) ceil($wait * 1_000_000));
         }
+    }
+
+    /**
+     * Unix time with microseconds from the framework clock (so tests can travel in time).
+     */
+    private function clock(): float
+    {
+        return (float) now()->format('U.u');
     }
 
     private function request(): PendingRequest

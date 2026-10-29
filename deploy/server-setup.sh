@@ -231,5 +231,5 @@ $(printf '\033[1;32m')Selesai!$(printf '\033[0m') Aplikasi: http://$SERVER_IP:$P
 
   Buat akun:        cd $APP_ROOT/backend && docker compose exec app php artisan app:create-user
   Data pasar awal:  docker compose exec app php artisan market:bootstrap
-  Log:              docker compose logs -f app queue scheduler
+  Log:              docker compose logs -f app queue queue-market scheduler
 MSG

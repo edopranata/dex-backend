@@ -52,7 +52,11 @@ class SystemInfo
             ],
             'queue' => [
                 'connection' => config('queue.default'),
-                'pending' => rescue(fn (): int => Queue::size(), null, report: false),
+                'pending' => rescue(fn (): int => Queue::size() + Queue::size(config('market.market_data_queue')), null, report: false),
+                'queues' => [
+                    'default' => rescue(fn (): int => Queue::size(), null, report: false),
+                    'market_data' => rescue(fn (): int => Queue::size(config('market.market_data_queue')), null, report: false),
+                ],
                 'failed' => DB::table('failed_jobs')->count(),
             ],
             'redis' => rescue(fn (): array => [

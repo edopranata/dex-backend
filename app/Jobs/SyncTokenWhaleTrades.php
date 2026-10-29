@@ -16,7 +16,10 @@ class SyncTokenWhaleTrades implements ShouldBeUnique, ShouldQueue
 
     public int $timeout = 120;
 
-    public function __construct(public Token $token) {}
+    public function __construct(public Token $token)
+    {
+        $this->onQueue(config('market.market_data_queue'));
+    }
 
     public function uniqueId(): string
     {

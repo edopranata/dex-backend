@@ -34,6 +34,7 @@
         <env name="AI_PROVIDER" value="none" force="true"/>
         <env name="GEMINI_API_KEY" value="" force="true"/>
         <env name="OPENAI_API_KEY" value="" force="true"/>
+        <env name="GECKOTERMINAL_RPM" value="60000" force="true"/>
         <env name="TELEGRAM_ENABLED" value="false" force="true"/>
         <env name="TELEGRAM_BOT_TOKEN" value="" force="true"/>
         <env name="COINGECKO_DEMO_API_KEY" value="" force="true"/>
