@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Admin\SettingsRegistry;
 use App\Services\Admin\SettingsStore;
 use App\Services\Ai\AiClient;
+use App\Services\Notifications\TelegramClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
@@ -86,6 +87,7 @@ class SettingsController extends Controller
         $this->validateWeights($values);
         $store->set($values, $request->user()->id);
         $this->resumeAiIfChanged(array_keys($values));
+        $this->connectTelegramIfChanged(array_keys($values));
 
         return $this->index($store);
     }
@@ -120,6 +122,21 @@ class SettingsController extends Controller
 
                 return;
             }
+        }
+    }
+
+    /**
+     * Saving a new bot token (or switching Telegram on) points the bot at our webhook right away.
+     * Failures show up in the bot status panel instead of failing the save.
+     *
+     * @param  list<string>  $keys
+     */
+    private function connectTelegramIfChanged(array $keys): void
+    {
+        $telegram = app(TelegramClient::class);
+
+        if (array_intersect($keys, ['market.telegram.bot_token', 'market.telegram.enabled']) !== [] && $telegram->isActive()) {
+            rescue(fn () => $telegram->connectWebhook(), report: false);
         }
     }
 

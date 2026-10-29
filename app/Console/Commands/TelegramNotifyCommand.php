@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Services\Notifications\TelegramClient;
 use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -11,10 +12,10 @@ use Illuminate\Console\Command;
 #[Description('Kirim notifikasi operasional ke Telegram tanpa queue (dipakai watchdog & backup)')]
 class TelegramNotifyCommand extends Command
 {
-    public function handle(TelegramNotifier $notifier): int
+    public function handle(TelegramClient $telegram, TelegramNotifier $notifier): int
     {
-        if (! $notifier->enabled('system')) {
-            $this->components->warn('Notifikasi Telegram operasional nonaktif.');
+        if (! $telegram->isActive()) {
+            $this->components->warn('Notifikasi Telegram nonaktif.');
 
             return self::SUCCESS;
         }

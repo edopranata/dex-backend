@@ -18,7 +18,12 @@ class UserController extends Controller
         $users = User::query()
             ->withCount(['positions' => fn ($q) => $q->where('quantity', '>', 0), 'orders'])
             ->orderBy('id')
-            ->get(['id', 'name', 'email', 'balance_usd', 'is_admin', 'created_at']);
+            ->get(['id', 'name', 'email', 'balance_usd', 'is_admin', 'created_at', 'two_factor_confirmed_at', 'telegram_chat_id'])
+            ->map(fn (User $user): array => [
+                ...$user->only('id', 'name', 'email', 'balance_usd', 'is_admin', 'created_at', 'positions_count', 'orders_count'),
+                'two_factor_enabled' => $user->two_factor_confirmed_at !== null,
+                'telegram_linked' => $user->telegram_chat_id !== null,
+            ]);
 
         return response()->json(['data' => $users]);
     }
@@ -44,6 +49,7 @@ class UserController extends Controller
             'email' => ['sometimes', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'password' => ['sometimes', 'nullable', Password::defaults()],
             'is_admin' => ['sometimes', 'boolean'],
+            'disable_two_factor' => ['sometimes', 'accepted'],
         ]);
 
         if ($user->is($request->user()) && array_key_exists('is_admin', $data) && ! $data['is_admin']) {
@@ -52,6 +58,12 @@ class UserController extends Controller
 
         if (blank($data['password'] ?? null)) {
             unset($data['password']);
+        }
+
+        // For a user who lost their phone and recovery codes.
+        if (isset($data['disable_two_factor'])) {
+            $user->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null]);
+            unset($data['disable_two_factor']);
         }
 
         $user->update($data);

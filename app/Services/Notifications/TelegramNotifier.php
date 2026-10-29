@@ -9,16 +9,19 @@ use App\Jobs\SendTelegramMessage;
 use App\Models\Analysis;
 use App\Models\Signal;
 use App\Models\Token;
+use App\Models\User;
 use App\Models\WatchlistEvent;
+use App\Services\Trading\PortfolioSummary;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Throwable;
 
 /**
- * Turns app events into Telegram messages. Every type can be switched off in Admin → Pengaturan;
- * during quiet hours non-urgent messages arrive without sound.
+ * Turns app events into Telegram messages for every user who linked a chat, following each
+ * user's own preferences (Profil → Notifikasi). Operational alerts go to admins only.
  */
 class TelegramNotifier
 {
@@ -27,17 +30,13 @@ class TelegramNotifier
      */
     private const URGENT = ['risk', 'system', 'stop_loss'];
 
-    public function enabled(string $type): bool
-    {
-        return (bool) config('market.telegram.enabled')
-            && filled(config('market.telegram.bot_token'))
-            && filled(config('market.telegram.chat_id'))
-            && (bool) config("market.telegram.notify.{$type}");
-    }
+    public function __construct(private TelegramClient $telegram, private PortfolioSummary $portfolio) {}
 
     public function newSignal(Signal $signal): void
     {
-        if (! $this->enabled('signals') || ! $this->passesSignalFilter($signal)) {
+        $recipients = $this->recipients('signals', $signal);
+
+        if ($recipients->isEmpty()) {
             return;
         }
 
@@ -62,7 +61,7 @@ class TelegramNotifier
 
         $lines[] = $this->link($token);
 
-        $this->send('signals', implode("\n", $lines));
+        $this->sendTo($recipients, 'signals', implode("\n", $lines));
     }
 
     /**
@@ -70,18 +69,11 @@ class TelegramNotifier
      */
     public function signalProgress(Signal $signal, SignalStatus $previousStatus, int $previousTpHit): void
     {
-        if (! $this->passesSignalFilter($signal)) {
-            return;
-        }
-
-        if (! $this->enabled('signal_updates')) {
-            return;
-        }
-
-        $message = $this->progressMessage($signal, $previousStatus, $previousTpHit);
+        $recipients = $this->recipients('signal_updates', $signal);
+        $message = $recipients->isEmpty() ? null : $this->progressMessage($signal, $previousStatus, $previousTpHit);
 
         if ($message !== null) {
-            $this->send($signal->status === SignalStatus::StopLoss ? 'stop_loss' : 'signal_updates', $message."\n".$this->link($signal->token));
+            $this->sendTo($recipients, $signal->status === SignalStatus::StopLoss ? 'stop_loss' : 'signal_updates', $message."\n".$this->link($signal->token));
         }
     }
 
@@ -92,7 +84,9 @@ class TelegramNotifier
      */
     public function riskAlert(Token $token, array $reasons): void
     {
-        if (! $this->enabled('risk') || ! Cache::add("telegram:risk:{$token->id}", true, now()->addHours(12))) {
+        $recipients = $this->recipients('risk');
+
+        if ($recipients->isEmpty() || ! Cache::add("telegram:risk:{$token->id}", true, now()->addHours(12))) {
             return;
         }
 
@@ -102,14 +96,13 @@ class TelegramNotifier
             $lines[] = '• '.e($reason);
         }
 
-        if ($token->positions()->where('quantity', '>', 0)->exists()) {
-            $lines[] = '';
-            $lines[] = 'Ada posisi terbuka di token ini — pertimbangkan untuk keluar.';
+        $message = implode("\n", $lines);
+        $holders = $token->positions()->where('quantity', '>', 0)->pluck('user_id')->all();
+
+        foreach ($recipients as $user) {
+            $note = in_array($user->id, $holders, true) ? "\n\nAnda punya posisi terbuka di token ini — pertimbangkan untuk keluar." : '';
+            $this->send($user, 'risk', $message.$note."\n".$this->link($token));
         }
-
-        $lines[] = $this->link($token);
-
-        $this->send('risk', implode("\n", $lines));
     }
 
     public function watchlist(WatchlistEvent $event): void
@@ -120,11 +113,11 @@ class TelegramNotifier
             default => [null, null],
         };
 
-        if ($icon === null || ! $this->enabled('watchlist')) {
+        if ($icon === null) {
             return;
         }
 
-        $this->send('watchlist', implode("\n", [
+        $this->sendTo($this->recipients('watchlist'), 'watchlist', implode("\n", [
             "{$icon} <b>{$this->symbol($event->token)}</b> {$verb}".($event->score !== null ? " (skor {$event->score})" : ''),
             e($event->reason),
             $this->link($event->token),
@@ -132,13 +125,15 @@ class TelegramNotifier
     }
 
     /**
-     * Operational alert. With a dedupe key, the same alert is sent at most once per window.
+     * Operational alert for admins. With a dedupe key, the same alert is sent at most once per window.
      *
      * @param  bool  $sync  Send right away instead of through the queue (e.g. from the watchdog).
      */
     public function system(string $title, string $detail = '', ?string $dedupeKey = null, int $dedupeMinutes = 60, bool $sync = false): void
     {
-        if (! $this->enabled('system')) {
+        $recipients = $this->recipients('system');
+
+        if ($recipients->isEmpty()) {
             return;
         }
 
@@ -146,21 +141,35 @@ class TelegramNotifier
             return;
         }
 
-        $this->send('system', '⚠️ <b>'.e($title).'</b>'.($detail !== '' ? "\n".e(Str::limit($detail, 1500)) : ''), $sync);
+        $this->sendTo($recipients, 'system', '⚠️ <b>'.e($title).'</b>'.($detail !== '' ? "\n".e(Str::limit($detail, 1500)) : ''), $sync);
     }
 
-    public function dailySummary(): void
+    /**
+     * Daily summary for every user whose chosen hour (WIB) is now, or for everyone who wants one when forced.
+     */
+    public function dailySummaries(bool $force = false): int
     {
-        if (! $this->enabled('daily_summary')) {
-            return;
+        $hour = now('Asia/Jakarta')->hour;
+        $recipients = $this->recipients('daily_summary')
+            ->filter(fn (User $user): bool => $force || $user->notificationSettings()['daily_summary_hour'] === $hour);
+
+        foreach ($recipients as $user) {
+            $this->send($user, 'daily_summary', $this->dailySummary($user));
         }
 
+        return $recipients->count();
+    }
+
+    public function dailySummary(User $user): string
+    {
         $since = now()->subDay();
         $closed = Signal::query()->with('token')->where('closed_at', '>=', $since)->whereNotNull('result_r')->get();
         $wins = $closed->filter(fn (Signal $s): bool => $s->result_r > 0)->count();
 
         $lines = [
             '📊 <b>Ringkasan 24 jam — '.now('Asia/Jakarta')->locale('id')->translatedFormat('d M Y').'</b>',
+            '',
+            ...$this->portfolioLines($user),
             '',
             'Sinyal baru: '.Signal::query()->where('created_at', '>=', $since)->count(),
             'Sinyal terbuka: '.Signal::query()->open()->count(),
@@ -193,16 +202,34 @@ class TelegramNotifier
         $lines[] = '';
         $lines[] = '<a href="'.e($this->appUrl('/signals')).'">Lihat semua sinyal</a>';
 
-        $this->send('daily_summary', implode("\n", $lines));
+        return implode("\n", $lines);
     }
 
     /**
-     * Whether the given moment falls inside the configured quiet hours (WIB). Equal start and end disables them.
+     * Equity and P&L lines for the daily summary and the bot's /status command.
+     *
+     * @return list<string>
      */
-    public function isQuietTime(?Carbon $at = null): bool
+    public function portfolioLines(User $user): array
     {
-        $start = (int) config('market.telegram.quiet_start_hour');
-        $end = (int) config('market.telegram.quiet_end_hour');
+        $p = $this->portfolio->for($user);
+
+        return [
+            'Ekuitas: <b>'.self::usd($p['equity_usd']).'</b>',
+            sprintf('Total P&amp;L: %s (%+.2f%%)', self::usd($p['total_pnl'], true), $p['total_pnl_pct']),
+            'P&amp;L terealisasi: '.self::usd($p['realized_pnl'], true).' · belum: '.self::usd($p['unrealized_pnl'], true),
+            "Posisi terbuka: {$p['open_positions']} · order pending: {$p['pending_orders']}",
+        ];
+    }
+
+    /**
+     * Whether the given moment falls inside the user's quiet hours (WIB). Equal start and end disables them.
+     */
+    public function isQuietTime(User $user, ?Carbon $at = null): bool
+    {
+        $settings = $user->notificationSettings();
+        $start = (int) $settings['quiet_start_hour'];
+        $end = (int) $settings['quiet_end_hour'];
         $hour = ($at ?? now())->copy()->setTimezone('Asia/Jakarta')->hour;
 
         if ($start === $end) {
@@ -227,6 +254,11 @@ class TelegramNotifier
         return '$'.(str_contains($formatted, '.') ? rtrim(rtrim($formatted, '0'), '.') : $formatted);
     }
 
+    public static function usd(float $value, bool $signed = false): string
+    {
+        return ($signed && $value > 0 ? '+' : ($value < 0 ? '-' : '')).'$'.number_format(abs($value), 2, '.', ',');
+    }
+
     public static function change(float $from, float $to): string
     {
         return sprintf('%+.1f%%', ($to / $from - 1) * 100);
@@ -235,6 +267,26 @@ class TelegramNotifier
     public static function r(float $value): string
     {
         return sprintf('%+.2fR', $value);
+    }
+
+    /**
+     * Linked users who want this type (and, for signals, whose filter the signal passes).
+     *
+     * @return Collection<int, User>
+     */
+    private function recipients(string $type, ?Signal $signal = null): Collection
+    {
+        if (! $this->telegram->isActive()) {
+            return collect();
+        }
+
+        return User::query()
+            ->whereNotNull('telegram_chat_id')
+            ->when($type === 'system', fn ($query) => $query->where('is_admin', true))
+            ->get()
+            ->filter(fn (User $user): bool => $user->wantsTelegram($type) && ($signal === null || $this->passesSignalFilter($user, $signal)))
+            ->values()
+            ->toBase();
     }
 
     private function progressMessage(Signal $signal, SignalStatus $previousStatus, int $previousTpHit): ?string
@@ -265,9 +317,9 @@ class TelegramNotifier
         };
     }
 
-    private function passesSignalFilter(Signal $signal): bool
+    private function passesSignalFilter(User $user, Signal $signal): bool
     {
-        return config('market.telegram.signal_min') === Recommendation::StrongBuy->value
+        return $user->notificationSettings()['signal_min'] === Recommendation::StrongBuy->value
             ? $signal->recommendation === Recommendation::StrongBuy
             : $signal->recommendation->isBullish();
     }
@@ -288,16 +340,26 @@ class TelegramNotifier
     }
 
     /**
+     * @param  Collection<int, User>  $recipients
+     */
+    private function sendTo(Collection $recipients, string $type, string $html, bool $sync = false): void
+    {
+        foreach ($recipients as $user) {
+            $this->send($user, $type, $html, $sync);
+        }
+    }
+
+    /**
      * Never let a notification problem (e.g. Redis down) break the pipeline that triggered it.
      */
-    private function send(string $type, string $html, bool $sync = false): void
+    private function send(User $user, string $type, string $html, bool $sync = false): void
     {
-        $silent = ! in_array($type, self::URGENT, true) && $this->isQuietTime();
+        $silent = ! in_array($type, self::URGENT, true) && $this->isQuietTime($user);
 
         try {
             $sync
-                ? SendTelegramMessage::dispatchSync($html, $silent)
-                : SendTelegramMessage::dispatch($html, $silent);
+                ? SendTelegramMessage::dispatchSync($user->telegram_chat_id, $html, $silent)
+                : SendTelegramMessage::dispatch($user->telegram_chat_id, $html, $silent);
         } catch (Throwable $e) {
             Log::warning("Notifikasi Telegram gagal diantrikan: {$e->getMessage()}");
         }

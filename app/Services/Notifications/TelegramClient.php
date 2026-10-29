@@ -2,6 +2,8 @@
 
 namespace App\Services\Notifications;
 
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Throwable;
 
@@ -11,24 +13,18 @@ use Throwable;
  */
 class TelegramClient
 {
-    public function isConfigured(): bool
+    public function isActive(): bool
     {
-        return filled(config('market.telegram.bot_token')) && filled(config('market.telegram.chat_id'));
+        return (bool) config('market.telegram.enabled') && filled(config('market.telegram.bot_token'));
     }
 
     /**
-     * Send an HTML-formatted message to the configured chat (or the given one).
+     * Send an HTML-formatted message to a chat.
      *
      * @throws TelegramException
      */
-    public function send(string $html, ?string $chatId = null, bool $silent = false): void
+    public function send(string $chatId, string $html, bool $silent = false): void
     {
-        $chatId ??= (string) config('market.telegram.chat_id');
-
-        if ($chatId === '') {
-            throw new TelegramException('Chat ID belum diisi.');
-        }
-
         $this->call('sendMessage', [
             'chat_id' => $chatId,
             'text' => mb_substr($html, 0, 4000),
@@ -39,43 +35,73 @@ class TelegramClient
     }
 
     /**
+     * Bot identity, cached per token (used for t.me deep links).
+     *
      * @return array{username: string, name: string}
      *
      * @throws TelegramException
      */
     public function bot(): array
     {
-        $bot = $this->call('getMe');
+        $key = 'telegram:bot:'.sha1((string) config('market.telegram.bot_token'));
 
-        return ['username' => (string) ($bot['username'] ?? ''), 'name' => (string) ($bot['first_name'] ?? '')];
+        if (is_array($cached = Cache::get($key))) {
+            return $cached;
+        }
+
+        $bot = $this->call('getMe');
+        $info = ['username' => (string) ($bot['username'] ?? ''), 'name' => (string) ($bot['first_name'] ?? '')];
+        Cache::put($key, $info, now()->addDay());
+
+        return $info;
     }
 
     /**
-     * Chats that messaged the bot recently, newest first, so the admin can pick a chat ID.
-     *
-     * @return list<array{id: string, type: string, title: string}>
+     * Point Telegram at our webhook. Pending updates are dropped: they were sent before linking was possible.
      *
      * @throws TelegramException
      */
-    public function recentChats(): array
+    public function connectWebhook(): void
     {
-        $chats = [];
+        $this->call('setWebhook', [
+            'url' => $this->webhookUrl(),
+            'secret_token' => $this->webhookSecret(),
+            'allowed_updates' => ['message'],
+            'drop_pending_updates' => true,
+        ]);
+    }
 
-        foreach (array_reverse($this->call('getUpdates', ['limit' => 100]) ?? []) as $update) {
-            $chat = $update['message']['chat'] ?? $update['channel_post']['chat'] ?? $update['my_chat_member']['chat'] ?? null;
+    /**
+     * @return array{url: string, expected_url: string, connected: bool, pending: int, last_error: string|null, last_error_at: string|null}
+     *
+     * @throws TelegramException
+     */
+    public function webhookInfo(): array
+    {
+        $info = $this->call('getWebhookInfo');
+        $url = (string) ($info['url'] ?? '');
 
-            if ($chat === null || isset($chats[$chat['id']])) {
-                continue;
-            }
+        return [
+            'url' => $url,
+            'expected_url' => $this->webhookUrl(),
+            'connected' => $url === $this->webhookUrl(),
+            'pending' => (int) ($info['pending_update_count'] ?? 0),
+            'last_error' => $info['last_error_message'] ?? null,
+            'last_error_at' => isset($info['last_error_date']) ? Carbon::createFromTimestamp($info['last_error_date'])->toIso8601String() : null,
+        ];
+    }
 
-            $chats[$chat['id']] = [
-                'id' => (string) $chat['id'],
-                'type' => (string) $chat['type'],
-                'title' => (string) ($chat['title'] ?? trim(($chat['first_name'] ?? '').' '.($chat['last_name'] ?? '')) ?: ($chat['username'] ?? $chat['id'])),
-            ];
-        }
+    public function webhookUrl(): string
+    {
+        return rtrim((string) config('app.url'), '/').'/api/telegram/webhook';
+    }
 
-        return array_values($chats);
+    /**
+     * Sent by Telegram in X-Telegram-Bot-Api-Secret-Token; changes whenever the bot token or app key changes.
+     */
+    public function webhookSecret(): string
+    {
+        return substr(hash_hmac('sha256', 'telegram-webhook|'.config('market.telegram.bot_token'), (string) config('app.key')), 0, 48);
     }
 
     /**

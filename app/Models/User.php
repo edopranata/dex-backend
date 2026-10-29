@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password', 'balance_usd', 'is_admin'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'email', 'password', 'balance_usd', 'is_admin', 'notification_preferences'])]
+#[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -30,7 +30,44 @@ class User extends Authenticatable
             'password' => 'hashed',
             'balance_usd' => 'float',
             'is_admin' => 'boolean',
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
+            'telegram_linked_at' => 'datetime',
+            'notification_preferences' => 'array',
         ];
+    }
+
+    public function hasTwoFactorEnabled(): bool
+    {
+        return $this->two_factor_secret !== null && $this->two_factor_confirmed_at !== null;
+    }
+
+    public function hasTelegram(): bool
+    {
+        return $this->telegram_chat_id !== null;
+    }
+
+    /**
+     * Saved preferences on top of the defaults, so new options get a sensible value.
+     *
+     * @return array{signals: bool, signal_updates: bool, risk: bool, watchlist: bool, system: bool, daily_summary: bool, signal_min: string, daily_summary_hour: int, quiet_start_hour: int, quiet_end_hour: int}
+     */
+    public function notificationSettings(): array
+    {
+        return array_replace(config('market.telegram.defaults'), array_intersect_key($this->notification_preferences ?? [], config('market.telegram.defaults')));
+    }
+
+    /**
+     * Whether this user should receive the given Telegram notification type. Operational alerts are for admins only.
+     */
+    public function wantsTelegram(string $type): bool
+    {
+        if (! $this->hasTelegram() || ($type === 'system' && ! $this->is_admin)) {
+            return false;
+        }
+
+        return (bool) ($this->notificationSettings()[$type] ?? false);
     }
 
     /**

@@ -22,6 +22,9 @@ class UserResource extends JsonResource
             'email' => $this->email,
             'balance_usd' => $this->balance_usd,
             'is_admin' => $this->is_admin,
+            'two_factor_enabled' => $this->hasTwoFactorEnabled(),
+            'telegram_linked' => $this->hasTelegram(),
+            'created_at' => $this->created_at?->toIso8601String(),
         ];
     }
 }

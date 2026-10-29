@@ -7,20 +7,17 @@ use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
-#[Signature('app:telegram-daily-summary {--force : Kirim walau belum jamnya}')]
-#[Description('Kirim ringkasan sinyal 24 jam ke Telegram pada jam yang diatur di Admin')]
+#[Signature('app:telegram-daily-summary {--force : Kirim ke semua pengguna sekarang, tanpa melihat jam pilihan mereka}')]
+#[Description('Kirim ringkasan harian ke Telegram pengguna yang jam pilihannya (WIB) adalah jam ini')]
 class TelegramDailySummaryCommand extends Command
 {
     /**
-     * Scheduled hourly; sends only in the hour chosen in the admin panel so the time stays editable there.
+     * Scheduled hourly; each user picks their own hour in Profil → Notifikasi.
      */
     public function handle(TelegramNotifier $notifier): int
     {
-        if (! $this->option('force') && now('Asia/Jakarta')->hour !== (int) config('market.telegram.daily_summary_hour')) {
-            return self::SUCCESS;
-        }
-
-        $notifier->dailySummary();
+        $sent = $notifier->dailySummaries((bool) $this->option('force'));
+        $this->components->info("Ringkasan harian diantrikan untuk {$sent} pengguna.");
 
         return self::SUCCESS;
     }

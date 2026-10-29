@@ -13,8 +13,12 @@ use App\Http\Controllers\Api\MarketController;
 use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PortfolioController;
+use App\Http\Controllers\Api\ProfileController;
+use App\Http\Controllers\Api\ProfileTelegramController;
 use App\Http\Controllers\Api\SignalController;
+use App\Http\Controllers\Api\TelegramWebhookController;
 use App\Http\Controllers\Api\TokenController;
+use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\WhaleController;
 use Illuminate\Support\Facades\Route;
 
@@ -24,6 +28,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::middleware('throttle:10,1')->group(function () {
         Route::post('register', [AuthController::class, 'register'])->name('register');
         Route::post('login', [AuthController::class, 'login'])->name('login');
+        Route::post('two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->name('two-factor');
     });
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -32,7 +37,24 @@ Route::prefix('auth')->name('auth.')->group(function () {
     });
 });
 
+// Called by Telegram's servers (no session); authenticated by the webhook secret header.
+Route::post('telegram/webhook', TelegramWebhookController::class)->middleware('throttle:120,1')->name('telegram.webhook');
+
 Route::middleware('auth:sanctum')->group(function () {
+    Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
+    Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::put('profile/password', [ProfileController::class, 'password'])->middleware('throttle:10,1')->name('profile.password');
+    Route::put('profile/notifications', [ProfileController::class, 'notifications'])->name('profile.notifications');
+
+    Route::post('profile/two-factor', [TwoFactorController::class, 'store'])->middleware('throttle:10,1')->name('two-factor.store');
+    Route::post('profile/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1')->name('two-factor.confirm');
+    Route::delete('profile/two-factor', [TwoFactorController::class, 'destroy'])->middleware('throttle:10,1')->name('two-factor.destroy');
+    Route::post('profile/two-factor/recovery-codes', [TwoFactorController::class, 'recoveryCodes'])->middleware('throttle:10,1')->name('two-factor.recovery-codes');
+
+    Route::post('profile/telegram', [ProfileTelegramController::class, 'link'])->middleware('throttle:10,1')->name('profile.telegram.link');
+    Route::delete('profile/telegram', [ProfileTelegramController::class, 'destroy'])->name('profile.telegram.destroy');
+    Route::post('profile/telegram/test', [ProfileTelegramController::class, 'test'])->middleware('throttle:10,1')->name('profile.telegram.test');
+
     Route::get('market/overview', [MarketController::class, 'overview'])->name('market.overview');
 
     Route::get('tokens/search', [TokenController::class, 'search'])->middleware('throttle:30,1')->name('tokens.search');
@@ -58,6 +80,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('signals/{signal}/follow', [SignalController::class, 'follow'])->name('signals.follow');
 
     Route::get('portfolio', [PortfolioController::class, 'show'])->name('portfolio.show');
+    Route::get('portfolio/summary', [PortfolioController::class, 'summary'])->name('portfolio.summary');
     Route::post('portfolio/reset', [PortfolioController::class, 'reset'])->name('portfolio.reset');
 
     Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
@@ -71,8 +94,8 @@ Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.'
     Route::post('settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
     Route::post('settings/test-ai', [SettingsController::class, 'testAi'])->middleware('throttle:10,1')->name('settings.test-ai');
 
-    Route::post('telegram/chats', [TelegramController::class, 'chats'])->middleware('throttle:10,1')->name('telegram.chats');
-    Route::post('telegram/test', [TelegramController::class, 'test'])->middleware('throttle:10,1')->name('telegram.test');
+    Route::get('telegram', [TelegramController::class, 'show'])->name('telegram.show');
+    Route::post('telegram/webhook', [TelegramController::class, 'connect'])->middleware('throttle:10,1')->name('telegram.connect');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');

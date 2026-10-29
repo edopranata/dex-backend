@@ -21,7 +21,7 @@ class SendTelegramMessage implements ShouldQueue
     /**
      * @param  bool  $silent  Deliver without sound (quiet hours).
      */
-    public function __construct(public string $html, public bool $silent = false) {}
+    public function __construct(public string $chatId, public string $html, public bool $silent = false) {}
 
     /**
      * @return list<int>
@@ -33,12 +33,12 @@ class SendTelegramMessage implements ShouldQueue
 
     public function handle(TelegramClient $telegram): void
     {
-        if (! $telegram->isConfigured()) {
+        if (! $telegram->isActive()) {
             return;
         }
 
         try {
-            $telegram->send($this->html, silent: $this->silent);
+            $telegram->send($this->chatId, $this->html, $this->silent);
         } catch (TelegramException $e) {
             if ($e->retryAfter !== null) {
                 $this->release($e->retryAfter + 1);
