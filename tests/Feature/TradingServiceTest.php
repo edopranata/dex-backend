@@ -89,3 +89,70 @@ test('reset restores the starting balance and clears history', function () {
         ->and(Order::count())->toBe(0)
         ->and($this->user->positions()->count())->toBe(0);
 });
+
+test('a market buy with tp and sl places both exits for the bought quantity', function () {
+    $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => 1000, 'take_profit_price' => 2.6, 'stop_loss_price' => 1.8]);
+    $exits = Order::query()->where('parent_id', $buy->id)->get()->keyBy(fn (Order $o) => $o->type->value);
+
+    expect($exits)->toHaveCount(2)
+        ->and($exits['take_profit']->trigger_price)->toEqual(2.6)
+        ->and($exits['stop_loss']->trigger_price)->toEqual(1.8)
+        ->and($exits['stop_loss']->quantity)->toEqualWithDelta($buy->filled_quantity, 1e-9)
+        ->and($exits['stop_loss']->status)->toBe(OrderStatus::Pending);
+});
+
+test('when the stop loss fills its take profit is cancelled even if other tokens remain', function () {
+    $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => 500]);
+    $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => 1000, 'take_profit_price' => 2.6, 'stop_loss_price' => 1.8]);
+    [$takeProfit, $stopLoss] = [Order::firstWhere(['parent_id' => $buy->id, 'type' => 'take_profit']), Order::firstWhere(['parent_id' => $buy->id, 'type' => 'stop_loss'])];
+
+    $this->token->update(['price_usd' => 1.79]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect($stopLoss->refresh()->status)->toBe(OrderStatus::Filled)
+        ->and($takeProfit->refresh()->status)->toBe(OrderStatus::Cancelled)
+        ->and($takeProfit->note)->toContain('OCO')
+        ->and($this->user->positions()->first()->quantity)->toBeGreaterThan(0);
+});
+
+test('a limit buy places its tp and sl only after it fills', function () {
+    $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'limit', 'amount_usd' => 500, 'trigger_price' => 1.8, 'take_profit_price' => 2.4, 'stop_loss_price' => 1.6]);
+
+    expect(Order::where('parent_id', $buy->id)->count())->toBe(0);
+
+    $this->token->update(['price_usd' => 1.79]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect($buy->refresh()->status)->toBe(OrderStatus::Filled)
+        ->and(Order::where('parent_id', $buy->id)->where('status', OrderStatus::Pending)->count())->toBe(2);
+});
+
+test('a cancelled limit buy never places its exits', function () {
+    $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'limit', 'amount_usd' => 500, 'trigger_price' => 1.8, 'stop_loss_price' => 1.6]);
+    $this->trading->cancel($buy);
+
+    $this->token->update(['price_usd' => 1.5]);
+    $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
+
+    expect(Order::where('parent_id', $buy->id)->count())->toBe(0);
+});
+
+test('tp and sl must be on the right side of the entry price', function (array $exit, string $field) {
+    expect(fn () => $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => 100, ...$exit]))
+        ->toThrow(fn (ValidationException $e) => expect($e->errors())->toHaveKey($field));
+
+    expect(Order::count())->toBe(0);
+})->with([
+    'stop loss above market' => [['stop_loss_price' => 2.1], 'stop_loss_price'],
+    'take profit below market' => [['take_profit_price' => 1.9], 'take_profit_price'],
+]);
+
+test('the order api accepts tp and sl on buys only', function () {
+    $this->actingAs($this->user)->postJson('/api/orders', [
+        'token_id' => $this->token->id, 'side' => 'buy', 'type' => 'market', 'amount_usd' => 100, 'take_profit_price' => 2.5, 'stop_loss_price' => 1.9,
+    ])->assertCreated()->assertJsonPath('data.stop_loss_price', 1.9);
+
+    $this->actingAs($this->user)->postJson('/api/orders', [
+        'token_id' => $this->token->id, 'side' => 'sell', 'type' => 'market', 'quantity' => 1, 'stop_loss_price' => 1.9,
+    ])->assertJsonValidationErrors('stop_loss_price');
+});

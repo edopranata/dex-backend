@@ -28,6 +28,8 @@ class StoreOrderRequest extends FormRequest
             'amount_usd' => ['required_if:side,buy', 'nullable', 'numeric', 'min:'.config('market.simulator.min_order_usd')],
             'quantity' => ['required_if:side,sell', 'nullable', 'numeric', 'gt:0'],
             'trigger_price' => ['required_unless:type,market', 'nullable', 'numeric', 'gt:0'],
+            'take_profit_price' => ['nullable', 'prohibited_if:side,sell', 'numeric', 'gt:0'],
+            'stop_loss_price' => ['nullable', 'prohibited_if:side,sell', 'numeric', 'gt:0'],
         ];
     }
 

@@ -29,8 +29,10 @@ class TradingService
 
     /**
      * Place an order. Market orders fill immediately; the rest wait for their trigger price.
+     * A buy may carry a take profit and/or stop loss: once it fills, both are placed for the
+     * filled quantity as a one-cancels-the-other pair (like TP/SL on Binance or Bybit).
      *
-     * @param  array{side: string, type: string, amount_usd?: float|null, quantity?: float|null, trigger_price?: float|null, note?: string|null}  $data
+     * @param  array{side: string, type: string, amount_usd?: float|null, quantity?: float|null, trigger_price?: float|null, take_profit_price?: float|null, stop_loss_price?: float|null, note?: string|null}  $data
      *
      * @throws ValidationException
      */
@@ -38,6 +40,12 @@ class TradingService
     {
         $side = OrderSide::from($data['side']);
         $type = OrderType::from($data['type']);
+        $takeProfit = $side === OrderSide::Buy ? ($data['take_profit_price'] ?? null) : null;
+        $stopLoss = $side === OrderSide::Buy ? ($data['stop_loss_price'] ?? null) : null;
+
+        if ($takeProfit !== null || $stopLoss !== null) {
+            $this->validateExits($token, $type, $data, $takeProfit, $stopLoss);
+        }
 
         if ($side === OrderSide::Sell && $this->positionQuantity($user, $token) <= self::DUST) {
             throw ValidationException::withMessages(['quantity' => "Anda tidak memiliki {$token->symbol}."]);
@@ -56,6 +64,8 @@ class TradingService
             'amount_usd' => $side === OrderSide::Buy ? $data['amount_usd'] : null,
             'quantity' => $side === OrderSide::Sell ? $data['quantity'] : null,
             'trigger_price' => $type === OrderType::Market ? null : $data['trigger_price'],
+            'take_profit_price' => $takeProfit,
+            'stop_loss_price' => $stopLoss,
             'note' => $data['note'] ?? null,
         ]);
 
@@ -91,9 +101,13 @@ class TradingService
                 ['quantity' => 0, 'avg_price' => 0, 'realized_pnl' => 0],
             );
 
-            $order->side === OrderSide::Buy
-                ? $this->fillBuy($order, $user, $position, $token, $marketPrice)
-                : $this->fillSell($order, $user, $position, $token, $marketPrice);
+            if ($order->side === OrderSide::Buy) {
+                $this->fillBuy($order, $user, $position, $token, $marketPrice);
+                $this->placeExits($order);
+            } else {
+                $this->fillSell($order, $user, $position, $token, $marketPrice);
+                $this->cancelSiblings($order);
+            }
 
             return $order;
         });
@@ -273,6 +287,81 @@ class TradingService
                 ->where('status', OrderStatus::Pending)
                 ->update(['status' => OrderStatus::Cancelled, 'note' => 'Dibatalkan otomatis: posisi sudah ditutup.']);
         }
+    }
+
+    /**
+     * The stop loss must sit below and the take profit above the price the buy is expected to fill at.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws ValidationException
+     */
+    private function validateExits(Token $token, OrderType $type, array $data, ?float $takeProfit, ?float $stopLoss): void
+    {
+        if ($type === OrderType::Market) {
+            $this->prices->ensureFresh($token);
+        }
+
+        $reference = $type === OrderType::Market ? $token->price_usd : (float) ($data['trigger_price'] ?? 0);
+        $label = $type === OrderType::Market ? 'harga sekarang' : 'harga limit';
+
+        if (! $reference) {
+            return;
+        }
+
+        if ($stopLoss !== null && $stopLoss >= $reference) {
+            throw ValidationException::withMessages(['stop_loss_price' => "Stop loss harus di bawah {$label}."]);
+        }
+
+        if ($takeProfit !== null && $takeProfit <= $reference) {
+            throw ValidationException::withMessages(['take_profit_price' => "Take profit harus di atas {$label}."]);
+        }
+    }
+
+    /**
+     * After a buy with TP/SL fills, protect exactly the bought quantity.
+     */
+    private function placeExits(Order $order): void
+    {
+        if ($order->status !== OrderStatus::Filled || ($order->take_profit_price === null && $order->stop_loss_price === null)) {
+            return;
+        }
+
+        $exits = array_filter([
+            OrderType::TakeProfit->value => $order->take_profit_price,
+            OrderType::StopLoss->value => $order->stop_loss_price,
+        ]);
+
+        foreach ($exits as $type => $price) {
+            Order::create([
+                'user_id' => $order->user_id,
+                'token_id' => $order->token_id,
+                'signal_id' => $order->signal_id,
+                'parent_id' => $order->id,
+                'side' => OrderSide::Sell,
+                'type' => $type,
+                'status' => OrderStatus::Pending,
+                'quantity' => $order->filled_quantity,
+                'trigger_price' => $price,
+                'note' => ($type === OrderType::StopLoss->value ? 'SL' : 'TP')." untuk order beli #{$order->id}",
+            ]);
+        }
+    }
+
+    /**
+     * One-cancels-the-other: when the TP or SL of a buy fills, the other one is no longer needed.
+     */
+    private function cancelSiblings(Order $order): void
+    {
+        if ($order->parent_id === null || $order->status !== OrderStatus::Filled) {
+            return;
+        }
+
+        Order::query()
+            ->where('parent_id', $order->parent_id)
+            ->whereKeyNot($order->id)
+            ->where('status', OrderStatus::Pending)
+            ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis (OCO): pasangannya #{$order->id} sudah terisi."]);
     }
 
     private function reject(Order $order, string $reason): void

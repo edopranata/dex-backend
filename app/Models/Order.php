@@ -12,8 +12,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'user_id', 'token_id', 'signal_id', 'side', 'type', 'status', 'amount_usd', 'quantity',
-    'trigger_price', 'filled_price', 'filled_quantity', 'total_usd', 'fee_usd', 'slippage_pct',
+    'user_id', 'token_id', 'signal_id', 'parent_id', 'side', 'type', 'status', 'amount_usd', 'quantity',
+    'trigger_price', 'take_profit_price', 'stop_loss_price', 'filled_price', 'filled_quantity', 'total_usd', 'fee_usd', 'slippage_pct',
     'realized_pnl', 'note', 'filled_at',
 ])]
 class Order extends Model
@@ -33,6 +33,8 @@ class Order extends Model
             'amount_usd' => 'float',
             'quantity' => 'float',
             'trigger_price' => 'float',
+            'take_profit_price' => 'float',
+            'stop_loss_price' => 'float',
             'filled_price' => 'float',
             'filled_quantity' => 'float',
             'total_usd' => 'float',
