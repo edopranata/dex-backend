@@ -25,6 +25,11 @@ x-app: &app
   env_file: .env
   restart: unless-stopped
   logging: *logging
+  volumes:
+    # Daily log files shared by app, queue and scheduler (readable in Admin > Log).
+    - app-logs:/var/www/html/storage/logs
+    # Host backup folder (written by cron, deploy/backup.sh) for listing, download and "Backup sekarang".
+    - ${BACKUP_HOST_PATH:-./storage/app/backups}:/var/www/html/storage/app/backups
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -116,3 +121,4 @@ networks:
 volumes:
   mysql-data:
   redis-data:
+  app-logs:

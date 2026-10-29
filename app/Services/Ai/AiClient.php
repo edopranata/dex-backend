@@ -28,6 +28,36 @@ class AiClient
     }
 
     /**
+     * Round-trip check for the admin panel. Error messages never contain the key (sent in headers).
+     *
+     * @return array{ok: bool, provider: string|null, model: string|null, latency_ms: int|null, error: string|null}
+     */
+    public function ping(): array
+    {
+        $provider = $this->provider();
+
+        if ($provider === null) {
+            return ['ok' => false, 'provider' => config('market.ai.provider'), 'model' => null, 'latency_ms' => null, 'error' => 'Provider nonaktif atau API key kosong.'];
+        }
+
+        $model = config("market.ai.{$provider}.model");
+        $start = microtime(true);
+
+        try {
+            $text = $provider === 'gemini'
+                ? $this->gemini('Reply with JSON only.', '{"ping": true} -> reply {"ok": true}')
+                : $this->openAi('Reply with JSON only.', '{"ping": true} -> reply {"ok": true}');
+            $ok = is_string($text) && str_contains($text, 'ok');
+            $error = $ok ? null : 'Respons tidak dikenali: '.mb_substr((string) $text, 0, 200);
+        } catch (Throwable $e) {
+            $ok = false;
+            $error = mb_substr($e->getMessage(), 0, 500);
+        }
+
+        return ['ok' => $ok, 'provider' => $provider, 'model' => $model, 'latency_ms' => (int) round((microtime(true) - $start) * 1000), 'error' => $error];
+    }
+
+    /**
      * Send a prompt and decode the JSON object the model returns.
      *
      * @return array<string, mixed>|null

@@ -18,7 +18,9 @@ RUN mkdir -p ../backend/public && npm run build:laravel
 FROM php:8.4-fpm-alpine AS app
 
 COPY --from=mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
-RUN install-php-extensions pdo_mysql redis bcmath intl opcache pcntl zip
+RUN install-php-extensions pdo_mysql redis bcmath intl opcache pcntl zip \
+    # mariadb-dump for "Backup sekarang" in the admin panel (connector-c adds MySQL 8 auth plugins)
+    && apk add --no-cache mariadb-client mariadb-connector-c
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -31,7 +33,7 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist --no-in
 COPY backend/ ./
 COPY --from=frontend /build/backend/public/ ./public/
 RUN composer dump-autoload --optimize --no-dev \
-    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs bootstrap/cache \
+    && mkdir -p storage/framework/cache storage/framework/sessions storage/framework/views storage/logs storage/app/backups bootstrap/cache \
     && chown -R www-data:www-data storage bootstrap/cache
 
 COPY backend/docker/app/php.ini /usr/local/etc/php/conf.d/zz-app.ini

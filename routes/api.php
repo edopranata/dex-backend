@@ -1,5 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\Admin\BackupController;
+use App\Http\Controllers\Api\Admin\LogController;
+use App\Http\Controllers\Api\Admin\SettingsController;
+use App\Http\Controllers\Api\Admin\SystemController;
+use App\Http\Controllers\Api\Admin\TaskController;
+use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DiscoveryController;
 use App\Http\Controllers\Api\MarketController;
@@ -56,4 +62,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('orders', [OrderController::class, 'index'])->name('orders.index');
     Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
     Route::delete('orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
+});
+
+Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
+    Route::post('settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
+    Route::post('settings/test-ai', [SettingsController::class, 'testAi'])->middleware('throttle:10,1')->name('settings.test-ai');
+
+    Route::get('users', [UserController::class, 'index'])->name('users.index');
+    Route::post('users', [UserController::class, 'store'])->name('users.store');
+    Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+
+    Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
+    Route::post('backups', [BackupController::class, 'store'])->middleware('throttle:5,1')->name('backups.store');
+    Route::get('backups/{name}/download', [BackupController::class, 'download'])->name('backups.download');
+    Route::delete('backups/{name}', [BackupController::class, 'destroy'])->name('backups.destroy');
+
+    Route::get('logs', [LogController::class, 'index'])->name('logs.index');
+    Route::get('logs/{name}/download', [LogController::class, 'download'])->name('logs.download');
+
+    Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
+    Route::post('tasks/run', [TaskController::class, 'run'])->middleware('throttle:20,1')->name('tasks.run');
+
+    Route::get('system', [SystemController::class, 'index'])->name('system.index');
+    Route::post('system/failed-jobs/{uuid}/retry', [SystemController::class, 'retryFailed'])->name('system.failed.retry');
+    Route::delete('system/failed-jobs/{uuid}', [SystemController::class, 'forgetFailed'])->name('system.failed.forget');
+    Route::post('system/cache/clear', [SystemController::class, 'clearCache'])->name('system.cache.clear');
 });

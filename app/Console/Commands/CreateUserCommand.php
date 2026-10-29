@@ -12,7 +12,7 @@ use Illuminate\Validation\Rules\Password;
 use function Laravel\Prompts\password;
 use function Laravel\Prompts\text;
 
-#[Signature('app:create-user {--name= : Nama} {--email= : Email} {--password= : Password (kosongkan untuk ditanya)}')]
+#[Signature('app:create-user {--name= : Nama} {--email= : Email} {--password= : Password (kosongkan untuk ditanya)} {--admin : Jadikan admin (akses halaman Admin)}')]
 #[Description('Buat akun user (dipakai saat pendaftaran publik ditutup)')]
 class CreateUserCommand extends Command
 {
@@ -38,9 +38,13 @@ class CreateUserCommand extends Command
             return self::FAILURE;
         }
 
-        $user = User::create([...$data, 'balance_usd' => config('market.simulator.starting_balance')]);
+        $user = User::create([
+            ...$data,
+            'balance_usd' => config('market.simulator.starting_balance'),
+            'is_admin' => $this->option('admin') || ! User::query()->where('is_admin', true)->exists(),
+        ]);
 
-        $this->components->info("User {$user->email} dibuat dengan saldo virtual $".number_format($user->balance_usd).'.');
+        $this->components->info("User {$user->email} dibuat dengan saldo virtual $".number_format($user->balance_usd).($user->is_admin ? ' (admin).' : '.'));
 
         return self::SUCCESS;
     }

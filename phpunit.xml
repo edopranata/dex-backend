@@ -30,6 +30,11 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
+        <!-- Never let tests read real API keys from a local .env -->
+        <env name="AI_PROVIDER" value="none" force="true"/>
+        <env name="GEMINI_API_KEY" value="" force="true"/>
+        <env name="OPENAI_API_KEY" value="" force="true"/>
+        <env name="COINGECKO_DEMO_API_KEY" value="" force="true"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
     </php>

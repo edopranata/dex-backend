@@ -142,6 +142,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Backup database
+    |--------------------------------------------------------------------------
+    |
+    | Backup terjadwal dibuat cron di host (deploy/backup.sh, memakai container
+    | MySQL). Folder backup host di-mount ke sini sehingga admin bisa melihat,
+    | mengunduh, dan membuat backup manual (dengan jeda) dari aplikasi.
+    |
+    */
+
+    'backup' => [
+        'path' => env('BACKUP_PATH', storage_path('app/backups')),
+        'manual_cooldown_minutes' => (int) env('BACKUP_COOLDOWN_MINUTES', 60),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Berita (RSS gratis; CryptoPanic sudah tidak punya paket gratis)
     |--------------------------------------------------------------------------
     */

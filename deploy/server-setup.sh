@@ -159,8 +159,15 @@ FIRST_RUN=false
 set_env() {
     if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi
 }
+ensure_env() {
+    grep -q "^$1=" .env || { echo "$1=$2" >> .env; ok "Tambah $1 ke .env"; }
+}
 if [ -f .env ]; then
-    ok ".env sudah ada, tidak diubah"
+    ok ".env sudah ada, nilai lama tidak diubah"
+    ensure_env LOG_STACK "daily,stderr"
+    ensure_env LOG_DAILY_DAYS 14
+    ensure_env BACKUP_HOST_PATH /var/backups/dex
+    ensure_env BACKUP_COOLDOWN_MINUTES 60
 else
     FIRST_RUN=true
     cp .env.docker.example .env
@@ -197,10 +204,11 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     ok "cloudflared berjalan; atur public hostname di dashboard Cloudflare -> http://dexsim:80"
 fi
 
-step "Backup database harian (02:30)"
-echo "30 2 * * * $DEPLOY_USER $APP_ROOT/backend/deploy/backup.sh >> /home/$DEPLOY_USER/dex-backup.log 2>&1" > /etc/cron.d/dex-backup
-install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" /var/backups/dex
-ok "Backup ke /var/backups/dex, disimpan 14 hari"
+step "Backup database harian (02:30 WIB, cron root)"
+install -d -m 700 -o 82 -g 82 /var/backups/dex
+chown -R 82:82 /var/backups/dex
+echo "30 2 * * * root $APP_ROOT/backend/deploy/backup.sh >> /var/log/dex-backup.log 2>&1" > /etc/cron.d/dex-backup
+ok "Backup ke /var/backups/dex (disimpan 14 hari), terlihat & bisa diunduh di Admin > Backup"
 
 cat <<MSG
 
