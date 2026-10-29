@@ -24,10 +24,12 @@ class SettingsRegistry
                 'fields' => [
                     ['key' => 'market.ai.provider', 'label' => 'Provider', 'type' => 'select', 'options' => ['none' => 'Nonaktif', 'gemini' => 'Google Gemini', 'openai' => 'OpenAI']],
                     ['key' => 'market.ai.gemini.key', 'label' => 'Gemini API key', 'type' => 'secret', 'description' => 'Buat gratis di aistudio.google.com/apikey'],
-                    ['key' => 'market.ai.gemini.model', 'label' => 'Model Gemini', 'type' => 'string'],
+                    ['key' => 'market.ai.gemini.model', 'label' => 'Model Gemini', 'type' => 'string', 'description' => 'Disarankan gemini-flash-lite-latest (kuota gratis paling longgar, tidak pensiun).'],
                     ['key' => 'market.ai.openai.key', 'label' => 'OpenAI API key', 'type' => 'secret'],
                     ['key' => 'market.ai.openai.model', 'label' => 'Model OpenAI', 'type' => 'string'],
                     ['key' => 'market.ai.summary_ttl_minutes', 'label' => 'Umur ringkasan AI (menit)', 'type' => 'int', 'min' => 5, 'max' => 1440, 'description' => 'Ringkasan dibuat ulang jika rekomendasi berubah atau lebih tua dari ini.'],
+                    ['key' => 'market.ai.max_requests_per_minute', 'label' => 'Maks. request AI per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Sesuaikan dengan batas free tier model (lihat AI Studio → Rate limits).'],
+                    ['key' => 'market.ai.max_requests_per_day', 'label' => 'Maks. request AI per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => 'Juga membatasi biaya jika memakai paket berbayar.'],
                 ],
             ],
             [

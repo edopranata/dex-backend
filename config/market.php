@@ -185,14 +185,18 @@ return [
         'provider' => env('AI_PROVIDER', 'none'),
         'gemini' => [
             'key' => env('GEMINI_API_KEY'),
-            'model' => env('GEMINI_MODEL', 'gemini-2.5-flash'),
+            // Alias "latest" mengikuti versi terbaru, jadi tidak pensiun seperti model bernomor.
+            'model' => env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
         ],
         'openai' => [
             'key' => env('OPENAI_API_KEY'),
             'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
         ],
         // Ringkasan AI dibuat ulang jika rekomendasi berubah atau ringkasan lebih tua dari ini.
-        'summary_ttl_minutes' => 60,
+        'summary_ttl_minutes' => 180,
+        // Anggaran request agar tidak melewati free tier; request di atasnya memakai cadangan (template/kamus).
+        'max_requests_per_minute' => (int) env('AI_MAX_REQUESTS_PER_MINUTE', 5),
+        'max_requests_per_day' => (int) env('AI_MAX_REQUESTS_PER_DAY', 250),
     ],
 
     /*

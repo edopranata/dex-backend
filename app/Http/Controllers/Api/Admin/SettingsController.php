@@ -42,7 +42,7 @@ class SettingsController extends Controller
             }, $group['fields']),
         ], SettingsRegistry::groups());
 
-        return response()->json(['groups' => $groups]);
+        return response()->json(['groups' => $groups, 'ai_status' => app(AiClient::class)->status()]);
     }
 
     /**
@@ -85,6 +85,7 @@ class SettingsController extends Controller
 
         $this->validateWeights($values);
         $store->set($values, $request->user()->id);
+        $this->resumeAiIfChanged(array_keys($values));
 
         return $this->index($store);
     }
@@ -96,6 +97,7 @@ class SettingsController extends Controller
     {
         $keys = $request->validate(['keys' => ['required', 'array'], 'keys.*' => ['string']])['keys'];
         $store->reset(array_values(array_intersect($keys, array_keys(SettingsRegistry::fields()))));
+        $this->resumeAiIfChanged($keys);
 
         return $this->index($store);
     }
@@ -103,6 +105,22 @@ class SettingsController extends Controller
     public function testAi(AiClient $ai): JsonResponse
     {
         return response()->json($ai->ping());
+    }
+
+    /**
+     * A new key, model or provider deserves a fresh attempt instead of waiting out an automatic pause.
+     *
+     * @param  list<string>  $keys
+     */
+    private function resumeAiIfChanged(array $keys): void
+    {
+        foreach ($keys as $key) {
+            if (str_starts_with($key, 'market.ai.')) {
+                app(AiClient::class)->resume();
+
+                return;
+            }
+        }
     }
 
     /**
