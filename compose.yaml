@@ -72,16 +72,12 @@ services:
   app:
     <<: *app
 
-  # Fast jobs: analysis, Telegram, security checks, news.
-  queue:
+  # Queue workers, managed by Laravel Horizon (config/horizon.php): "default" for fast jobs
+  # (analysis, Telegram, security, news), "market-data" with one process for GeckoTerminal.
+  # Dashboard: /horizon (admins only).
+  horizon:
     <<: *app
-    command: ["php", "artisan", "queue:work", "redis", "--queue=default", "--sleep=1", "--tries=2", "--timeout=600", "--max-time=3600"]
-    stop_grace_period: 620s
-
-  # GeckoTerminal jobs (candles, whale trades, discovery), paced by the API rate limit.
-  queue-market:
-    <<: *app
-    command: ["php", "artisan", "queue:work", "redis", "--queue=market-data", "--sleep=3", "--tries=2", "--timeout=600", "--max-time=3600"]
+    command: ["php", "artisan", "horizon"]
     stop_grace_period: 620s
 
   scheduler:

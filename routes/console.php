@@ -35,5 +35,7 @@ Schedule::command('market:analyze')->cron('6,21,36,51 * * * *')->withoutOverlapp
 
 Schedule::command('app:telegram-daily-summary')->hourlyAt(0);
 
+Schedule::command('horizon:snapshot')->everyFiveMinutes();
+
 Schedule::command('model:prune')->dailyAt('03:00');
 Schedule::command('queue:prune-failed --hours=168')->dailyAt('03:30');

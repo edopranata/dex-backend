@@ -13,7 +13,7 @@ VPS
 
 Container (docker compose, proyek "dex"):
   web (Nginx, port 8080 & alias "dexsim" di jaringan edge) ─► app (PHP-FPM + frontend hasil build:laravel)
-  queue · scheduler · migrate (sekali jalan) · mysql (volume) · redis (volume)
+  horizon (queue default + market-data) · scheduler · migrate (sekali jalan) · mysql (volume) · redis (volume)
 ```
 
 - **Sekarang:** akses lewat `http://IP_VPS:8080`.
@@ -130,7 +130,7 @@ Deploy menarik **kedua** repo, membangun ulang image, menjalankan migrasi, mengg
 | Kebutuhan | Perintah (di VPS, folder `/opt/dex/backend`) |
 |---|---|
 | Status container | `docker compose ps` |
-| Log | `docker compose logs -f app queue scheduler` |
+| Log | `docker compose logs -f app horizon scheduler` · dashboard queue: `/horizon` (admin) |
 | Artisan | `docker compose exec app php artisan <perintah>` |
 | Ubah konfigurasi | Edit `.env`, lalu `docker compose up -d` |
 | Backup manual | `bash deploy/backup.sh` (otomatis tiap 02:30 ke `/var/backups/dex`) |
