@@ -68,7 +68,7 @@ Keputusan penting di tengah jalan: **perpanjang VPS sebelum 29 Nov 2026** (lihat
 Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 
 - [ ] Rotate Gemini API key lama, isi key baru di Admin → Pengaturan → AI, klik *Tes koneksi AI*
-- [ ] Uji pemulihan: reboot VPS sekali, pastikan semua layanan kembali sendiri (lihat `docs/DEPLOY_VPS.md`)
+- [x] Uji pemulihan: reboot VPS sekali, pastikan semua layanan kembali sendiri — **29 Okt 2026: online lagi ±60 detik setelah reboot, semua container, scheduler & queue pulih; watchdog memulihkan app yang dihentikan dalam ±22 detik**
 - [ ] **Notifikasi Telegram**: sinyal Buy baru, TP/SL tercapai, peringatan rug pull, token masuk/keluar Market
 - [ ] Notifikasi Telegram untuk operasional: watchdog memulihkan layanan, backup gagal, job gagal
 - [ ] Monitor uptime eksternal gratis (mis. UptimeRobot / Healthchecks.io) ke `/up`, kirim ke Telegram
@@ -188,6 +188,8 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 |---|---|---|
 | 29 Okt 2026 | Server production berjalan di vpsindonesia (1 bulan), akses via IP:port | Uji stabilitas & akses API sebelum perpanjang |
 | 29 Okt 2026 | Exchange target: Tokocrypto & Indodax (berizin OJK); Binance tidak dipakai langsung | Binance masuk daftar platform ilegal Satgas PASTI (Jun 2026) |
+| 29 Okt 2026 | Auto-start (`dex.service`), watchdog 2 menit, reboot keamanan otomatis 04:00 WIB | Server harus pulih sendiri selama 2 bulan berjalan tanpa diawasi; uji reboot lolos |
+| 29 Okt 2026 | Modal live dibatasi sendiri oleh pemilik; aplikasi wajib menegakkan batas di bagian 5 | Pengaman berlapis terhadap bug dan salah klik |
 | | | |
 
 ---
