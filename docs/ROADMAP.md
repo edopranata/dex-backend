@@ -15,7 +15,7 @@ Dokumen kerja untuk 2 bulan ke depan (**30 Oktober – 24 Desember 2026**). Serv
 | Area | Status |
 |---|---|
 | Aplikasi | Simulator, analisis & sinyal (entry/SL/TP), discovery + Market otomatis, whale tracker, berita, panel Admin |
-| Server | VPS NAT vpsindonesia (3 vCPU / 6 GB), Docker, akses `http://103.119.237.114:30040` — **aktif s/d 29 Nov 2026** |
+| Server | VPS NAT vpsindonesia (3 vCPU / 6 GB), Docker, akses **`https://dexsim.tune-in.trade`** (Cloudflare Tunnel) — **aktif s/d 29 Nov 2026** |
 | Deploy | Push ke `main` (dex-backend / dex-frontend) → GitHub Actions (tes/build) → deploy otomatis |
 | Keandalan | Auto-start saat boot (`dex.service`), watchdog `/up` tiap 2 menit, restart container otomatis |
 | Backup | Cron harian 02:30 WIB (14 hari), download & backup manual dari Admin (jeda 60 menit) |
@@ -105,7 +105,8 @@ Tujuan: server siap memegang API key exchange.
 
 - [ ] **Perpanjang VPS** (sebelum 29 Nov). Pertimbangkan paket 12 bulan (hemat 15%) jika Fase 1 stabil
 - [ ] **IP dedicated** (opsi provider) — IP NAT bersama melemahkan IP whitelist API exchange
-- [ ] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`)
+- [x] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`) — **29 Okt 2026: `https://dexsim.tune-in.trade`, port 8080 hanya localhost, firewall hanya SSH, cookie `secure`**
+- [ ] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia
 - [ ] **2FA (TOTP)** untuk login, wajib untuk admin
 - [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa)
 - [ ] Batasi sesi: logout otomatis, satu perangkat admin
@@ -190,6 +191,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 29 Okt 2026 | Exchange target: Tokocrypto & Indodax (berizin OJK); Binance tidak dipakai langsung | Binance masuk daftar platform ilegal Satgas PASTI (Jun 2026) |
 | 29 Okt 2026 | Auto-start (`dex.service`), watchdog 2 menit, reboot keamanan otomatis 04:00 WIB | Server harus pulih sendiri selama 2 bulan berjalan tanpa diawasi; uji reboot lolos |
 | 29 Okt 2026 | Modal live dibatasi sendiri oleh pemilik; aplikasi wajib menegakkan batas di bagian 5 | Pengaman berlapis terhadap bug dan salah klik |
+| 29 Okt 2026 | Domain `tune-in.trade` (Cloudflare) + Tunnel bersama `/opt/edge`; aplikasi di `dexsim.tune-in.trade`, akses IP:port ditutup | VPS NAT tidak bisa sertifikat langsung; tunnel tanpa port masuk, siap untuk subdomain lain |
 | | | |
 
 ---
