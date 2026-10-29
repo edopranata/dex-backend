@@ -11,13 +11,15 @@ main() {
     backend="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     frontend="$(cd "$backend/../frontend" && pwd)"
 
-    # One deploy at a time (pushes to both repos can arrive together).
-    exec 9>/tmp/dex-deploy.lock
-    flock 9
+    # One deploy at a time (pushes to both repos can arrive together). ci-deploy.sh already holds it.
+    if [ "${DEX_DEPLOY_LOCKED:-0}" != "1" ]; then
+        exec 9>/tmp/dex-deploy.lock
+        flock 9
+    fi
 
     if [ "${1:-}" != "--no-pull" ]; then
-        git -C "$backend" pull --ff-only -q
-        git -C "$frontend" pull --ff-only -q
+        git -C "$backend" pull --ff-only -q origin main
+        git -C "$frontend" pull --ff-only -q origin main
     fi
     echo "backend  $(git -C "$backend" log -1 --format='%h %s')"
     echo "frontend $(git -C "$frontend" log -1 --format='%h %s')"
