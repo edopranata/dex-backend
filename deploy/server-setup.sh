@@ -13,6 +13,7 @@
 #   TIMEZONE        zona waktu server (default Asia/Jakarta)
 #
 # Aman dijalankan ulang: langkah yang sudah selesai dilewati, .env yang sudah ada tidak ditimpa.
+# Catatan: skrip ini dibaca dari stdin, jadi setiap perintah yang bisa membaca stdin diberi </dev/null.
 set -euo pipefail
 
 REPO_BACKEND="${REPO_BACKEND:-https://github.com/edopranata/dex-backend.git}"
@@ -179,11 +180,11 @@ else
 fi
 
 step "Build & jalankan container (pertama kali ±5-10 menit)"
-as_deploy bash "$APP_ROOT/backend/deploy/deploy.sh" --no-pull
+as_deploy bash "$APP_ROOT/backend/deploy/deploy.sh" --no-pull </dev/null
 
 if [ "$FIRST_RUN" = true ]; then
     step "Token awal"
-    as_deploy docker compose -f "$APP_ROOT/backend/compose.yaml" exec -T app php artisan db:seed --class=MarketTokenSeeder --force
+    as_deploy docker compose -f "$APP_ROOT/backend/compose.yaml" exec -T app php artisan db:seed --class=MarketTokenSeeder --force </dev/null
 fi
 
 if [ -n "$TUNNEL_TOKEN" ]; then
@@ -192,7 +193,7 @@ if [ -n "$TUNNEL_TOKEN" ]; then
     cp "$APP_ROOT/backend/deploy/edge/compose.yaml" /opt/edge/compose.yaml
     echo "CLOUDFLARE_TUNNEL_TOKEN=$TUNNEL_TOKEN" > /opt/edge/.env
     chmod 600 /opt/edge/.env
-    docker compose -f /opt/edge/compose.yaml up -d
+    docker compose -f /opt/edge/compose.yaml up -d </dev/null
     ok "cloudflared berjalan; atur public hostname di dashboard Cloudflare -> http://dexsim:80"
 fi
 
