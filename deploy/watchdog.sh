@@ -7,8 +7,12 @@ set -uo pipefail
 main() {
     cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 1
 
-    exec 9>/tmp/dex-deploy.lock
-    flock -n 9 || exit 0
+    # Read-only open: the lock file belongs to the deploy user, and Ubuntu's fs.protected_regular stops root
+    # from opening someone else's file in /tmp for writing. flock works on a read-only descriptor too.
+    if [ -e /tmp/dex-deploy.lock ]; then
+        exec 9</tmp/dex-deploy.lock
+        flock -n 9 || exit 0
+    fi
 
     local port url state failures
     port="$(grep -E '^WEB_PORT=' .env | cut -d= -f2)"
