@@ -46,4 +46,12 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o BatchMode=yes deploy@"$HOST" deploy
+          # The VPS NAT sometimes resets connections from some runner IPs before sshd sees them (exit 255).
+          for attempt in 1 2 3 4 5; do
+            status=0
+            ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 deploy@"$HOST" deploy || status=$?
+            [ "$status" -ne 255 ] && exit "$status"
+            echo "SSH gagal tersambung (percobaan $attempt), coba lagi dalam 20 detik…"
+            sleep 20
+          done
+          exit 255
