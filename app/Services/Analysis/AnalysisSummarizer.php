@@ -43,7 +43,7 @@ class AnalysisSummarizer
             );
 
             if (is_string($result['summary'] ?? null) && $result['summary'] !== '') {
-                return ['summary' => mb_substr($result['summary'], 0, 2000), 'provider' => $this->ai->provider()];
+                return ['summary' => mb_substr($result['summary'], 0, 2000), 'provider' => $this->ai->lastProvider()];
             }
         }
 

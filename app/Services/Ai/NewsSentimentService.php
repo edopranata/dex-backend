@@ -42,7 +42,7 @@ class NewsSentimentService
         }
 
         $scores = $this->ai->isEnabled() ? $this->scoreWithAi($items) : [];
-        $provider = $this->ai->provider();
+        $provider = $this->ai->lastProvider();
 
         foreach ($items as $item) {
             $score = $scores[$item->id] ?? null;

@@ -187,21 +187,35 @@ return [
     */
 
     'ai' => [
+        // Provider utama dipakai dulu; cadangan dipakai saat utama dijeda (limit, kuota, error) atau anggarannya habis.
         'provider' => env('AI_PROVIDER', 'none'),
+        'fallback_provider' => env('AI_FALLBACK_PROVIDER', 'none'),
         'gemini' => [
             'key' => env('GEMINI_API_KEY'),
             // Alias "latest" mengikuti versi terbaru, jadi tidak pensiun seperti model bernomor.
             'model' => env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
+            // Anggaran agar tidak melewati free tier; request di atasnya pindah ke cadangan atau template/kamus.
+            'max_per_minute' => (int) env('GEMINI_MAX_PER_MINUTE', env('AI_MAX_REQUESTS_PER_MINUTE', 5)),
+            'max_per_day' => (int) env('GEMINI_MAX_PER_DAY', env('AI_MAX_REQUESTS_PER_DAY', 250)),
+        ],
+        'xai' => [
+            'key' => env('XAI_API_KEY'),
+            'base_url' => 'https://api.x.ai/v1',
+            // Non-reasoning: tanpa token "berpikir" yang ikut ditagih, cukup untuk sentimen & ringkasan.
+            'model' => env('XAI_MODEL', 'grok-4.20-0309-non-reasoning'),
+            // Berbayar per token: batas harian sekaligus membatasi biaya.
+            'max_per_minute' => (int) env('XAI_MAX_PER_MINUTE', 30),
+            'max_per_day' => (int) env('XAI_MAX_PER_DAY', 100),
         ],
         'openai' => [
             'key' => env('OPENAI_API_KEY'),
+            'base_url' => 'https://api.openai.com/v1',
             'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
+            'max_per_minute' => (int) env('OPENAI_MAX_PER_MINUTE', 30),
+            'max_per_day' => (int) env('OPENAI_MAX_PER_DAY', 250),
         ],
         // Ringkasan AI dibuat ulang jika rekomendasi berubah atau ringkasan lebih tua dari ini.
         'summary_ttl_minutes' => 180,
-        // Anggaran request agar tidak melewati free tier; request di atasnya memakai cadangan (template/kamus).
-        'max_requests_per_minute' => (int) env('AI_MAX_REQUESTS_PER_MINUTE', 5),
-        'max_requests_per_day' => (int) env('AI_MAX_REQUESTS_PER_DAY', 250),
     ],
 
     /*

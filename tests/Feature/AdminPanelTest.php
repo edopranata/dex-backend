@@ -23,8 +23,8 @@ test('api keys are stored encrypted, applied to config and never returned', func
         ->putJson('/api/admin/settings', ['values' => ['market.ai.provider' => 'gemini', 'market.ai.gemini.key' => 'AIzaSecretKey1234']])
         ->assertOk()
         ->assertDontSee('AIzaSecretKey1234')
-        ->assertJsonPath('groups.0.fields.1.masked', '••••1234')
-        ->assertJsonPath('groups.0.fields.1.source', 'panel');
+        ->assertJsonPath('groups.0.fields.2.masked', '••••1234')
+        ->assertJsonPath('groups.0.fields.2.source', 'panel');
 
     expect(Setting::firstWhere('key', 'market.ai.gemini.key')->value)->not->toContain('AIzaSecretKey1234')
         ->and(config('market.ai.gemini.key'))->toBe('AIzaSecretKey1234')
