@@ -19,7 +19,16 @@ APP_UID=82
 notify() {
     timeout 60 docker compose exec -T app php artisan app:telegram-notify "$1" "$2" </dev/null >/dev/null 2>&1 || true
 }
-trap 'notify "Backup database gagal" "backup.sh berhenti di baris $LINENO ($(date "+%F %T")). Cek /var/log/dex-backup.log"' ERR
+
+# Optional Healthchecks.io check (BACKUP_PING_URL in /etc/dex/offsite.env), so a day without any backup alerts too.
+ping_backup() {
+    local url
+    url=$(sed -n 's/^BACKUP_PING_URL=//p' "$OFFSITE_ENV" 2>/dev/null || true)
+    if [ -n "$url" ]; then
+        curl -fsS -m 10 --retry 3 -o /dev/null "$url$1" || true
+    fi
+}
+trap 'notify "Backup database gagal" "backup.sh berhenti di baris $LINENO ($(date "+%F %T")). Cek /var/log/dex-backup.log"; ping_backup /fail' ERR
 
 mkdir -p "$BACKUP_DIR"
 
@@ -38,7 +47,7 @@ if [ -f "$OFFSITE_ENV" ]; then
     NAME=$(basename "$FILE")
     STATUS="$BACKUP_DIR/offsite-status.json"
     if output=$(offsite "$BACKUP_DIR:ro" copyto "/data/$NAME" "offsite:$NAME" --stats 0 2>&1); then
-        offsite_json "$STATUS" ok=true file="$NAME" size="$(stat -c %s "$FILE")" at="$(date -Iseconds)"
+        offsite_json "$STATUS" ok=true file="$NAME" size="$(stat -c %s "$FILE")" at="$(date -Iseconds)" bucket="$(sed -n 's/^R2_BUCKET=//p' "$OFFSITE_ENV")"
         echo "$(date '+%F %T') offsite: R2 $NAME"
     else
         ERROR=$(printf '%s\n' "$output" | tail -n 1)
@@ -46,6 +55,9 @@ if [ -f "$OFFSITE_ENV" ]; then
         echo "$(date '+%F %T') offsite gagal: $output"
         trap - ERR
         notify "Salinan backup ke R2 gagal" "Backup lokal $NAME aman, tetapi upload ke R2 gagal: $ERROR"
+        ping_backup /fail
         exit 1
     fi
 fi
+
+ping_backup ""

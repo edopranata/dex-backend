@@ -4,12 +4,17 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Notifications\InviteUser;
+use App\Services\Notifications\MailSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Password as PasswordBroker;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class UserController extends Controller
 {
@@ -28,18 +33,48 @@ class UserController extends Controller
         return response()->json(['data' => $users]);
     }
 
-    public function store(Request $request): JsonResponse
+    /**
+     * Create an account with a password set by the admin, or (invite) let the user set it from an email link.
+     */
+    public function store(Request $request, MailSettings $mail): JsonResponse
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', Password::defaults()],
+            'invite' => ['sometimes', 'boolean'],
+            'password' => ['exclude_if:invite,true', 'required', Password::defaults()],
             'is_admin' => ['boolean'],
         ]);
+        $invite = (bool) ($data['invite'] ?? false);
 
-        $user = User::create([...$data, 'is_admin' => $data['is_admin'] ?? false, 'balance_usd' => config('market.simulator.starting_balance')]);
+        if ($invite && ! $mail->isEnabled()) {
+            throw ValidationException::withMessages(['invite' => 'Email belum diaktifkan (Pengaturan → Email). Isi password secara manual.']);
+        }
 
-        return response()->json(['data' => $user->only('id', 'name', 'email', 'balance_usd', 'is_admin')], 201);
+        $user = User::create([
+            'name' => $data['name'],
+            'email' => $data['email'],
+            // Nobody knows this one; the invitation link replaces it.
+            'password' => $invite ? Str::password(40) : $data['password'],
+            'is_admin' => $data['is_admin'] ?? false,
+            'balance_usd' => config('market.simulator.starting_balance'),
+        ]);
+
+        return response()->json([
+            'data' => $user->only('id', 'name', 'email', 'balance_usd', 'is_admin'),
+            'invite' => $invite ? $this->sendInvite($user, $request->user()) : null,
+        ], 201);
+    }
+
+    /**
+     * (Re)send the invitation link, e.g. when it expired or the user forgot their password.
+     */
+    public function invite(Request $request, User $user, MailSettings $mail): JsonResponse
+    {
+        abort_if($user->is_system, 422, 'Akun sistem tidak bisa login.');
+        abort_unless($mail->isEnabled(), 422, 'Email belum diaktifkan (Pengaturan → Email).');
+
+        return response()->json(['invite' => $this->sendInvite($user, $request->user())]);
     }
 
     public function update(Request $request, User $user): JsonResponse
@@ -69,6 +104,24 @@ class UserController extends Controller
         $user->update($data);
 
         return response()->json(['data' => $user->only('id', 'name', 'email', 'balance_usd', 'is_admin')]);
+    }
+
+    /**
+     * Sent right away (not queued) so the admin sees a wrong SMTP setting immediately.
+     *
+     * @return array{sent: bool, error: string|null}
+     */
+    private function sendInvite(User $user, User $admin): array
+    {
+        try {
+            $user->notifyNow(new InviteUser(PasswordBroker::broker('invites')->createToken($user), $admin->name));
+        } catch (Throwable $e) {
+            report($e);
+
+            return ['sent' => false, 'error' => mb_substr($e->getMessage(), 0, 300)];
+        }
+
+        return ['sent' => true, 'error' => null];
     }
 
     public function destroy(Request $request, User $user): Response

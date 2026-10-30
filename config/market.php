@@ -235,6 +235,24 @@ return [
         'amount_usd' => (float) env('AUTO_FOLLOW_AMOUNT_USD', 100),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Monitoring eksternal
+    |--------------------------------------------------------------------------
+    |
+    | heartbeat_url: URL ping Healthchecks.io (https://hc-ping.com/<uuid>). Diping
+    | app:heartbeat tiap 5 menit; jika ping berhenti (server/scheduler mati) atau
+    | melapor /fail (database, Redis, Horizon bermasalah), Healthchecks.io mengirim
+    | peringatan ke Telegram. Endpoint /health dipantau dari luar oleh UptimeRobot.
+    |
+    */
+
+    'monitoring' => [
+        'heartbeat_url' => env('HEARTBEAT_URL'),
+        // Scheduler dianggap mati jika tidak ada tugas terjadwal selesai selama ini.
+        'scheduler_stale_minutes' => 10,
+    ],
+
     'telegram' => [
         'enabled' => (bool) env('TELEGRAM_ENABLED', false),
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),

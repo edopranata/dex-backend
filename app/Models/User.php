@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Notifications\ResetPassword;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
@@ -55,6 +56,16 @@ class User extends Authenticatable
                 'balance_usd' => config('market.simulator.starting_balance'),
                 'is_system' => true,
             ])->save());
+    }
+
+    /**
+     * Send the "lupa password" link in Indonesian, pointing at the SPA's reset page.
+     *
+     * @param  string  $token
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPassword($token));
     }
 
     public function hasTwoFactorEnabled(): bool

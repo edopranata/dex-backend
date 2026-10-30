@@ -6,6 +6,7 @@
 #   R2_SECRET_ACCESS_KEY=...
 #   R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
 #   R2_BUCKET=dex-bucket
+#   BACKUP_PING_URL=https://hc-ping.com/<uuid>   (opsional, Healthchecks.io)
 
 OFFSITE_ENV="${OFFSITE_ENV:-/etc/dex/offsite.env}"
 RCLONE_IMAGE="rclone/rclone:1.68.2"

@@ -49,6 +49,28 @@ class SettingsRegistry
                 ],
             ],
             [
+                'key' => 'mail',
+                'label' => 'Email (SMTP)',
+                'description' => 'Untuk undangan pengguna baru dan lupa password. Disarankan Resend (gratis 3.000/bulan): host smtp.resend.com, port 587, username resend, password = API key Resend. Alamat pengirim harus dari domain yang sudah diverifikasi di Resend.',
+                'fields' => [
+                    ['key' => 'mail.default', 'label' => 'Pengiriman email', 'type' => 'select', 'options' => ['log' => 'Nonaktif (hanya dicatat di log)', 'smtp' => 'SMTP']],
+                    ['key' => 'mail.mailers.smtp.host', 'label' => 'SMTP host', 'type' => 'string'],
+                    ['key' => 'mail.mailers.smtp.port', 'label' => 'SMTP port', 'type' => 'int', 'min' => 1, 'max' => 65535, 'description' => '587 (STARTTLS) atau 465 (TLS).'],
+                    ['key' => 'mail.mailers.smtp.username', 'label' => 'SMTP username', 'type' => 'string'],
+                    ['key' => 'mail.mailers.smtp.password', 'label' => 'SMTP password / API key', 'type' => 'secret'],
+                    ['key' => 'mail.from.address', 'label' => 'Alamat pengirim', 'type' => 'string', 'rules' => ['email'], 'description' => 'Mis. noreply@tune-in.trade'],
+                    ['key' => 'mail.from.name', 'label' => 'Nama pengirim', 'type' => 'string'],
+                ],
+            ],
+            [
+                'key' => 'monitoring',
+                'label' => 'Monitoring eksternal',
+                'description' => 'UptimeRobot memantau https://dexsim.tune-in.trade/health dari luar (tidak perlu diisi di sini). Healthchecks.io menerima heartbeat dari server tiap 5 menit; jika heartbeat berhenti atau melapor gagal, Anda mendapat peringatan di Telegram.',
+                'fields' => [
+                    ['key' => 'market.monitoring.heartbeat_url', 'label' => 'URL ping Healthchecks.io', 'type' => 'secret', 'rules' => ['url', 'starts_with:https://'], 'description' => 'Bentuknya https://hc-ping.com/<uuid>. Atur di Healthchecks: Period 5 menit, Grace 10 menit.'],
+                ],
+            ],
+            [
                 'key' => 'data',
                 'label' => 'Sumber data',
                 'description' => 'Batas request dan ambang data pasar.',
@@ -145,7 +167,7 @@ class SettingsRegistry
      */
     public static function rules(array $field): array
     {
-        return match ($field['type']) {
+        $rules = match ($field['type']) {
             'int' => ['nullable', 'integer', 'min:'.$field['min'], 'max:'.$field['max']],
             'float' => ['nullable', 'numeric', 'min:'.$field['min'], 'max:'.$field['max']],
             'bool' => ['nullable', 'boolean'],
@@ -153,6 +175,8 @@ class SettingsRegistry
             'secret' => ['nullable', 'string', 'max:500'],
             default => ['nullable', 'string', 'max:200'],
         };
+
+        return [...$rules, ...($field['rules'] ?? [])];
     }
 
     public static function cast(string $type, mixed $value): mixed

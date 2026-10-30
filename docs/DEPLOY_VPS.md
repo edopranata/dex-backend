@@ -165,6 +165,25 @@ Hasil upload terakhir dan uji restore terakhir tampil di **Admin → Backup**. U
 
 Restore dari R2 jika VPS hilang: unduh file dari dashboard R2 (atau `rclone`), lalu jalankan perintah *Restore* di tabel atas pada server baru. Siapkan juga `APP_KEY` lama dari password manager: tanpa itu data terenkripsi (2FA, API key di Pengaturan) tidak bisa dibaca.
 
+## 6c. Monitoring eksternal & email
+
+Semua layanan pihak ke-3 (alamat dashboard, biaya, tempat pengaturan, status) tercantum di **Admin → General Information**; tambahkan catatan akun/paket di sana.
+
+**UptimeRobot** (cek dari luar, gratis): buat akun, hubungkan Telegram di *Integrations*, lalu *New monitor* → HTTP(s) → `https://dexsim.tune-in.trade/health`, interval 5 menit. `/health` menjawab 503 jika database, Redis atau scheduler mati (`/up` tetap untuk watchdog & deploy).
+
+**Healthchecks.io** (heartbeat dari dalam, gratis): buat akun, hubungkan Telegram di *Integrations*, lalu buat dua check:
+
+| Check | Period / Grace | Isi URL ping di |
+|---|---|---|
+| `dex-heartbeat` | 5 menit / 10 menit | Admin → Pengaturan → Monitoring eksternal |
+| `dex-backup` | 1 hari / 2 jam | `/etc/dex/offsite.env` sebagai `BACKUP_PING_URL` (lihat di bawah) |
+
+```bash
+ssh -t dex-vps "sudo bash -c 'read -rp \"URL ping dex-backup: \" url; sed -i \"/^BACKUP_PING_URL=/d\" /etc/dex/offsite.env; echo \"BACKUP_PING_URL=\$url\" >> /etc/dex/offsite.env' && echo tersimpan"
+```
+
+**Resend** (email, gratis 3.000/bulan): *Domains* → tambahkan `tune-in.trade` → pasang record DNS di Cloudflare (tombol otomatis Cloudflare tersedia) → tunggu *Verified*. *API Keys* → buat key dengan izin *Sending access* untuk domain itu. Lalu Admin → Pengaturan → Email (SMTP): Pengiriman = SMTP, host `smtp.resend.com`, port `587`, username `resend`, password = API key, pengirim `noreply@tune-in.trade` → Simpan → **Kirim email tes**. Setelah aktif: tombol *Lupa password?* muncul di halaman masuk, dan pengguna baru bisa diundang lewat email (Admin → Pengguna).
+
 ## 6b. Pemulihan otomatis (server mati / reboot)
 
 Tiga lapis, dipasang oleh `deploy/server-setup.sh`:

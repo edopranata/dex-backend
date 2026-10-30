@@ -41,5 +41,8 @@ Schedule::command('app:telegram-daily-summary')->hourlyAt(0);
 
 Schedule::command('horizon:snapshot')->everyFiveMinutes();
 
+// Healthchecks.io: a missing ping means the server or scheduler is down; /fail means a service is unhealthy.
+Schedule::command('app:heartbeat')->everyFiveMinutes();
+
 Schedule::command('model:prune')->dailyAt('03:00');
 Schedule::command('queue:prune-failed --hours=168')->dailyAt('03:30');

@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use App\Services\Admin\SettingsRegistry;
 use App\Services\Admin\SettingsStore;
 use App\Services\Ai\AiClient;
+use App\Services\Notifications\MailSettings;
 use App\Services\Notifications\TelegramBot;
 use App\Services\Notifications\TelegramClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class SettingsController extends Controller
 {
@@ -108,6 +111,29 @@ class SettingsController extends Controller
     public function testAi(AiClient $ai): JsonResponse
     {
         return response()->json($ai->ping());
+    }
+
+    /**
+     * Send a test email to the admin with the saved SMTP settings.
+     */
+    public function testMail(Request $request, MailSettings $mail): JsonResponse
+    {
+        if (! $mail->isEnabled()) {
+            return response()->json(['ok' => false, 'error' => 'Pilih SMTP, isi host dan alamat pengirim, lalu Simpan.']);
+        }
+
+        $email = $request->user()->email;
+        $start = microtime(true);
+
+        try {
+            Mail::raw('Email tes dari '.config('app.name').'. Jika Anda menerima ini, pengaturan SMTP sudah benar.', function ($message) use ($email): void {
+                $message->to($email)->subject('Email tes '.config('app.name'));
+            });
+        } catch (Throwable $e) {
+            return response()->json(['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 500)]);
+        }
+
+        return response()->json(['ok' => true, 'to' => $email, 'provider' => $mail->provider(), 'latency_ms' => (int) round((microtime(true) - $start) * 1000)]);
     }
 
     /**

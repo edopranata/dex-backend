@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\Admin\BackupController;
+use App\Http\Controllers\Api\Admin\InfoController;
 use App\Http\Controllers\Api\Admin\LogController;
 use App\Http\Controllers\Api\Admin\SettingsController;
 use App\Http\Controllers\Api\Admin\SystemController;
@@ -12,6 +13,7 @@ use App\Http\Controllers\Api\DiscoveryController;
 use App\Http\Controllers\Api\MarketController;
 use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\OrderController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\PortfolioController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProfileTelegramController;
@@ -29,6 +31,11 @@ Route::prefix('auth')->name('auth.')->group(function () {
         Route::post('register', [AuthController::class, 'register'])->name('register');
         Route::post('login', [AuthController::class, 'login'])->name('login');
         Route::post('two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->name('two-factor');
+    });
+
+    Route::middleware('throttle:5,1')->group(function () {
+        Route::post('forgot-password', [PasswordResetController::class, 'forgot'])->name('password.forgot');
+        Route::post('reset-password', [PasswordResetController::class, 'reset'])->name('password.reset');
     });
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -89,10 +96,14 @@ Route::middleware('auth:sanctum')->group(function () {
 });
 
 Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('info', [InfoController::class, 'index'])->name('info.index');
+    Route::put('info/{service}/note', [InfoController::class, 'updateNote'])->name('info.note');
+
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
     Route::post('settings/test-ai', [SettingsController::class, 'testAi'])->middleware('throttle:10,1')->name('settings.test-ai');
+    Route::post('settings/test-mail', [SettingsController::class, 'testMail'])->middleware('throttle:5,1')->name('settings.test-mail');
 
     Route::get('telegram', [TelegramController::class, 'show'])->name('telegram.show');
     Route::post('telegram/webhook', [TelegramController::class, 'connect'])->middleware('throttle:10,1')->name('telegram.connect');
@@ -100,6 +111,7 @@ Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.'
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');
     Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::post('users/{user}/invite', [UserController::class, 'invite'])->middleware('throttle:10,1')->name('users.invite');
     Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
 
     Route::get('backups', [BackupController::class, 'index'])->name('backups.index');

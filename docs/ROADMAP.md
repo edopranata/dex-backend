@@ -72,8 +72,8 @@ Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 - [x] **Notifikasi Telegram per pengguna**: sinyal Buy baru, TP/SL tercapai, peringatan rug pull, token masuk/keluar Market, ringkasan harian, jam tenang — **29 Okt 2026: admin memasang bot (webhook otomatis); tiap pengguna menautkan chat dengan kode unik di Profil → Telegram dan memilih notifikasinya sendiri**
 - [x] Notifikasi Telegram untuk operasional: watchdog memulihkan layanan, backup gagal, job/jadwal gagal, AI dijeda lama
 - [x] Keamanan akun: 2FA (TOTP + kode pemulihan) yang diaktifkan sendiri oleh pengguna; admin bisa me-reset 2FA pengguna yang terkunci
-- [ ] **Email ke pengguna baru** (pending): pakai layanan SMTP transaksional gratis (Brevo 300/hari, Resend 3.000/bulan) — bukan mail server sendiri di VPS (port 25 & reverse DNS di NAT tidak bisa diatur, email mudah masuk spam)
-- [ ] Monitor uptime eksternal gratis (mis. UptimeRobot / Healthchecks.io) ke `/up`, kirim ke Telegram
+- [ ] **Email ke pengguna baru** lewat Resend (SMTP gratis 3.000/bulan) — **30 Okt 2026: undangan (pengguna membuat password sendiri, link 3 hari), lupa password, dan tombol email tes siap. Tinggal verifikasi domain di Resend & isi SMTP di Admin → Pengaturan → Email**
+- [ ] Monitor uptime eksternal: UptimeRobot ke `/health` (database, Redis, scheduler) + Healthchecks.io untuk heartbeat 5 menit & backup harian, semua ke Telegram — **30 Okt 2026: endpoint & heartbeat siap; tinggal buat akun & monitor (DEPLOY_VPS.md 6c). Semua layanan pihak ke-3 tercatat di Admin → General Information**
 - [x] Salinan backup ke luar VPS (Cloudflare R2), uji restore sekali — **30 Okt 2026: upload harian ke bucket R2 `dex-bucket` (`deploy/backup.sh`): dump 2,9 MB ±1,9 dtk + upload ±1,1 dtk; uji restore dari R2 ke database sementara (`deploy/restore-check.sh`) LOLOS dalam 6,5 dtk (26/26 tabel, 29/29 migrasi). CPU puncak ±65% selama <2 dtk, RAM +80 MB; status di Admin → Backup**
 - [ ] **Token trending di X** (tahap akhir, butuh pertimbangan): job terjadwal memakai tool *X Search* xAI (Grok) pada daftar akun crypto pilihan; hasil masuk Temukan sebagai kandidat "X trending" dan tetap melewati cek DEX Screener, likuiditas & keamanan; badge "Ramai di X", bukan pemicu beli. Putuskan dulu frekuensi (4 atau 6 jam), daftar akun, dan batas biaya harian — perkiraan $40–60/bulan
 
@@ -197,6 +197,8 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 29 Okt 2026 | Domain `tune-in.trade` (Cloudflare) + Tunnel bersama `/opt/edge`; aplikasi di `dexsim.tune-in.trade`, akses IP:port ditutup | VPS NAT tidak bisa sertifikat langsung; tunnel tanpa port masuk, siap untuk subdomain lain |
 | 30 Okt 2026 | AI memakai rantai provider: Gemini (utama, gratis) → xAI Grok (cadangan, berbayar, batas 100 request/hari) | Kuota gratis Gemini sering habis; analisis tetap jalan tanpa biaya besar |
 | 30 Okt 2026 | Backup ke luar VPS memakai Cloudflare R2, bukan Google Drive | Gratis 10 GB, key S3 dibatasi satu bucket, tanpa login OAuth yang bisa kedaluwarsa |
+| 30 Okt 2026 | Monitoring: UptimeRobot (cek dari luar) + Healthchecks.io (heartbeat dari dalam & backup) | Gratis, keduanya kirim ke Telegram; heartbeat menangkap scheduler/Horizon mati yang tidak terlihat dari luar |
+| 30 Okt 2026 | Email transaksional memakai Resend (SMTP), bukan Brevo | Gratis 3.000/bulan tanpa branding; domain diverifikasi lewat DNS Cloudflare |
 | | | |
 
 ---

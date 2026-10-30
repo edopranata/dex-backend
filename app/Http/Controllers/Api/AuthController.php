@@ -8,6 +8,7 @@ use App\Http\Requests\RegisterRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\Auth\TwoFactorAuthenticator;
+use App\Services\Notifications\MailSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -24,7 +25,10 @@ class AuthController extends Controller
      */
     public function options(): JsonResponse
     {
-        return response()->json(['registration_enabled' => config('market.simulator.registration_enabled')]);
+        return response()->json([
+            'registration_enabled' => config('market.simulator.registration_enabled'),
+            'password_reset_enabled' => app(MailSettings::class)->isEnabled(),
+        ]);
     }
 
     public function register(RegisterRequest $request): UserResource

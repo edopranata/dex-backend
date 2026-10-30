@@ -34,6 +34,11 @@ class SettingsStore
                 ? SettingsRegistry::cast($field['type'], $stored[$key])
                 : $this->defaults[$key]]);
         }
+
+        // Mailers are built once per process; drop them so changed SMTP settings reach queue workers.
+        if (app()->resolved('mail.manager')) {
+            app('mail.manager')->forgetMailers();
+        }
     }
 
     /**
