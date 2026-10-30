@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\OrderSide;
 use App\Models\Signal;
 use App\Models\User;
 use App\Services\Trading\TradingService;
@@ -28,8 +29,15 @@ class FollowSignalAutomatically implements ShouldQueue
             return;
         }
 
+        $account = User::autoFollower();
+
+        // A retried job (e.g. after a worker restart) must not buy the same signal twice.
+        if ($account->orders()->where('signal_id', $this->signal->id)->where('side', OrderSide::Buy)->exists()) {
+            return;
+        }
+
         try {
-            $trading->followSignal(User::autoFollower(), $this->signal->load('token'), (float) config('market.autofollow.amount_usd'), limit: true);
+            $trading->followSignal($account, $this->signal->load('token'), (float) config('market.autofollow.amount_usd'), limit: true);
         } catch (ValidationException $e) {
             Log::info("Auto-follow melewati sinyal #{$this->signal->id}: ".collect($e->errors())->flatten()->first());
         }

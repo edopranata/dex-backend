@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Jobs\FollowSignalAutomatically;
 use App\Models\Order;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
 use App\Services\Admin\SettingsStore;
+use App\Services\Trading\TradingService;
 
 beforeEach(function () {
     app(SettingsStore::class)->set(['market.autofollow.enabled' => true, 'market.autofollow.amount_usd' => 100, 'market.simulator.starting_balance' => 10_000]);
@@ -51,4 +53,12 @@ test('waiting signal buys are cancelled when the signal closes before entry', fu
 
     expect($buy->refresh()->status)->toBe(OrderStatus::Cancelled)
         ->and($buy->note)->toContain('sudah ditutup');
+});
+
+test('a retried auto-follow job does not buy the same signal twice', function () {
+    $signal = Signal::factory()->for($this->token)->create();
+
+    (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
+
+    expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(1);
 });

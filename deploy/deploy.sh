@@ -2,7 +2,8 @@
 # Tarik kode terbaru kedua repo, build image, lalu ganti container. Jalankan sebagai user deploy:
 #   bash /opt/dex/backend/deploy/deploy.sh            (normal)
 #   bash /opt/dex/backend/deploy/deploy.sh --no-pull  (build dari kode yang sudah ada)
-# Migrasi database berjalan otomatis (service "migrate") sebelum app, queue, dan scheduler start ulang.
+# Urutan: build -> migrasi -> app/scheduler/web (situs langsung pakai versi baru) -> horizon paling akhir,
+# supaya situs tidak pernah menunggu worker queue menyelesaikan job-nya.
 set -euo pipefail
 
 # Wrapped in a function so bash parses the whole script before git pull can change this file.
@@ -26,6 +27,13 @@ main() {
 
     cd "$backend"
     docker compose build
+
+    docker compose up -d --wait mysql redis
+    docker compose up --no-deps --exit-code-from migrate migrate
+    docker compose up -d --no-deps app scheduler web
+
+    # Queue workers last: stopping them may wait for running jobs (stop_grace_period), the site doesn't care.
+    docker compose up -d --no-deps horizon
     docker compose up -d --remove-orphans
     docker image prune -f >/dev/null
 

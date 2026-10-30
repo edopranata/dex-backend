@@ -78,7 +78,8 @@ services:
   horizon:
     <<: *app
     command: ["php", "artisan", "horizon"]
-    stop_grace_period: 620s
+    # Jobs take seconds (the longest, discovery, about a minute); an interrupted job is retried.
+    stop_grace_period: 90s
 
   scheduler:
     <<: *app
