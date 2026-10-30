@@ -74,7 +74,7 @@ Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 - [x] Keamanan akun: 2FA (TOTP + kode pemulihan) yang diaktifkan sendiri oleh pengguna; admin bisa me-reset 2FA pengguna yang terkunci
 - [ ] **Email ke pengguna baru** (pending): pakai layanan SMTP transaksional gratis (Brevo 300/hari, Resend 3.000/bulan) — bukan mail server sendiri di VPS (port 25 & reverse DNS di NAT tidak bisa diatur, email mudah masuk spam)
 - [ ] Monitor uptime eksternal gratis (mis. UptimeRobot / Healthchecks.io) ke `/up`, kirim ke Telegram
-- [ ] Salinan backup ke luar VPS (Cloudflare R2), uji restore sekali — **30 Okt 2026: upload harian ke R2 (`deploy/backup.sh`) & uji restore ke database sementara (`deploy/restore-check.sh`) siap; status di Admin → Backup. Tinggal isi key di server lalu jalankan uji pertama**
+- [x] Salinan backup ke luar VPS (Cloudflare R2), uji restore sekali — **30 Okt 2026: upload harian ke bucket R2 `dex-bucket` (`deploy/backup.sh`): dump 2,9 MB ±1,9 dtk + upload ±1,1 dtk; uji restore dari R2 ke database sementara (`deploy/restore-check.sh`) LOLOS dalam 6,5 dtk (26/26 tabel, 29/29 migrasi). CPU puncak ±65% selama <2 dtk, RAM +80 MB; status di Admin → Backup**
 - [ ] **Token trending di X** (tahap akhir, butuh pertimbangan): job terjadwal memakai tool *X Search* xAI (Grok) pada daftar akun crypto pilihan; hasil masuk Temukan sebagai kandidat "X trending" dan tetap melewati cek DEX Screener, likuiditas & keamanan; badge "Ramai di X", bukan pemicu beli. Putuskan dulu frekuensi (4 atau 6 jam), daftar akun, dan batas biaya harian — perkiraan $40–60/bulan
 
 **Kriteria lolos:** 7 hari berturut-turut tanpa downtime yang tidak terdeteksi; backup harian ada dan pernah diuji restore.

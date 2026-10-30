@@ -142,9 +142,9 @@ Aktifkan AI: isi `AI_PROVIDER=gemini` dan `GEMINI_API_KEY=...` di `.env`, lalu `
 
 ## 6a. Salinan backup di Cloudflare R2
 
-Backup harian juga di-upload ke bucket R2 `dex-backups` memakai container `rclone` (tidak ada yang dipasang di host). Key R2 disimpan di `/etc/dex/offsite.env` (root, 600), **bukan** di `.env`, karena `.env` ikut masuk ke semua container aplikasi.
+Backup harian juga di-upload ke bucket R2 (production: `dex-bucket`, diatur lewat `R2_BUCKET`) memakai container `rclone` (tidak ada yang dipasang di host). Key R2 disimpan di `/etc/dex/offsite.env` (root, 600), **bukan** di `.env`, karena `.env` ikut masuk ke semua container aplikasi.
 
-Di Cloudflare (sekali): buat bucket `dex-backups`, aturan lifecycle *hapus setelah 30 hari*, dan API token **Object Read & Write** khusus bucket itu (TTL *Forever*, tanpa filter IP selama IP VPS masih NAT bersama).
+Di Cloudflare (sekali): buat bucket (mis. `dex-bucket`), aturan lifecycle *hapus setelah 30 hari*, dan API token **Object Read & Write** khusus bucket itu (TTL *Forever*, tanpa filter IP selama IP VPS masih NAT bersama).
 
 Di VPS, isi key tanpa menampilkannya di layar atau di history shell:
 
@@ -155,7 +155,7 @@ sudo bash -c 'umask 077
 read -rp  "R2 Access Key ID: " id
 read -rsp "R2 Secret Access Key: " secret; echo
 read -rp  "R2 endpoint (https://<account-id>.r2.cloudflarestorage.com): " endpoint
-printf "R2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\nR2_ENDPOINT=%s\nR2_BUCKET=dex-backups\n" "$id" "$secret" "$endpoint" > /etc/dex/offsite.env'
+printf "R2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\nR2_ENDPOINT=%s\nR2_BUCKET=dex-bucket\n" "$id" "$secret" "$endpoint" > /etc/dex/offsite.env'
 cd /opt/dex/backend
 sudo bash deploy/backup.sh          # backup + upload pertama
 sudo bash deploy/restore-check.sh   # ambil dari R2, restore ke database sementara, bandingkan, hapus
