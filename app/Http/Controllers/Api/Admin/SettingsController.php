@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\Admin\SettingsRegistry;
 use App\Services\Admin\SettingsStore;
 use App\Services\Ai\AiClient;
+use App\Services\Notifications\TelegramBot;
 use App\Services\Notifications\TelegramClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -136,7 +137,10 @@ class SettingsController extends Controller
         $telegram = app(TelegramClient::class);
 
         if (array_intersect($keys, ['market.telegram.bot_token', 'market.telegram.enabled']) !== [] && $telegram->isActive()) {
-            rescue(fn () => $telegram->connectWebhook(), report: false);
+            rescue(function () use ($telegram): void {
+                $telegram->connectWebhook();
+                TelegramBot::syncCommands($telegram);
+            }, report: false);
         }
     }
 

@@ -131,6 +131,21 @@ class TelegramClient
         ];
     }
 
+    /**
+     * Commands shown in Telegram's "/" menu, for every chat or for one chat.
+     *
+     * @param  array<string, string>  $commands  Command (without "/") => description.
+     *
+     * @throws TelegramException
+     */
+    public function setCommands(array $commands, ?string $chatId = null): void
+    {
+        $this->call('setMyCommands', array_filter([
+            'commands' => collect($commands)->map(fn (string $description, string $command): array => ['command' => $command, 'description' => $description])->values()->all(),
+            'scope' => $chatId !== null ? ['type' => 'chat', 'chat_id' => $chatId] : null,
+        ]));
+    }
+
     public function webhookUrl(): string
     {
         return rtrim((string) config('app.url'), '/').'/api/telegram/webhook';

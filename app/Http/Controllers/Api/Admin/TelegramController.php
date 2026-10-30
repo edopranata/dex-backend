@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Notifications\TelegramBot;
 use App\Services\Notifications\TelegramClient;
 use App\Services\Notifications\TelegramException;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ class TelegramController extends Controller
     {
         try {
             $telegram->connectWebhook();
+            TelegramBot::syncCommands($telegram);
         } catch (TelegramException $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }

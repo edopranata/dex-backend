@@ -24,6 +24,9 @@ x-app: &app
   image: dex-app:latest
   env_file: .env
   restart: unless-stopped
+  # A tiny init as PID 1 forwards stop signals: PHP as PID 1 (notably Horizon) ignored them, so
+  # Docker waited the whole stop grace period on every deploy.
+  init: true
   logging: *logging
   volumes:
     # Daily log files shared by app, queue and scheduler (readable in Admin > Log).

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use App\Services\Admin\HorizonStatus;
 use App\Services\Admin\SettingsStore;
 use App\Services\Notifications\TelegramClient;
 use Illuminate\Http\Client\Request;
@@ -106,4 +107,43 @@ test('saving the bot token connects the webhook with its secret', function () {
         ->assertOk()
         ->assertJsonPath('bot.username', 'DexSimulatebot')
         ->assertJsonPath('webhook.connected', true);
+});
+
+test('help lists the commands, with /horizon only for admins', function () {
+    User::factory()->create(['telegram_chat_id' => '777']);
+    User::factory()->create(['telegram_chat_id' => '888', 'is_admin' => true]);
+
+    webhook(telegramUpdate('/help'))->assertJsonPath('text', fn (string $t) => str_contains($t, '/status') && ! str_contains($t, '/horizon'));
+    webhook(telegramUpdate('/help', 888))->assertJsonPath('text', fn (string $t) => str_contains($t, '/horizon'));
+});
+
+test('/horizon shows queue health to admins only', function () {
+    User::factory()->create(['telegram_chat_id' => '777']);
+    User::factory()->create(['telegram_chat_id' => '888', 'is_admin' => true]);
+    $this->mock(HorizonStatus::class)->shouldReceive('summary')->andReturn([
+        'status' => 'running',
+        'queues' => [['name' => 'default', 'length' => 0, 'wait' => 0, 'processes' => 1], ['name' => 'market-data', 'length' => 12, 'wait' => 140, 'processes' => 1]],
+        'jobs_per_minute' => 6.5,
+        'failed_24h' => 0,
+    ]);
+
+    webhook(telegramUpdate('/horizon'))->assertJsonPath('text', 'Perintah /horizon hanya untuk admin.');
+    webhook(telegramUpdate('/horizon', 888))->assertJsonPath('text', fn (string $t) => str_contains($t, 'berjalan')
+        && str_contains($t, 'market-data: 12 menunggu · tunggu ±140 dtk')
+        && str_contains($t, 'https://dexsim.test/horizon'));
+});
+
+test('the command menu is synced for everyone and for admin chats', function () {
+    User::factory()->create(['telegram_chat_id' => '777']);
+    User::factory()->create(['telegram_chat_id' => '888', 'is_admin' => true]);
+
+    $this->artisan('app:telegram-sync')->assertSuccessful();
+
+    $calls = collect(Http::recorded())->map(fn (array $pair): Request => $pair[0])->filter(fn (Request $r): bool => str_ends_with($r->url(), '/setMyCommands'))->values();
+
+    expect($calls)->toHaveCount(2)
+        ->and(collect($calls[0]['commands'])->pluck('command')->all())->toBe(['status', 'help', 'stop'])
+        ->and($calls[0]->data())->not->toHaveKey('scope')
+        ->and($calls[1]['scope'])->toBe(['type' => 'chat', 'chat_id' => '888'])
+        ->and(collect($calls[1]['commands'])->pluck('command')->all())->toContain('horizon');
 });
