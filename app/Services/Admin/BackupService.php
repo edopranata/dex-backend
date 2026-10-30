@@ -50,6 +50,37 @@ class BackupService
     }
 
     /**
+     * Result of the last upload to R2 by deploy/backup.sh, or null before off-site copies were set up.
+     *
+     * @return array{ok: bool, file: string, size: int, at: string, error?: string}|null
+     */
+    public function offsiteStatus(): ?array
+    {
+        return $this->statusFile('offsite-status.json');
+    }
+
+    /**
+     * Result of the last deploy/restore-check.sh run, or null if a restore was never tested.
+     *
+     * @return array{ok: bool, file: string, source: string, at: string, seconds: int, tables: int, live_tables: int, migrations: int, live_migrations: int, users: int, tokens: int, orders: int}|null
+     */
+    public function restoreCheck(): ?array
+    {
+        return $this->statusFile('restore-check.json');
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function statusFile(string $name): ?array
+    {
+        $path = $this->directory().'/'.$name;
+        $status = is_file($path) ? json_decode((string) File::get($path), true) : null;
+
+        return is_array($status) ? $status : null;
+    }
+
+    /**
      * When the next manual backup is allowed, or null if allowed now.
      */
     public function manualAvailableAt(): ?Carbon

@@ -75,6 +75,30 @@ test('backups can be listed and downloaded and manual backups respect the cooldo
     File::deleteDirectory($dir);
 });
 
+test('backup status includes the last R2 copy and restore check written by the server scripts', function () {
+    $dir = sys_get_temp_dir().'/dex-backups-'.uniqid();
+    File::ensureDirectoryExists($dir);
+    config(['market.backup.path' => $dir]);
+
+    $this->actingAs($this->admin)->getJson('/api/admin/backups')
+        ->assertOk()
+        ->assertJsonPath('offsite', null)
+        ->assertJsonPath('restore_check', null);
+
+    file_put_contents("{$dir}/offsite-status.json", '{"ok":false,"file":"dex-2026-10-30-023000.sql.gz","size":880,"at":"2026-10-30T02:30:05+07:00","error":"403 Forbidden"}');
+    file_put_contents("{$dir}/restore-check.json", '{"ok":true,"file":"dex-2026-10-30-023000.sql.gz","source":"R2","at":"2026-10-30T17:00:00+07:00","seconds":4,"tables":30,"live_tables":30,"migrations":29,"live_migrations":29,"users":3,"tokens":120,"orders":40}');
+
+    $this->actingAs($this->admin)->getJson('/api/admin/backups')
+        ->assertOk()
+        ->assertJsonCount(0, 'data')
+        ->assertJsonPath('offsite.ok', false)
+        ->assertJsonPath('offsite.error', '403 Forbidden')
+        ->assertJsonPath('restore_check.ok', true)
+        ->assertJsonPath('restore_check.source', 'R2');
+
+    File::deleteDirectory($dir);
+});
+
 test('log entries are parsed newest first with level filter and stack traces', function () {
     $file = 'laravel-2099-01-01.log';
     File::ensureDirectoryExists(storage_path('logs'));
@@ -106,11 +130,14 @@ test('scheduled task history is summarized and allowlisted commands can be queue
     TaskRun::factory()->count(3)->create();
     TaskRun::factory()->create(['status' => 'failed', 'exit_code' => 1]);
 
-    $this->actingAs($this->admin)->getJson('/api/admin/tasks')
-        ->assertOk()
-        ->assertJsonPath('tasks.0.command', 'market:prices')
-        ->assertJsonPath('tasks.0.last_status', 'failed')
-        ->assertJsonPath('tasks.0.failures_24h', 1);
+    TaskRun::factory()->create(['command' => 'market:candles --timeframe=4h --timeframe=1d']);
+
+    $tasks = collect($this->actingAs($this->admin)->getJson('/api/admin/tasks')->assertOk()->json('tasks'))->keyBy('command');
+
+    expect($tasks['market:prices'])->toMatchArray(['last_status' => 'failed', 'failures_24h' => 1, 'runs_24h' => 4])
+        ->and($tasks['model:prune'])->toMatchArray(['last_status' => null, 'last_run_at' => null, 'runs_24h' => 0])
+        ->and($tasks['model:prune']['next_run_at'])->toEndWith('T03:00:00+00:00')
+        ->and($tasks->has('market:candles --timeframe=4h --timeframe=1d'))->toBeFalse();
 
     $this->actingAs($this->admin)->postJson('/api/admin/tasks/run', ['command' => 'market:discover'])->assertAccepted();
     $this->actingAs($this->admin)->postJson('/api/admin/tasks/run', ['command' => 'migrate:fresh'])->assertUnprocessable();

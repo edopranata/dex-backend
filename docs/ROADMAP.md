@@ -74,7 +74,8 @@ Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 - [x] Keamanan akun: 2FA (TOTP + kode pemulihan) yang diaktifkan sendiri oleh pengguna; admin bisa me-reset 2FA pengguna yang terkunci
 - [ ] **Email ke pengguna baru** (pending): pakai layanan SMTP transaksional gratis (Brevo 300/hari, Resend 3.000/bulan) — bukan mail server sendiri di VPS (port 25 & reverse DNS di NAT tidak bisa diatur, email mudah masuk spam)
 - [ ] Monitor uptime eksternal gratis (mis. UptimeRobot / Healthchecks.io) ke `/up`, kirim ke Telegram
-- [ ] Salinan backup ke luar VPS (mis. Google Drive / Cloudflare R2), uji restore sekali
+- [ ] Salinan backup ke luar VPS (Cloudflare R2), uji restore sekali — **30 Okt 2026: upload harian ke R2 (`deploy/backup.sh`) & uji restore ke database sementara (`deploy/restore-check.sh`) siap; status di Admin → Backup. Tinggal isi key di server lalu jalankan uji pertama**
+- [ ] **Token trending di X** (tahap akhir, butuh pertimbangan): job terjadwal memakai tool *X Search* xAI (Grok) pada daftar akun crypto pilihan; hasil masuk Temukan sebagai kandidat "X trending" dan tetap melewati cek DEX Screener, likuiditas & keamanan; badge "Ramai di X", bukan pemicu beli. Putuskan dulu frekuensi (4 atau 6 jam), daftar akun, dan batas biaya harian — perkiraan $40–60/bulan
 
 **Kriteria lolos:** 7 hari berturut-turut tanpa downtime yang tidak terdeteksi; backup harian ada dan pernah diuji restore.
 
@@ -194,6 +195,8 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 29 Okt 2026 | Auto-start (`dex.service`), watchdog 2 menit, reboot keamanan otomatis 04:00 WIB | Server harus pulih sendiri selama 2 bulan berjalan tanpa diawasi; uji reboot lolos |
 | 29 Okt 2026 | Modal live dibatasi sendiri oleh pemilik; aplikasi wajib menegakkan batas di bagian 5 | Pengaman berlapis terhadap bug dan salah klik |
 | 29 Okt 2026 | Domain `tune-in.trade` (Cloudflare) + Tunnel bersama `/opt/edge`; aplikasi di `dexsim.tune-in.trade`, akses IP:port ditutup | VPS NAT tidak bisa sertifikat langsung; tunnel tanpa port masuk, siap untuk subdomain lain |
+| 30 Okt 2026 | AI memakai rantai provider: Gemini (utama, gratis) → xAI Grok (cadangan, berbayar, batas 100 request/hari) | Kuota gratis Gemini sering habis; analisis tetap jalan tanpa biaya besar |
+| 30 Okt 2026 | Backup ke luar VPS memakai Cloudflare R2, bukan Google Drive | Gratis 10 GB, key S3 dibatasi satu bucket, tanpa login OAuth yang bisa kedaluwarsa |
 | | | |
 
 ---

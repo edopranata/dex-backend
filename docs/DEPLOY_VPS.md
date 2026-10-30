@@ -133,11 +133,37 @@ Deploy menarik **kedua** repo, membangun ulang image, menjalankan migrasi, mengg
 | Log | `docker compose logs -f app horizon scheduler` · dashboard queue: `/horizon` (admin) |
 | Artisan | `docker compose exec app php artisan <perintah>` |
 | Ubah konfigurasi | Edit `.env`, lalu `docker compose up -d` |
-| Backup manual | `bash deploy/backup.sh` (otomatis tiap 02:30 ke `/var/backups/dex`) |
+| Backup manual | `sudo bash deploy/backup.sh` (otomatis tiap 02:30 ke `/var/backups/dex`, lalu ke R2 jika diatur) |
+| Uji restore | `sudo bash deploy/restore-check.sh` (ke database sementara; database live tidak disentuh) |
 | Restore | `gunzip -c /var/backups/dex/FILE.sql.gz \| docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'` |
 | Pemakaian disk | `df -h` dan `docker system df` |
 
 Aktifkan AI: isi `AI_PROVIDER=gemini` dan `GEMINI_API_KEY=...` di `.env`, lalu `docker compose up -d`.
+
+## 6a. Salinan backup di Cloudflare R2
+
+Backup harian juga di-upload ke bucket R2 `dex-backups` memakai container `rclone` (tidak ada yang dipasang di host). Key R2 disimpan di `/etc/dex/offsite.env` (root, 600), **bukan** di `.env`, karena `.env` ikut masuk ke semua container aplikasi.
+
+Di Cloudflare (sekali): buat bucket `dex-backups`, aturan lifecycle *hapus setelah 30 hari*, dan API token **Object Read & Write** khusus bucket itu (TTL *Forever*, tanpa filter IP selama IP VPS masih NAT bersama).
+
+Di VPS, isi key tanpa menampilkannya di layar atau di history shell:
+
+```bash
+ssh dex-vps
+sudo install -d -m 700 /etc/dex
+sudo bash -c 'umask 077
+read -rp  "R2 Access Key ID: " id
+read -rsp "R2 Secret Access Key: " secret; echo
+read -rp  "R2 endpoint (https://<account-id>.r2.cloudflarestorage.com): " endpoint
+printf "R2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\nR2_ENDPOINT=%s\nR2_BUCKET=dex-backups\n" "$id" "$secret" "$endpoint" > /etc/dex/offsite.env'
+cd /opt/dex/backend
+sudo bash deploy/backup.sh          # backup + upload pertama
+sudo bash deploy/restore-check.sh   # ambil dari R2, restore ke database sementara, bandingkan, hapus
+```
+
+Hasil upload terakhir dan uji restore terakhir tampil di **Admin → Backup**. Upload yang gagal mengirim notifikasi Telegram; backup lokal tetap tersimpan.
+
+Restore dari R2 jika VPS hilang: unduh file dari dashboard R2 (atau `rclone`), lalu jalankan perintah *Restore* di tabel atas pada server baru. Siapkan juga `APP_KEY` lama dari password manager: tanpa itu data terenkripsi (2FA, API key di Pengaturan) tidak bisa dibaca.
 
 ## 6b. Pemulihan otomatis (server mati / reboot)
 

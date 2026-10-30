@@ -20,6 +20,8 @@ class BackupController extends Controller
             'manual_available_at' => $backups->manualAvailableAt()?->toIso8601String(),
             'cooldown_minutes' => config('market.backup.manual_cooldown_minutes'),
             'schedule' => 'Otomatis setiap hari pukul 02:30 WIB (cron server), disimpan 14 hari.',
+            'offsite' => $backups->offsiteStatus(),
+            'restore_check' => $backups->restoreCheck(),
         ]);
     }
 
