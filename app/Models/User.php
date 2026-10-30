@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 #[Fillable(['name', 'email', 'password', 'balance_usd', 'is_admin', 'notification_preferences'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
@@ -30,12 +31,30 @@ class User extends Authenticatable
             'password' => 'hashed',
             'balance_usd' => 'float',
             'is_admin' => 'boolean',
+            'is_system' => 'boolean',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
             'telegram_linked_at' => 'datetime',
             'notification_preferences' => 'array',
         ];
+    }
+
+    /**
+     * The paper account that follows every signal (created on first use; it cannot log in).
+     */
+    public static function autoFollower(): self
+    {
+        $email = 'auto-follow@system.invalid';
+
+        return static::query()->where('email', $email)->first()
+            ?? tap(new static, fn (self $user) => $user->forceFill([
+                'name' => 'Auto-follow (sistem)',
+                'email' => $email,
+                'password' => Str::random(64),
+                'balance_usd' => config('market.simulator.starting_balance'),
+                'is_system' => true,
+            ])->save());
     }
 
     public function hasTwoFactorEnabled(): bool

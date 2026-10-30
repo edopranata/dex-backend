@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'token_id', 'timeframe', 'recommendation', 'final_score', 'technical_score', 'onchain_score',
@@ -64,6 +65,14 @@ class Analysis extends Model
     public function token(): BelongsTo
     {
         return $this->belongsTo(Token::class);
+    }
+
+    /**
+     * @return HasOne<AnalysisEvaluation, $this>
+     */
+    public function evaluation(): HasOne
+    {
+        return $this->hasOne(AnalysisEvaluation::class);
     }
 
     /**

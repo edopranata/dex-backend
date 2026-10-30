@@ -18,9 +18,9 @@ class UserController extends Controller
         $users = User::query()
             ->withCount(['positions' => fn ($q) => $q->where('quantity', '>', 0), 'orders'])
             ->orderBy('id')
-            ->get(['id', 'name', 'email', 'balance_usd', 'is_admin', 'created_at', 'two_factor_confirmed_at', 'telegram_chat_id'])
+            ->get(['id', 'name', 'email', 'balance_usd', 'is_admin', 'is_system', 'created_at', 'two_factor_confirmed_at', 'telegram_chat_id'])
             ->map(fn (User $user): array => [
-                ...$user->only('id', 'name', 'email', 'balance_usd', 'is_admin', 'created_at', 'positions_count', 'orders_count'),
+                ...$user->only('id', 'name', 'email', 'balance_usd', 'is_admin', 'is_system', 'created_at', 'positions_count', 'orders_count'),
                 'two_factor_enabled' => $user->two_factor_confirmed_at !== null,
                 'telegram_linked' => $user->telegram_chat_id !== null,
             ]);

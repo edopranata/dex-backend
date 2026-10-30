@@ -213,6 +213,13 @@ return [
     | Notifikasi Telegram. Bot diatur admin (Admin → Pengaturan → Telegram); tiap pengguna
     | menghubungkan chat-nya sendiri dengan kode unik di Profil → Telegram.
     */
+    // Akun sistem yang otomatis mengikuti SETIAP sinyal baru dengan nominal tetap (limit + SL/TP sinyal),
+    // supaya win rate & P&L aplikasi terukur apa adanya, termasuk fee dan slippage.
+    'autofollow' => [
+        'enabled' => (bool) env('AUTO_FOLLOW_ENABLED', true),
+        'amount_usd' => (float) env('AUTO_FOLLOW_AMOUNT_USD', 100),
+    ],
+
     'telegram' => [
         'enabled' => (bool) env('TELEGRAM_ENABLED', false),
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),

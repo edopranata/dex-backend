@@ -64,6 +64,15 @@ class SettingsRegistry
                 ],
             ],
             [
+                'key' => 'autofollow',
+                'label' => 'Auto-follow (pengukur kinerja)',
+                'description' => 'Akun sistem "Auto-follow" membeli setiap sinyal baru dengan nominal tetap memakai aturan sinyal (limit di zona entry, SL, TP1–TP3). Hasilnya mengukur win rate aplikasi tanpa pilih-pilih.',
+                'fields' => [
+                    ['key' => 'market.autofollow.enabled', 'label' => 'Ikuti semua sinyal otomatis', 'type' => 'bool'],
+                    ['key' => 'market.autofollow.amount_usd', 'label' => 'Nominal per sinyal (USD)', 'type' => 'float', 'min' => 1, 'max' => 100000, 'description' => 'Saldo awal akun mengikuti "Saldo awal" simulator.'],
+                ],
+            ],
+            [
                 'key' => 'discovery',
                 'label' => 'Discovery',
                 'description' => 'Penemuan token otomatis dan syarat masuk Market.',

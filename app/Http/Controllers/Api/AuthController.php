@@ -51,7 +51,7 @@ class AuthController extends Controller
         $provider = Auth::guard('web')->getProvider();
         $user = $provider->retrieveByCredentials($request->only('email'));
 
-        if (! $user instanceof User || ! $provider->validateCredentials($user, $request->only('password'))) {
+        if (! $user instanceof User || $user->is_system || ! $provider->validateCredentials($user, $request->only('password'))) {
             throw ValidationException::withMessages(['email' => __('auth.failed')]);
         }
 

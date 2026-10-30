@@ -199,6 +199,19 @@ class TradingService
     }
 
     /**
+     * A closed signal no longer has an entry: cancel limit buys still waiting for it.
+     */
+    public function cancelPendingSignalBuys(Signal $signal): int
+    {
+        return Order::query()
+            ->where('signal_id', $signal->id)
+            ->where('side', OrderSide::Buy)
+            ->where('exit_plan', 'signal')
+            ->where('status', OrderStatus::Pending)
+            ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: sinyal #{$signal->id} sudah ditutup."]);
+    }
+
+    /**
      * Wipe positions and orders and restore the starting balance.
      */
     public function reset(User $user): void
