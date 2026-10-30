@@ -169,7 +169,7 @@ Restore dari R2 jika VPS hilang: unduh file dari dashboard R2 (atau `rclone`), l
 
 Semua layanan pihak ke-3 (alamat dashboard, biaya, tempat pengaturan, status) tercantum di **Admin → General Information**; tambahkan catatan akun/paket di sana.
 
-**UptimeRobot** (cek dari luar, gratis): buat akun, hubungkan Telegram di *Integrations*, lalu *New monitor* → HTTP(s) → `https://dexsim.tune-in.trade/health`, interval 5 menit. `/health` menjawab 503 jika database, Redis atau scheduler mati (`/up` tetap untuk watchdog & deploy).
+**UptimeRobot** (cek dari luar, gratis): *Integrations & API* → Telegram → hubungkan; *New* → HTTP(s) → `https://dexsim.tune-in.trade/health`, interval 5 menit, centang Telegram sebagai alert contact. `/health` menjawab 503 jika database, Redis atau scheduler mati (`/up` tetap untuk watchdog & deploy). Lalu *Integrations & API* → API → **Read-only API key** → isi di Admin → Pengaturan → Monitoring eksternal: status, uptime 24 jam/7 hari/30 hari, dan downtime terakhir tampil di General Information.
 
 **Healthchecks.io** (heartbeat dari dalam, gratis): buat akun, hubungkan Telegram di *Integrations*, lalu buat dua check:
 

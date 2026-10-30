@@ -7,6 +7,7 @@ use App\Http\Controllers\HealthController;
 use App\Models\ServiceNote;
 use App\Services\Ai\AiClient;
 use App\Services\Notifications\MailSettings;
+use Carbon\CarbonInterval;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\Cache;
  */
 class ServiceDirectory
 {
-    public function __construct(private AiClient $ai, private MailSettings $mail, private BackupService $backups) {}
+    public function __construct(private AiClient $ai, private MailSettings $mail, private BackupService $backups, private UptimeRobot $uptimeRobot) {}
 
     /**
      * @return list<array{key: string, label: string, services: list<array<string, mixed>>}>
@@ -26,6 +27,7 @@ class ServiceDirectory
     {
         $notes = ServiceNote::query()->pluck('note', 'service');
         $host = parse_url((string) config('app.url'), PHP_URL_HOST) ?: (string) config('app.url');
+        $uptimeMonitor = $this->uptimeRobot->healthMonitor();
 
         $groups = [
             [
@@ -60,9 +62,10 @@ class ServiceDirectory
                     $this->service('uptimerobot', 'UptimeRobot', 'Memantau '.url('/health').' dari luar tiap 5 menit; peringatan ke Telegram saat situs, database, Redis atau scheduler mati.',
                         'Gratis (50 monitor, interval 5 menit)', [
                             ['label' => 'Dashboard', 'url' => 'https://dashboard.uptimerobot.com'],
+                            ...($uptimeMonitor ? [['label' => 'Monitor', 'url' => "https://dashboard.uptimerobot.com/monitors/{$uptimeMonitor['id']}"]] : []),
                             ['label' => '/health', 'url' => url('/health')],
                         ],
-                        $this->uptimeStatus(), 'Di dashboard UptimeRobot (tidak ada key di aplikasi)'),
+                        $this->uptimeStatus(), 'Monitor & alert: dashboard UptimeRobot · read-only API key: Admin → Pengaturan → Monitoring'),
                     $this->service('healthchecks', 'Healthchecks.io', 'Heartbeat dari server tiap 5 menit (database, Redis, scheduler, Horizon) dan dari backup harian. Diam = server mati.',
                         'Gratis (20 cek)', [['label' => 'Dashboard', 'url' => 'https://healthchecks.io/projects/']],
                         $this->heartbeatStatus(), 'Admin → Pengaturan → Monitoring; ping backup di /etc/dex/offsite.env'),
@@ -147,6 +150,14 @@ class ServiceDirectory
     }
 
     /**
+     * "5 menit yang lalu": the app locale is English, this page is Indonesian.
+     */
+    private function ago(string $iso): string
+    {
+        return Carbon::parse($iso)->locale('id')->diffForHumans();
+    }
+
+    /**
      * @param  list<array{label: string, url: string}>  $links
      * @param  array{state: string, label: string, detail: string|null}  $status
      * @return array<string, mixed>
@@ -175,8 +186,8 @@ class ServiceDirectory
         return match (true) {
             $offsite === null => $this->status('off', 'Belum diatur'),
             ! $offsite['ok'] => $this->status('error', 'Upload gagal', $offsite['error'] ?? null),
-            Carbon::parse($offsite['at'])->lt(now()->subHours(36)) => $this->status('warn', 'Terlambat', 'Upload terakhir '.Carbon::parse($offsite['at'])->diffForHumans()),
-            default => $this->status('ok', 'Aman', trim(($offsite['bucket'] ?? '').' · upload '.Carbon::parse($offsite['at'])->diffForHumans(), ' ·')),
+            Carbon::parse($offsite['at'])->lt(now()->subHours(36)) => $this->status('warn', 'Terlambat', 'Upload terakhir '.$this->ago($offsite['at'])),
+            default => $this->status('ok', 'Aman', trim(($offsite['bucket'] ?? '').' · upload '.$this->ago($offsite['at']), ' ·')),
         };
     }
 
@@ -185,13 +196,55 @@ class ServiceDirectory
      */
     private function uptimeStatus(): array
     {
+        if ($this->uptimeRobot->isConfigured()) {
+            return $this->uptimeRobotStatus();
+        }
+
         $last = Cache::get(HealthController::LAST_MONITOR_CHECK);
 
         return match (true) {
             ! is_array($last) => $this->status('off', 'Belum terdeteksi', 'Belum ada cek dari UptimeRobot dalam 24 jam'),
-            ! $last['ok'] => $this->status('error', 'Cek terakhir gagal', Carbon::parse($last['at'])->diffForHumans()),
-            Carbon::parse($last['at'])->lt(now()->subMinutes(15)) => $this->status('warn', 'Cek terhenti', 'Terakhir '.Carbon::parse($last['at'])->diffForHumans()),
-            default => $this->status('ok', 'Memantau', 'Cek terakhir '.Carbon::parse($last['at'])->diffForHumans()),
+            ! $last['ok'] => $this->status('error', 'Cek terakhir gagal', $this->ago($last['at'])),
+            Carbon::parse($last['at'])->lt(now()->subMinutes(15)) => $this->status('warn', 'Cek terhenti', 'Terakhir '.$this->ago($last['at'])),
+            default => $this->status('ok', 'Memantau', 'Cek terakhir '.$this->ago($last['at'])),
+        };
+    }
+
+    /**
+     * Status straight from the UptimeRobot API: up/down, uptime ratios, response time and the last outage.
+     *
+     * @return array{state: string, label: string, detail: string|null}
+     */
+    private function uptimeRobotStatus(): array
+    {
+        $result = $this->uptimeRobot->monitors();
+        $monitor = $this->uptimeRobot->healthMonitor();
+
+        if (! ($result['ok'] ?? false)) {
+            return $this->status('warn', 'API gagal', $result['error'] ?? null);
+        }
+
+        if ($monitor === null) {
+            return $this->status('off', 'Belum ada monitor', 'Buat monitor HTTP(s) ke '.url('/health'));
+        }
+
+        $percent = fn (?float $value): string => $value === null ? '–' : rtrim(rtrim(number_format($value, 2, ',', '.'), '0'), ',').'%';
+        $detail = "Uptime 24 jam {$percent($monitor['uptime']['day'])} · 7 hari {$percent($monitor['uptime']['week'])} · 30 hari {$percent($monitor['uptime']['month'])}";
+
+        if ($monitor['response_ms'] !== null) {
+            $detail .= " · respons {$monitor['response_ms']} ms";
+        }
+
+        if ($monitor['last_down'] !== null) {
+            $detail .= ' · down terakhir '.$this->ago($monitor['last_down']['at'])
+                .' ('.CarbonInterval::seconds($monitor['last_down']['duration_seconds'])->cascade()->locale('id')->forHumans(['parts' => 2]).')';
+        }
+
+        return match ($monitor['status']) {
+            'up' => $this->status('ok', 'Up', $detail),
+            'down' => $this->status('error', 'Down', $detail),
+            'paused' => $this->status('warn', 'Dijeda', $detail),
+            default => $this->status('info', 'Menunggu cek pertama', $detail),
         };
     }
 
@@ -210,7 +263,7 @@ class ServiceDirectory
             ! is_array($last) => $this->status('warn', 'Menunggu ping pertama', 'Dikirim tiap 5 menit'),
             ! $last['sent'] => $this->status('error', 'Ping tidak terkirim', $last['detail']),
             ! $last['healthy'] => $this->status('error', 'Melapor gagal', $last['detail']),
-            default => $this->status('ok', 'Aktif', 'Ping terakhir '.Carbon::parse($last['at'])->diffForHumans()),
+            default => $this->status('ok', 'Aktif', 'Ping terakhir '.$this->ago($last['at'])),
         };
     }
 

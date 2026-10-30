@@ -154,3 +154,44 @@ test('the heartbeat url must be an https url', function () {
         ->putJson('/api/admin/settings', ['values' => ['market.monitoring.heartbeat_url' => 'not-a-url']])
         ->assertUnprocessable();
 });
+
+test('general information shows uptime robot status from its read-only api', function () {
+    Http::fake(['api.uptimerobot.com/*' => Http::response([
+        'stat' => 'ok',
+        'monitors' => [[
+            'id' => 801234567,
+            'friendly_name' => 'DEX health',
+            'url' => 'https://dexsim.tune-in.trade/health',
+            'status' => 2,
+            'custom_uptime_ratio' => '100.000-99.950-99.800',
+            'average_response_time' => '231.4',
+            'logs' => [
+                ['type' => 2, 'datetime' => now()->subDays(2)->timestamp, 'duration' => 172800],
+                ['type' => 1, 'datetime' => now()->subDays(2)->subMinutes(6)->timestamp, 'duration' => 360, 'reason' => ['code' => '503', 'detail' => 'Service Unavailable']],
+            ],
+        ]],
+    ])]);
+    config(['market.monitoring.uptimerobot_key' => 'ur123-readonly']);
+
+    $uptime = collect($this->actingAs($this->admin)->getJson('/api/admin/info')->assertOk()->json('groups'))
+        ->flatMap(fn (array $group): array => $group['services'])
+        ->firstWhere('key', 'uptimerobot');
+
+    expect($uptime['status']['state'])->toBe('ok')
+        ->and($uptime['status']['label'])->toBe('Up')
+        ->and($uptime['status']['detail'])->toContain('24 jam 100%', '7 hari 99,95%', '30 hari 99,8%', 'respons 231 ms', 'down terakhir 2 hari yang lalu (6 menit)')
+        ->and(collect($uptime['links'])->pluck('url'))->toContain('https://dashboard.uptimerobot.com/monitors/801234567');
+
+    Http::assertSent(fn ($request): bool => $request['api_key'] === 'ur123-readonly' && $request['custom_uptime_ratios'] === '1-7-30');
+});
+
+test('a rejected uptime robot key is shown instead of failing the page', function () {
+    Http::fake(['api.uptimerobot.com/*' => Http::response(['stat' => 'fail', 'error' => ['message' => 'api_key not found.']])]);
+    config(['market.monitoring.uptimerobot_key' => 'wrong']);
+
+    $uptime = collect($this->actingAs($this->admin)->getJson('/api/admin/info')->assertOk()->json('groups'))
+        ->flatMap(fn (array $group): array => $group['services'])
+        ->firstWhere('key', 'uptimerobot');
+
+    expect($uptime['status'])->toMatchArray(['state' => 'warn', 'label' => 'API gagal', 'detail' => 'api_key not found.']);
+});

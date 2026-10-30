@@ -249,6 +249,8 @@ return [
 
     'monitoring' => [
         'heartbeat_url' => env('HEARTBEAT_URL'),
+        // Read-only API key UptimeRobot: status, uptime & downtime monitor tampil di Admin → General Information.
+        'uptimerobot_key' => env('UPTIMEROBOT_API_KEY'),
         // Scheduler dianggap mati jika tidak ada tugas terjadwal selesai selama ini.
         'scheduler_stale_minutes' => 10,
     ],

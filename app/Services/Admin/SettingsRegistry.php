@@ -65,8 +65,9 @@ class SettingsRegistry
             [
                 'key' => 'monitoring',
                 'label' => 'Monitoring eksternal',
-                'description' => 'UptimeRobot memantau https://dexsim.tune-in.trade/health dari luar (tidak perlu diisi di sini). Healthchecks.io menerima heartbeat dari server tiap 5 menit; jika heartbeat berhenti atau melapor gagal, Anda mendapat peringatan di Telegram.',
+                'description' => 'UptimeRobot memantau https://dexsim.tune-in.trade/health dari luar dan mengirim peringatan ke Telegram; read-only API key-nya hanya untuk menampilkan status di General Information. Healthchecks.io menerima heartbeat dari server tiap 5 menit; jika heartbeat berhenti atau melapor gagal, Anda mendapat peringatan di Telegram.',
                 'fields' => [
+                    ['key' => 'market.monitoring.uptimerobot_key', 'label' => 'UptimeRobot read-only API key', 'type' => 'secret', 'description' => 'Dari UptimeRobot → Integrations & API → API → Read-only API key. Menampilkan status, uptime 24 jam/7 hari/30 hari, dan downtime terakhir di General Information.'],
                     ['key' => 'market.monitoring.heartbeat_url', 'label' => 'URL ping Healthchecks.io', 'type' => 'secret', 'rules' => ['url', 'starts_with:https://'], 'description' => 'Bentuknya https://hc-ping.com/<uuid>. Atur di Healthchecks: Period 5 menit, Grace 10 menit.'],
                 ],
             ],
