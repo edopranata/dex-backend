@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Notifications\TestEmail;
 use App\Services\Admin\SettingsRegistry;
 use App\Services\Admin\SettingsStore;
 use App\Services\Ai\AiClient;
@@ -11,7 +12,7 @@ use App\Services\Notifications\TelegramBot;
 use App\Services\Notifications\TelegramClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -126,9 +127,7 @@ class SettingsController extends Controller
         $start = microtime(true);
 
         try {
-            Mail::raw('Email tes dari '.config('app.name').'. Jika Anda menerima ini, pengaturan SMTP sudah benar.', function ($message) use ($email): void {
-                $message->to($email)->subject('Email tes '.config('app.name'));
-            });
+            Notification::route('mail', $email)->notifyNow(new TestEmail((string) $mail->provider()));
         } catch (Throwable $e) {
             return response()->json(['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 500)]);
         }

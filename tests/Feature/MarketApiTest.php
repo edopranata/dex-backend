@@ -15,18 +15,14 @@ test('guests cannot access the api', function () {
     $this->getJson('/api/tokens')->assertUnauthorized();
 });
 
-test('registration creates a user with the starting balance', function () {
-    config(['market.simulator.starting_balance' => 10_000]);
+test('there is no public registration; accounts are created by admins', function () {
+    $this->getJson('/api/auth/options')->assertOk()->assertJsonMissingPath('registration_enabled');
 
     $this->withHeader('Origin', 'http://localhost:5173')
-        ->postJson('/api/auth/register', [
-            'name' => 'Edo',
-            'email' => 'edo@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-        ])
-        ->assertCreated()
-        ->assertJsonPath('data.balance_usd', 10000);
+        ->postJson('/api/auth/register', ['name' => 'Stranger', 'email' => 'stranger@example.com', 'password' => 'password123', 'password_confirmation' => 'password123'])
+        ->assertNotFound();
+
+    expect(User::count())->toBe(0);
 });
 
 test('login rejects wrong credentials', function () {
@@ -117,23 +113,6 @@ test('signal stats summarize closed signals', function () {
         ->assertOk()
         ->assertJsonPath('win_rate', 50)
         ->assertJsonPath('total_r', 1);
-});
-
-test('registration can be closed for public servers', function () {
-    config(['market.simulator.registration_enabled' => false]);
-
-    $this->getJson('/api/auth/options')->assertOk()->assertJsonPath('registration_enabled', false);
-
-    $this->withHeader('Origin', 'http://localhost:5173')
-        ->postJson('/api/auth/register', [
-            'name' => 'Stranger',
-            'email' => 'stranger@example.com',
-            'password' => 'password123',
-            'password_confirmation' => 'password123',
-        ])
-        ->assertForbidden();
-
-    expect(User::count())->toBe(0);
 });
 
 test('admins create users from the command line', function () {

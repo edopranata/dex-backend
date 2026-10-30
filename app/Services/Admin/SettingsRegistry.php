@@ -51,7 +51,7 @@ class SettingsRegistry
             [
                 'key' => 'mail',
                 'label' => 'Email (SMTP)',
-                'description' => 'Untuk undangan pengguna baru dan lupa password. Disarankan Resend (gratis 3.000/bulan): host smtp.resend.com, port 587, username resend, password = API key Resend. Alamat pengirim harus dari domain yang sudah diverifikasi di Resend.',
+                'description' => 'Untuk password sementara pengguna baru, lupa password, reset 2FA, dan notifikasi keamanan akun. Disarankan Resend (gratis 3.000/bulan): host smtp.resend.com, port 587, username resend, password = API key Resend. Alamat pengirim harus dari domain yang sudah diverifikasi di Resend.',
                 'fields' => [
                     ['key' => 'mail.default', 'label' => 'Pengiriman email', 'type' => 'select', 'options' => ['log' => 'Nonaktif (hanya dicatat di log)', 'smtp' => 'SMTP']],
                     ['key' => 'mail.mailers.smtp.host', 'label' => 'SMTP host', 'type' => 'string'],
@@ -90,7 +90,6 @@ class SettingsRegistry
                     ['key' => 'market.simulator.starting_balance', 'label' => 'Saldo awal (USD)', 'type' => 'float', 'min' => 10, 'max' => 100000000],
                     ['key' => 'market.simulator.fee_rate', 'label' => 'Fee swap (desimal, 0.003 = 0,3%)', 'type' => 'float', 'min' => 0, 'max' => 0.05, 'step' => 0.0005],
                     ['key' => 'market.simulator.max_tokens', 'label' => 'Kapasitas Market (token)', 'type' => 'int', 'min' => 1, 'max' => 100, 'description' => 'Dibatasi rate limit GeckoTerminal; ±20 untuk paket gratis.'],
-                    ['key' => 'market.simulator.registration_enabled', 'label' => 'Pendaftaran publik', 'type' => 'bool', 'description' => 'Matikan di server publik; tambah user dari tab Pengguna.'],
                 ],
             ],
             [

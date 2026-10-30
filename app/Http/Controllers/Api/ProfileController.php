@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
+use App\Notifications\PasswordChanged;
+use App\Services\Auth\TemporaryPasswords;
 use App\Services\Notifications\TelegramClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,12 +53,15 @@ class ProfileController extends Controller
     {
         $data = $request->validate([
             'current_password' => ['required', 'current_password'],
-            'password' => ['required', 'confirmed', Password::defaults()],
-        ]);
+            'password' => ['required', 'confirmed', 'different:current_password', Password::defaults()],
+        ], ['password.different' => 'Password baru harus berbeda dari password sekarang.']);
 
-        $request->user()->update(['password' => $data['password']]);
+        $user = $request->user();
+        $user->update(['password' => $data['password']]);
+        app(TemporaryPasswords::class)->clear($user);
+        $user->notify(new PasswordChanged(now()));
 
-        return response()->json(['message' => 'Password diganti.']);
+        return response()->json(['message' => 'Password diganti.', 'data' => new UserResource($user)]);
     }
 
     public function notifications(Request $request): JsonResponse

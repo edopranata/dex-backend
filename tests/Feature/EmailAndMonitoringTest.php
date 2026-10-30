@@ -5,12 +5,15 @@ use App\Http\Controllers\HealthController;
 use App\Models\ServiceNote;
 use App\Models\TaskRun;
 use App\Models\User;
-use App\Notifications\InviteUser;
+use App\Notifications\PasswordChanged;
 use App\Notifications\ResetPassword;
+use App\Notifications\TemporaryPassword;
+use App\Notifications\TestEmail;
+use App\Notifications\TwoFactorDisabled;
+use App\Notifications\TwoFactorResetLink;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Redis;
@@ -45,8 +48,9 @@ test('forgot password needs email to be set up and never reveals which emails ex
     Notification::assertCount(1);
 });
 
-test('a reset link sets a new password once; invitation links use their own longer-lived broker', function () {
-    $user = User::factory()->create();
+test('a reset link sets a new password once, ends a pending temporary password and sends a notice', function () {
+    Notification::fake();
+    $user = User::factory()->create(['must_change_password' => true, 'temporary_password_expires_at' => now()->addDay()]);
     $token = Password::broker('users')->createToken($user);
 
     $this->postJson('/api/auth/reset-password', ['token' => 'wrong', 'email' => $user->email, 'password' => 'Password-baru-123', 'password_confirmation' => 'Password-baru-123'])
@@ -54,42 +58,75 @@ test('a reset link sets a new password once; invitation links use their own long
 
     $this->postJson('/api/auth/reset-password', ['token' => $token, 'email' => $user->email, 'password' => 'Password-baru-123', 'password_confirmation' => 'Password-baru-123'])
         ->assertOk();
-    expect(Hash::check('Password-baru-123', $user->fresh()->password))->toBeTrue();
+    $user->refresh();
+    expect(Hash::check('Password-baru-123', $user->password))->toBeTrue()
+        ->and($user->must_change_password)->toBeFalse();
+    Notification::assertSentTo($user, PasswordChanged::class);
 
     $this->postJson('/api/auth/reset-password', ['token' => $token, 'email' => $user->email, 'password' => 'Lagi-lagi-1234', 'password_confirmation' => 'Lagi-lagi-1234'])
         ->assertUnprocessable();
-
-    $invite = Password::broker('invites')->createToken($user);
-    $this->travel(2)->days();
-    $this->postJson('/api/auth/reset-password', ['token' => $invite, 'email' => $user->email, 'invite' => true, 'password' => 'Dari-undangan-123', 'password_confirmation' => 'Dari-undangan-123'])
-        ->assertOk();
 });
 
-test('admins invite new users by email instead of choosing their password', function () {
+test('admins create accounts whose temporary password is emailed and must be replaced at the first login', function () {
     Notification::fake();
-
-    $this->actingAs($this->admin)->postJson('/api/admin/users', ['name' => 'Sari', 'email' => 'sari@example.com', 'invite' => true])
-        ->assertUnprocessable()->assertJsonValidationErrors('invite');
-
     enableMail();
-    $this->actingAs($this->admin)->postJson('/api/admin/users', ['name' => 'Sari', 'email' => 'sari@example.com', 'invite' => true])
+
+    $this->actingAs($this->admin)->postJson('/api/admin/users', ['name' => 'Sari', 'email' => 'sari@example.com'])
         ->assertCreated()
-        ->assertJsonPath('invite.sent', true);
+        ->assertJsonPath('delivery.sent', true)
+        ->assertJsonPath('delivery.password', null);
 
     $sari = User::query()->where('email', 'sari@example.com')->firstOrFail();
-    Notification::assertSentTo($sari, InviteUser::class, function (InviteUser $notification) use ($sari): bool {
-        $mail = $notification->toMail($sari);
+    $password = null;
+    Notification::assertSentTo($sari, TemporaryPassword::class, function (TemporaryPassword $notification) use (&$password): bool {
+        $password = $notification->password;
 
-        return $notification->invitedBy === 'Admin' && str_contains($mail->actionUrl, 'invite=1') && str_contains($mail->actionUrl, urlencode('sari@example.com'));
+        return $notification->isNew && $notification->admin === 'Admin';
     });
 
-    $this->actingAs($this->admin)->postJson("/api/admin/users/{$sari->id}/invite")->assertOk()->assertJsonPath('invite.sent', true);
-    $this->actingAs($this->admin)->postJson('/api/admin/users', ['name' => 'Tanpa', 'email' => 'tanpa@example.com'])->assertUnprocessable()->assertJsonValidationErrors('password');
-    Notification::assertSentToTimes($sari, InviteUser::class, 2);
+    expect($password)->toMatch('/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/')
+        ->and($sari->must_change_password)->toBeTrue()
+        ->and($sari->temporary_password_expires_at->diffInHours(now(), true))->toBeGreaterThan(71);
+
+    auth()->forgetGuards();
+    $spa = fn () => $this->withHeader('Origin', 'http://localhost:5173');
+    $spa()->postJson('/api/auth/login', ['email' => 'sari@example.com', 'password' => $password])->assertOk()->assertJsonPath('data.must_change_password', true);
+    $spa()->getJson('/api/portfolio')->assertForbidden()->assertJsonPath('code', 'password_change_required');
+    $spa()->putJson('/api/profile/password', ['current_password' => $password, 'password' => $password, 'password_confirmation' => $password])
+        ->assertJsonValidationErrors('password');
+    $spa()->putJson('/api/profile/password', ['current_password' => $password, 'password' => 'Pilihan-sendiri-9', 'password_confirmation' => 'Pilihan-sendiri-9'])
+        ->assertOk()->assertJsonPath('data.must_change_password', false);
+    $spa()->getJson('/api/portfolio')->assertOk();
+    Notification::assertSentTo($sari, PasswordChanged::class);
+});
+
+test('an expired temporary password no longer logs in, and admins can email a new one', function () {
+    Notification::fake();
+    enableMail();
+    $user = User::factory()->create(['must_change_password' => true, 'temporary_password_expires_at' => now()->subMinute()]);
+
+    $this->withHeader('Origin', 'http://localhost:5173')->postJson('/api/auth/login', ['email' => $user->email, 'password' => 'password'])
+        ->assertJsonValidationErrors(['email' => 'kedaluwarsa']);
+
+    $this->actingAs($this->admin)->postJson("/api/admin/users/{$user->id}/temporary-password")->assertOk()->assertJsonPath('delivery.sent', true);
+    $this->actingAs($this->admin)->postJson("/api/admin/users/{$this->admin->id}/temporary-password")->assertUnprocessable();
+
+    Notification::assertSentTo($user, TemporaryPassword::class, fn (TemporaryPassword $notification): bool => ! $notification->isNew);
+    expect($user->refresh()->temporaryPasswordExpired())->toBeFalse();
+});
+
+test('without email the admin types the temporary password, which still has to be replaced', function () {
+    $this->actingAs($this->admin)->postJson('/api/admin/users', ['name' => 'Budi', 'email' => 'budi@example.com'])
+        ->assertUnprocessable()->assertJsonValidationErrors('password');
+
+    $this->actingAs($this->admin)->postJson('/api/admin/users', ['name' => 'Budi', 'email' => 'budi@example.com', 'password' => 'Sementara-123'])
+        ->assertCreated()->assertJsonPath('delivery', null);
+
+    expect(User::query()->where('email', 'budi@example.com')->first()->must_change_password)->toBeTrue();
 });
 
 test('admins can send a test email with the saved smtp settings', function () {
-    Mail::fake();
+    Notification::fake();
 
     $this->actingAs($this->admin)->postJson('/api/admin/settings/test-mail')->assertOk()->assertJsonPath('ok', false);
 
@@ -99,6 +136,29 @@ test('admins can send a test email with the saved smtp settings', function () {
         ->assertJsonPath('ok', true)
         ->assertJsonPath('to', $this->admin->email)
         ->assertJsonPath('provider', 'Resend');
+
+    Notification::assertSentOnDemand(TestEmail::class);
+});
+
+test('every email renders on the app theme', function () {
+    $user = new User(['name' => 'Sari', 'email' => 'sari@example.com']);
+    $emails = [
+        new TemporaryPassword('Hq7k-Rm2x-Tb9w', now()->addDays(3), 'Admin', true),
+        new TemporaryPassword('Hq7k-Rm2x-Tb9w', now()->addDays(3), 'Admin', false),
+        new ResetPassword('token123'),
+        new PasswordChanged(now()),
+        new TwoFactorResetLink('token456', 30),
+        new TwoFactorDisabled(now(), true),
+        new TestEmail('Resend'),
+    ];
+
+    foreach ($emails as $email) {
+        $html = (string) $email->toMail($user)->render();
+
+        expect($html)->toContain('#121925', '/mail/logo.png', 'jangan dibalas')->not->toContain('Laravel');
+    }
+
+    expect((string) $emails[0]->toMail($user)->render())->toContain('Hq7k-Rm2x-Tb9w', 'Akun Anda sudah dibuat');
 });
 
 test('the health endpoint fails when the scheduler stops and remembers uptime robot checks', function () {

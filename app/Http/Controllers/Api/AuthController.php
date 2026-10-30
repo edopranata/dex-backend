@@ -4,10 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
-use App\Http\Requests\RegisterRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Services\Auth\TwoFactorAuthenticator;
+use App\Services\Auth\TwoFactorReset;
 use App\Services\Notifications\MailSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,25 +25,7 @@ class AuthController extends Controller
      */
     public function options(): JsonResponse
     {
-        return response()->json([
-            'registration_enabled' => config('market.simulator.registration_enabled'),
-            'password_reset_enabled' => app(MailSettings::class)->isEnabled(),
-        ]);
-    }
-
-    public function register(RegisterRequest $request): UserResource
-    {
-        abort_unless(config('market.simulator.registration_enabled'), 403, 'Pendaftaran ditutup. Hubungi admin untuk dibuatkan akun.');
-
-        $user = User::create([
-            ...$request->validated(),
-            'balance_usd' => config('market.simulator.starting_balance'),
-        ]);
-
-        Auth::guard('web')->login($user);
-        $request->session()->regenerate();
-
-        return new UserResource($user);
+        return response()->json(['password_reset_enabled' => app(MailSettings::class)->isEnabled()]);
     }
 
     /**
@@ -57,6 +39,10 @@ class AuthController extends Controller
 
         if (! $user instanceof User || $user->is_system || ! $provider->validateCredentials($user, $request->only('password'))) {
             throw ValidationException::withMessages(['email' => __('auth.failed')]);
+        }
+
+        if ($user->temporaryPasswordExpired()) {
+            throw ValidationException::withMessages(['email' => 'Password sementara sudah kedaluwarsa. Minta admin mengirim password sementara baru, atau pakai "Lupa password?".']);
         }
 
         if ($user->hasTwoFactorEnabled()) {
@@ -107,6 +93,47 @@ class AuthController extends Controller
         $request->session()->regenerate();
 
         return new UserResource($user);
+    }
+
+    /**
+     * "Tidak bisa membuka authenticator?" on the 2FA step: emails a link that switches 2FA off.
+     * Only possible within the five minutes after the password was accepted.
+     */
+    public function requestTwoFactorReset(Request $request, MailSettings $mail, TwoFactorReset $reset): JsonResponse
+    {
+        abort_unless($mail->isEnabled(), 503, 'Email belum diaktifkan. Hubungi admin untuk reset 2FA.');
+
+        $pending = $request->session()->get('login.two_factor');
+        $user = is_array($pending) && $pending['expires_at'] >= now()->getTimestamp() ? User::find($pending['id']) : null;
+
+        if ($user === null || ! $user->hasTwoFactorEnabled()) {
+            throw ValidationException::withMessages(['code' => 'Sesi login kedaluwarsa. Masukkan email dan password lagi.']);
+        }
+
+        $reset->sendLink($user);
+
+        return response()->json(['message' => "Link reset 2FA dikirim ke {$this->maskEmail($user->email)}. Berlaku ".TwoFactorReset::LINK_MINUTES.' menit.']);
+    }
+
+    public function resetTwoFactor(Request $request, TwoFactorReset $reset): JsonResponse
+    {
+        $data = $request->validate(['email' => ['required', 'email'], 'token' => ['required', 'string']]);
+
+        if ($reset->useLink($data['email'], $data['token']) === null) {
+            throw ValidationException::withMessages(['token' => 'Link tidak valid, sudah dipakai, atau kedaluwarsa. Masuk lagi lalu minta link baru.']);
+        }
+
+        return response()->json(['message' => '2FA dimatikan. Silakan masuk dengan password, lalu aktifkan lagi 2FA di Profil.']);
+    }
+
+    /**
+     * "e***@gmail.com": confirms where the link went without spelling out the address.
+     */
+    private function maskEmail(string $email): string
+    {
+        [$name, $domain] = explode('@', $email, 2) + [1 => ''];
+
+        return mb_substr($name, 0, 1).'***@'.$domain;
     }
 
     public function logout(Request $request): Response

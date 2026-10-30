@@ -73,7 +73,7 @@ Skrip ini:
 1. Menampilkan info server, update sistem, memasang Docker Engine + Compose (repo resmi), swap 2 GB, firewall (SSH + 8080), fail2ban, dan update keamanan otomatis.
 2. Membuat user `deploy` (grup docker) dan meng-clone kedua repo ke `/opt/dex`.
 3. Mengecek akses DEX Screener, GeckoTerminal, GoPlus, CoinGecko, dan Fear & Greed dari IP VPS.
-4. Membuat `/opt/dex/backend/.env` (password acak, buffer MySQL sesuai RAM, pendaftaran publik ditutup, URL `http://IP:8080`).
+4. Membuat `/opt/dex/backend/.env` (password acak, buffer MySQL sesuai RAM, tanpa pendaftaran publik, URL `http://IP:8080`).
 5. Membuat jaringan Docker `edge`, build image, menjalankan semua container, mengisi token awal, dan memasang backup harian.
 
 Lalu buat akun dan isi data awal:
@@ -182,7 +182,7 @@ Semua layanan pihak ke-3 (alamat dashboard, biaya, tempat pengaturan, status) te
 ssh -t dex-vps "sudo bash -c 'read -rp \"URL ping dex-backup: \" url; sed -i \"/^BACKUP_PING_URL=/d\" /etc/dex/offsite.env; echo \"BACKUP_PING_URL=\$url\" >> /etc/dex/offsite.env' && echo tersimpan"
 ```
 
-**Resend** (email, gratis 3.000/bulan): *Domains* → tambahkan `tune-in.trade` → pasang record DNS di Cloudflare (tombol otomatis Cloudflare tersedia) → tunggu *Verified*. *API Keys* → buat key dengan izin *Sending access* untuk domain itu. Lalu Admin → Pengaturan → Email (SMTP): Pengiriman = SMTP, host `smtp.resend.com`, port `587`, username `resend`, password = API key, pengirim `noreply@tune-in.trade` → Simpan → **Kirim email tes**. Setelah aktif: tombol *Lupa password?* muncul di halaman masuk, dan pengguna baru bisa diundang lewat email (Admin → Pengguna).
+**Resend** (email, gratis 3.000/bulan): *Domains* → tambahkan subdomain `mail.tune-in.trade` (region Tokyo, tracking mati) → pasang record DNS di Cloudflare (tombol otomatis Cloudflare tersedia) → tunggu *Verified*. *API Keys* → buat key dengan izin *Sending access* untuk domain itu. Lalu Admin → Pengaturan → Email (SMTP): Pengiriman = SMTP, host `smtp.resend.com`, port `587`, username `resend`, password = API key, pengirim `noreply@mail.tune-in.trade` → Simpan → **Kirim email tes**. Setelah aktif: tombol *Lupa password?* dan *Reset 2FA lewat email* muncul di halaman masuk, dan akun baru dari Admin → Pengguna langsung menerima password sementara di email (wajib diganti saat login pertama, berlaku 72 jam). Tidak ada pendaftaran publik.
 
 ## 6b. Pemulihan otomatis (server mati / reboot)
 

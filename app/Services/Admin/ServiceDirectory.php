@@ -81,7 +81,7 @@ class ServiceDirectory
                 'key' => 'email',
                 'label' => 'Email',
                 'services' => [
-                    $this->service('email', 'Resend (SMTP)', 'Undangan pengguna baru dan lupa password.',
+                    $this->service('email', 'Resend (SMTP)', 'Password sementara untuk pengguna baru, lupa password, reset 2FA, dan notifikasi keamanan.',
                         'Gratis 3.000 email/bulan (100/hari)', [
                             ['label' => 'Email terkirim', 'url' => 'https://resend.com/emails'],
                             ['label' => 'Domain', 'url' => 'https://resend.com/domains'],

@@ -99,14 +99,6 @@ return [
             'expire' => 60,
             'throttle' => 60,
         ],
-
-        // Link in the invitation email for a user created by an admin (sets their own password).
-        'invites' => [
-            'provider' => 'users',
-            'table' => env('AUTH_PASSWORD_RESET_TOKEN_TABLE', 'password_reset_tokens'),
-            'expire' => 60 * 72,
-            'throttle' => 0,
-        ],
     ],
 
     /*

@@ -1,6 +1,9 @@
 <?php
 
 use App\Models\User;
+use App\Notifications\TwoFactorDisabled;
+use App\Notifications\TwoFactorResetLink;
+use Illuminate\Support\Facades\Notification;
 use PragmaRX\Google2FA\Google2FA;
 
 function enableTwoFactor(User $user): array
@@ -102,4 +105,42 @@ test('users without 2fa log in directly', function () {
     spa()->postJson('/api/auth/login', ['email' => $user->email, 'password' => 'password'])
         ->assertOk()
         ->assertJsonPath('data.two_factor_enabled', false);
+});
+
+test('a user who lost the authenticator resets 2fa with an emailed link, only after the password', function () {
+    Notification::fake();
+    config(['mail.default' => 'smtp', 'mail.mailers.smtp.host' => 'smtp.resend.com', 'mail.from.address' => 'noreply@example.com']);
+    $user = User::factory()->create();
+    enableTwoFactor($user);
+    auth()->forgetGuards();
+
+    spa()->postJson('/api/auth/two-factor/reset-request')->assertJsonValidationErrors(['code' => 'kedaluwarsa']);
+
+    spa()->postJson('/api/auth/login', ['email' => $user->email, 'password' => 'password'])->assertExactJson(['two_factor' => true]);
+    spa()->postJson('/api/auth/two-factor/reset-request')->assertOk()->assertJsonPath('message', fn (string $message): bool => str_contains($message, '***@'));
+
+    $token = null;
+    Notification::assertSentTo($user, TwoFactorResetLink::class, function (TwoFactorResetLink $notification) use (&$token): bool {
+        $token = $notification->token;
+
+        return true;
+    });
+
+    spa()->postJson('/api/auth/two-factor/reset', ['email' => $user->email, 'token' => 'wrong'])->assertJsonValidationErrors('token');
+    spa()->postJson('/api/auth/two-factor/reset', ['email' => $user->email, 'token' => $token])->assertOk();
+    expect($user->refresh()->hasTwoFactorEnabled())->toBeFalse();
+    Notification::assertSentTo($user, TwoFactorDisabled::class, fn (TwoFactorDisabled $notification): bool => ! $notification->byAdmin);
+
+    spa()->postJson('/api/auth/two-factor/reset', ['email' => $user->email, 'token' => $token])->assertJsonValidationErrors('token');
+    spa()->postJson('/api/auth/login', ['email' => $user->email, 'password' => 'password'])->assertOk()->assertJsonPath('data.email', $user->email);
+});
+
+test('an admin resetting 2fa emails the user a notice', function () {
+    Notification::fake();
+    $user = User::factory()->create();
+    enableTwoFactor($user);
+
+    $this->actingAs(User::factory()->create(['is_admin' => true]))->patchJson("/api/admin/users/{$user->id}", ['disable_two_factor' => true])->assertOk();
+
+    Notification::assertSentTo($user, TwoFactorDisabled::class, fn (TwoFactorDisabled $notification): bool => $notification->byAdmin);
 });

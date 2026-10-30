@@ -19,6 +19,11 @@
 /public/assets
 /public/index.html
 /public/favicon.svg
+/public/mail
+/public/pwa
+/public/sw.js
+/public/workbox-*.js
+/public/manifest.webmanifest
 /public/fonts-manifest.dev.json
 /public/hot
 /public/storage

@@ -4,28 +4,34 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Notifications\InviteUser;
+use App\Services\Auth\TemporaryPasswords;
+use App\Services\Auth\TwoFactorReset;
 use App\Services\Notifications\MailSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Password as PasswordBroker;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
-use Throwable;
 
+/**
+ * Accounts are created only here (there is no public registration). With email set up, the user
+ * gets a temporary password by email; without it the admin types one. Either way the user must
+ * replace it at the first login.
+ */
 class UserController extends Controller
 {
+    public function __construct(private TemporaryPasswords $passwords) {}
+
     public function index(): JsonResponse
     {
         $users = User::query()
             ->withCount(['positions' => fn ($q) => $q->where('quantity', '>', 0), 'orders'])
             ->orderBy('id')
-            ->get(['id', 'name', 'email', 'balance_usd', 'is_admin', 'is_system', 'created_at', 'two_factor_confirmed_at', 'telegram_chat_id'])
+            ->get(['id', 'name', 'email', 'balance_usd', 'is_admin', 'is_system', 'created_at', 'two_factor_confirmed_at', 'telegram_chat_id', 'must_change_password', 'temporary_password_expires_at'])
             ->map(fn (User $user): array => [
-                ...$user->only('id', 'name', 'email', 'balance_usd', 'is_admin', 'is_system', 'created_at', 'positions_count', 'orders_count'),
+                ...$user->only('id', 'name', 'email', 'balance_usd', 'is_admin', 'is_system', 'created_at', 'positions_count', 'orders_count', 'must_change_password'),
+                'temporary_password_expires_at' => $user->temporary_password_expires_at?->toIso8601String(),
                 'two_factor_enabled' => $user->two_factor_confirmed_at !== null,
                 'telegram_linked' => $user->telegram_chat_id !== null,
             ]);
@@ -33,51 +39,47 @@ class UserController extends Controller
         return response()->json(['data' => $users]);
     }
 
-    /**
-     * Create an account with a password set by the admin, or (invite) let the user set it from an email link.
-     */
     public function store(Request $request, MailSettings $mail): JsonResponse
     {
+        $byEmail = $mail->isEnabled();
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'invite' => ['sometimes', 'boolean'],
-            'password' => ['exclude_if:invite,true', 'required', Password::defaults()],
+            'password' => [$byEmail ? 'exclude' : 'required', Password::defaults()],
             'is_admin' => ['boolean'],
         ]);
-        $invite = (bool) ($data['invite'] ?? false);
-
-        if ($invite && ! $mail->isEnabled()) {
-            throw ValidationException::withMessages(['invite' => 'Email belum diaktifkan (Pengaturan → Email). Isi password secara manual.']);
-        }
 
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
-            // Nobody knows this one; the invitation link replaces it.
-            'password' => $invite ? Str::password(40) : $data['password'],
+            'password' => $data['password'] ?? $this->passwords->generate(),
             'is_admin' => $data['is_admin'] ?? false,
             'balance_usd' => config('market.simulator.starting_balance'),
         ]);
 
-        return response()->json([
-            'data' => $user->only('id', 'name', 'email', 'balance_usd', 'is_admin'),
-            'invite' => $invite ? $this->sendInvite($user, $request->user()) : null,
-        ], 201);
+        if ($byEmail) {
+            $delivery = $this->passwords->issue($user, $request->user(), isNew: true);
+        } else {
+            $this->passwords->assign($user, $data['password']);
+            $delivery = null;
+        }
+
+        return response()->json(['data' => $user->only('id', 'name', 'email', 'balance_usd', 'is_admin'), 'delivery' => $delivery], 201);
     }
 
     /**
-     * (Re)send the invitation link, e.g. when it expired or the user forgot their password.
+     * Email a new temporary password (forgotten password, expired temporary password, locked out).
      */
-    public function invite(Request $request, User $user, MailSettings $mail): JsonResponse
+    public function temporaryPassword(Request $request, User $user, MailSettings $mail): JsonResponse
     {
         abort_if($user->is_system, 422, 'Akun sistem tidak bisa login.');
+        abort_if($user->is($request->user()), 422, 'Ganti password Anda sendiri di Profil.');
         abort_unless($mail->isEnabled(), 422, 'Email belum diaktifkan (Pengaturan → Email).');
 
-        return response()->json(['invite' => $this->sendInvite($user, $request->user())]);
+        return response()->json(['delivery' => $this->passwords->issue($user, $request->user(), isNew: false)]);
     }
 
-    public function update(Request $request, User $user): JsonResponse
+    public function update(Request $request, User $user, TwoFactorReset $twoFactor): JsonResponse
     {
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -91,37 +93,21 @@ class UserController extends Controller
             throw ValidationException::withMessages(['is_admin' => 'Anda tidak bisa mencabut status admin akun sendiri.']);
         }
 
-        if (blank($data['password'] ?? null)) {
-            unset($data['password']);
+        // A password typed by an admin is temporary for anyone but the admin themself.
+        if (filled($data['password'] ?? null)) {
+            $user->is($request->user())
+                ? $user->update(['password' => $data['password']])
+                : $this->passwords->assign($user, $data['password']);
         }
 
-        // For a user who lost their phone and recovery codes.
+        // For a user who lost their phone and recovery codes; they get an email notice.
         if (isset($data['disable_two_factor'])) {
-            $user->forceFill(['two_factor_secret' => null, 'two_factor_recovery_codes' => null, 'two_factor_confirmed_at' => null]);
-            unset($data['disable_two_factor']);
+            $twoFactor->disable($user, byAdmin: true);
         }
 
-        $user->update($data);
+        $user->update(collect($data)->only('name', 'email', 'is_admin')->all());
 
         return response()->json(['data' => $user->only('id', 'name', 'email', 'balance_usd', 'is_admin')]);
-    }
-
-    /**
-     * Sent right away (not queued) so the admin sees a wrong SMTP setting immediately.
-     *
-     * @return array{sent: bool, error: string|null}
-     */
-    private function sendInvite(User $user, User $admin): array
-    {
-        try {
-            $user->notifyNow(new InviteUser(PasswordBroker::broker('invites')->createToken($user), $admin->name));
-        } catch (Throwable $e) {
-            report($e);
-
-            return ['sent' => false, 'error' => mb_substr($e->getMessage(), 0, 300)];
-        }
-
-        return ['sent' => true, 'error' => null];
     }
 
     public function destroy(Request $request, User $user): Response

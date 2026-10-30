@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Notifications\PasswordChanged;
 use App\Services\Notifications\MailSettings;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -14,7 +15,7 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * "Lupa password" and the link from an invitation email; both end on the SPA's /reset-password page.
+ * "Lupa password": the emailed link opens the SPA's /reset-password page.
  */
 class PasswordResetController extends Controller
 {
@@ -41,14 +42,20 @@ class PasswordResetController extends Controller
             'token' => ['required', 'string'],
             'email' => ['required', 'email'],
             'password' => ['required', 'confirmed', PasswordRule::defaults()],
-            'invite' => ['sometimes', 'boolean'],
         ]);
 
-        $status = Password::broker(($data['invite'] ?? false) ? 'invites' : 'users')->reset(
+        $status = Password::broker('users')->reset(
             ['email' => $data['email'], 'token' => $data['token'], 'password' => $data['password']],
             function (User $user, string $password): void {
-                $user->forceFill(['password' => $password, 'remember_token' => Str::random(60)])->save();
+                // Their own password now, so a pending temporary password no longer applies.
+                $user->forceFill([
+                    'password' => $password,
+                    'remember_token' => Str::random(60),
+                    'must_change_password' => false,
+                    'temporary_password_expires_at' => null,
+                ])->save();
                 event(new PasswordReset($user));
+                $user->notify(new PasswordChanged(now()));
             },
         );
 

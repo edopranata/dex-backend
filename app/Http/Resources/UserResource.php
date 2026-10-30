@@ -23,6 +23,8 @@ class UserResource extends JsonResource
             'balance_usd' => $this->balance_usd,
             'is_admin' => $this->is_admin,
             'two_factor_enabled' => $this->hasTwoFactorEnabled(),
+            // The SPA sends the user to the change-password screen; the API refuses everything else.
+            'must_change_password' => (bool) $this->must_change_password,
             'telegram_linked' => $this->hasTelegram(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

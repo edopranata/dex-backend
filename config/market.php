@@ -19,8 +19,6 @@ return [
         'starting_balance' => (float) env('SIM_STARTING_BALANCE', 10000),
         'fee_rate' => (float) env('SIM_FEE_RATE', 0.003),
         'max_tokens' => (int) env('SIM_MAX_TOKENS', 20),
-        // Matikan di server publik; buat akun dengan `php artisan app:create-user`.
-        'registration_enabled' => (bool) env('REGISTRATION_ENABLED', true),
         'min_order_usd' => 1,
         // Harga lebih tua dari ini dianggap basi dan diambil ulang sebelum order dieksekusi.
         'max_price_age_seconds' => 30,

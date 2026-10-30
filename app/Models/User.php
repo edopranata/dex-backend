@@ -33,6 +33,8 @@ class User extends Authenticatable
             'balance_usd' => 'float',
             'is_admin' => 'boolean',
             'is_system' => 'boolean',
+            'must_change_password' => 'boolean',
+            'temporary_password_expires_at' => 'datetime',
             'two_factor_secret' => 'encrypted',
             'two_factor_recovery_codes' => 'encrypted:array',
             'two_factor_confirmed_at' => 'datetime',
@@ -66,6 +68,14 @@ class User extends Authenticatable
     public function sendPasswordResetNotification($token): void
     {
         $this->notify(new ResetPassword($token));
+    }
+
+    /**
+     * A temporary password from an admin that was not replaced in time can no longer be used.
+     */
+    public function temporaryPasswordExpired(): bool
+    {
+        return $this->must_change_password && $this->temporary_password_expires_at?->isPast() === true;
     }
 
     public function hasTwoFactorEnabled(): bool

@@ -28,7 +28,6 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::get('options', [AuthController::class, 'options'])->name('options');
 
     Route::middleware('throttle:10,1')->group(function () {
-        Route::post('register', [AuthController::class, 'register'])->name('register');
         Route::post('login', [AuthController::class, 'login'])->name('login');
         Route::post('two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->name('two-factor');
     });
@@ -36,7 +35,11 @@ Route::prefix('auth')->name('auth.')->group(function () {
     Route::middleware('throttle:5,1')->group(function () {
         Route::post('forgot-password', [PasswordResetController::class, 'forgot'])->name('password.forgot');
         Route::post('reset-password', [PasswordResetController::class, 'reset'])->name('password.reset');
+        Route::post('two-factor/reset', [AuthController::class, 'resetTwoFactor'])->name('two-factor.reset');
     });
+
+    // Its own counter (prefix): the login throttle above shares the per-IP key otherwise.
+    Route::post('two-factor/reset-request', [AuthController::class, 'requestTwoFactorReset'])->middleware('throttle:3,10,two-factor-reset')->name('two-factor.reset-request');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('logout', [AuthController::class, 'logout'])->name('logout');
@@ -47,7 +50,7 @@ Route::prefix('auth')->name('auth.')->group(function () {
 // Called by Telegram's servers (no session); authenticated by the webhook secret header.
 Route::post('telegram/webhook', TelegramWebhookController::class)->middleware('throttle:120,1')->name('telegram.webhook');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::put('profile/password', [ProfileController::class, 'password'])->middleware('throttle:10,1')->name('profile.password');
@@ -95,7 +98,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy');
 });
 
-Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth:sanctum', 'password.changed', 'can:admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('info', [InfoController::class, 'index'])->name('info.index');
     Route::put('info/{service}/note', [InfoController::class, 'updateNote'])->name('info.note');
 
@@ -111,7 +114,7 @@ Route::middleware(['auth:sanctum', 'can:admin'])->prefix('admin')->name('admin.'
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');
     Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::post('users/{user}/invite', [UserController::class, 'invite'])->middleware('throttle:10,1')->name('users.invite');
+    Route::post('users/{user}/temporary-password', [UserController::class, 'temporaryPassword'])->middleware('throttle:10,1')->name('users.temporary-password');
     Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
 
     Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
