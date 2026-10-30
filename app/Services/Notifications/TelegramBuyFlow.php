@@ -7,6 +7,7 @@ use App\Models\Signal;
 use App\Models\User;
 use App\Services\Trading\TradingService;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
@@ -19,6 +20,8 @@ use Throwable;
  */
 class TelegramBuyFlow
 {
+    private const UNREACHABLE = 'Telegram sedang gangguan, coba tap lagi sebentar lagi.';
+
     public function __construct(private TelegramClient $telegram, private TradingService $trading) {}
 
     /**
@@ -103,12 +106,12 @@ class TelegramBuyFlow
     {
         Cache::put("telegram:buy-amount:{$chatId}", $signalId, now()->addMinutes(10));
 
-        $this->telegram->send($chatId, 'Ketik nominal pembelian dalam USD (contoh: <code>150</code>):', replyMarkup: [
+        $sent = $this->ui(fn () => $this->telegram->send($chatId, 'Ketik nominal pembelian dalam USD (contoh: <code>150</code>):', replyMarkup: [
             'force_reply' => true,
             'input_field_placeholder' => 'Nominal USD',
-        ]);
+        ]));
 
-        return null;
+        return $sent ? null : [self::UNREACHABLE, true];
     }
 
     /**
@@ -117,9 +120,9 @@ class TelegramBuyFlow
     private function sendConfirmation(User $user, string $chatId, int $signalId, float $amount): ?array
     {
         $confirmation = $this->confirmation($user, $signalId, $amount);
-        $this->telegram->send($chatId, $confirmation['text'], replyMarkup: $confirmation['reply_markup']);
+        $sent = $this->ui(fn () => $this->telegram->send($chatId, $confirmation['text'], replyMarkup: $confirmation['reply_markup']));
 
-        return null;
+        return $sent ? null : [self::UNREACHABLE, true];
     }
 
     /**
@@ -181,7 +184,7 @@ class TelegramBuyFlow
 
         if ($problem !== null) {
             Cache::forget("telegram:buy-confirmed:{$chatId}:{$messageId}");
-            $this->telegram->edit($chatId, $messageId, "⚠️ {$problem}");
+            $this->ui(fn () => $this->telegram->edit($chatId, $messageId, "⚠️ {$problem}"));
 
             return [$problem, true];
         }
@@ -191,13 +194,14 @@ class TelegramBuyFlow
             ? 'terisi '.self::quantity((float) $buy->filled_quantity).' '.$symbol.' @ '.TelegramNotifier::price($buy->filled_price).'. Stop loss &amp; TP1–TP3 sudah terpasang.'
             : 'pending, menunggu harga ≤ '.TelegramNotifier::price($buy->trigger_price).'. Stop loss &amp; TP dipasang otomatis saat terisi.';
 
-        $this->telegram->edit($chatId, $messageId, implode("\n", [
+        // The order exists at this point: a failed message update must not turn into an error.
+        $this->ui(fn () => $this->telegram->edit($chatId, $messageId, implode("\n", [
             "✅ <b>Order #{$buy->id}: beli {$symbol} ".TelegramNotifier::usd($amount).'</b>',
             'Limit '.TelegramNotifier::price($buy->trigger_price)." — {$state}",
             '<a href="'.e(rtrim((string) config('app.url'), '/').'/portfolio').'">Lihat portofolio</a>',
-        ]));
+        ])));
 
-        return ['Order dibuat', false];
+        return ["Order #{$buy->id} dibuat", false];
     }
 
     /**
@@ -205,9 +209,25 @@ class TelegramBuyFlow
      */
     private function cancel(string $chatId, int $messageId): ?array
     {
-        $this->telegram->edit($chatId, $messageId, '✖️ Pembelian dibatalkan.');
+        $this->ui(fn () => $this->telegram->edit($chatId, $messageId, '✖️ Pembelian dibatalkan.'));
 
         return ['Dibatalkan', false];
+    }
+
+    /**
+     * Run a call that only updates what the user sees; a Telegram outage is logged, not thrown.
+     */
+    private function ui(callable $call): bool
+    {
+        try {
+            $call();
+
+            return true;
+        } catch (TelegramException $e) {
+            Log::warning("Pesan Telegram (alur beli) tidak terkirim: {$e->getMessage()}");
+
+            return false;
+        }
     }
 
     private static function quantity(float $value): string

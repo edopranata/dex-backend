@@ -8,8 +8,11 @@ use App\Models\User;
 use App\Services\Admin\SettingsStore;
 use App\Services\Notifications\TelegramBuyFlow;
 use App\Services\Notifications\TelegramClient;
+use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 
 beforeEach(function () {
     config(['app.url' => 'https://dexsim.test']);
@@ -126,3 +129,35 @@ test('amounts are parsed leniently', function (string $input, ?float $expected) 
 })->with([
     ['150', 150.0], ['$150', 150.0], ['150,5', 150.5], [' 99.99 ', 99.99], ['abc', null], ['0', null], ['1.234', null],
 ]);
+
+/**
+ * Replace the default fake with method-specific responses (earlier fakes would win otherwise).
+ *
+ * @param  array<string, mixed>  $stubs
+ */
+function fakeTelegramWith(array $stubs): void
+{
+    Http::swap(new Factory(app('events')));
+    Http::fake([...$stubs, 'api.telegram.org/*' => Http::response(['ok' => true, 'result' => ['message_id' => 99]])]);
+}
+
+test('a connection reset while talking to telegram is retried', function () {
+    Sleep::fake();
+    fakeTelegramWith(['api.telegram.org/*/editMessageText' => Http::sequence()->pushFailedConnection()->push(['ok' => true, 'result' => true])]);
+
+    tapButton("ok:{$this->signal->id}:50", messageId: 99)->assertNoContent();
+
+    expect(collect(telegramCalls('editMessageText'))->last()['text'])->toContain('Order #');
+});
+
+test('an order still counts when telegram cannot be reached afterwards', function () {
+    Sleep::fake();
+    Log::spy();
+    fakeTelegramWith(['api.telegram.org/*/editMessageText' => Http::failedConnection()]);
+
+    tapButton("ok:{$this->signal->id}:50", messageId: 99)->assertNoContent();
+
+    $buy = Order::where('side', 'buy')->sole();
+    expect(collect(telegramCalls('answerCallbackQuery'))->last()['text'])->toBe("Order #{$buy->id} dibuat");
+    Log::shouldHaveReceived('warning')->withArgs(fn (string $m): bool => str_contains($m, 'alur beli'));
+});

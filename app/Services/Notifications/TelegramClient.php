@@ -2,6 +2,7 @@
 
 namespace App\Services\Notifications;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -157,7 +158,10 @@ class TelegramClient
         }
 
         try {
-            $response = Http::timeout(15)->post("https://api.telegram.org/bot{$token}/{$method}", $payload);
+            // Connections to Telegram are now and then reset mid-request: retry those quickly.
+            $response = Http::timeout(15)
+                ->retry([200, 1000], when: fn (Throwable $e): bool => $e instanceof ConnectionException, throw: false)
+                ->post("https://api.telegram.org/bot{$token}/{$method}", $payload);
         } catch (Throwable $e) {
             throw new TelegramException('Koneksi ke Telegram gagal: '.str_replace($token, '***', $e->getMessage()));
         }
