@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Str;
 
 #[Fillable([
     'chain_id', 'pair_address', 'token_address', 'symbol', 'name', 'quote_symbol', 'dex_id',
@@ -45,6 +46,46 @@ class Token extends Model
             'is_pinned' => 'boolean',
             'discovered_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (Token $token): void {
+            $token->slug ??= static::slugFor($token->symbol, $token->chain_id);
+        });
+    }
+
+    /**
+     * Readable, unique URL key such as "JOB-SOL"; a symbol already used on the chain gets "-2", "-3", ...
+     */
+    public static function slugFor(string $symbol, string $chainId): string
+    {
+        $symbol = Str::upper(Str::substr(preg_replace('/[^A-Za-z0-9]+/', '', Str::ascii($symbol)), 0, 20)) ?: 'TOKEN';
+        $base = $symbol.'-'.Str::upper(config("market.chains.{$chainId}.short", $chainId));
+
+        $slug = $base;
+        for ($suffix = 2; static::query()->where('slug', $slug)->exists(); $suffix++) {
+            $slug = "{$base}-{$suffix}";
+        }
+
+        return $slug;
+    }
+
+    /**
+     * Token pages are addressed by slug; numeric ids keep working for old links.
+     *
+     * @param  mixed  $value
+     * @param  string|null  $field
+     */
+    public function resolveRouteBinding($value, $field = null): ?Token
+    {
+        if ($field !== null) {
+            return parent::resolveRouteBinding($value, $field);
+        }
+
+        return ctype_digit((string) $value)
+            ? static::query()->find($value)
+            : static::query()->where('slug', Str::upper((string) $value))->first();
     }
 
     /**

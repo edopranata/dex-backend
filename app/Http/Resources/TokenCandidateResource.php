@@ -63,6 +63,7 @@ class TokenCandidateResource extends JsonResource
             'last_seen_at' => $this->last_seen_at,
             'token' => $this->whenLoaded('token', fn () => $this->token ? [
                 'id' => $this->token->id,
+                'slug' => $this->token->slug,
                 'is_active' => $this->token->is_active,
                 'recommendation' => $this->token->latestAnalysis?->recommendation,
                 'final_score' => $this->token->latestAnalysis?->final_score,

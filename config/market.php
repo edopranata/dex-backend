@@ -36,15 +36,16 @@ return [
     |
     */
 
+    // short: kode jaringan di URL halaman token, misalnya /tokens/JOB-SOL.
     'chains' => [
-        'solana' => ['label' => 'Solana', 'geckoterminal' => 'solana', 'goplus' => 'solana'],
-        'ethereum' => ['label' => 'Ethereum', 'geckoterminal' => 'eth', 'goplus' => '1'],
-        'base' => ['label' => 'Base', 'geckoterminal' => 'base', 'goplus' => '8453'],
-        'bsc' => ['label' => 'BNB Chain', 'geckoterminal' => 'bsc', 'goplus' => '56'],
-        'arbitrum' => ['label' => 'Arbitrum', 'geckoterminal' => 'arbitrum', 'goplus' => '42161'],
-        'polygon' => ['label' => 'Polygon', 'geckoterminal' => 'polygon_pos', 'goplus' => '137'],
-        'optimism' => ['label' => 'Optimism', 'geckoterminal' => 'optimism', 'goplus' => '10'],
-        'avalanche' => ['label' => 'Avalanche', 'geckoterminal' => 'avax', 'goplus' => '43114'],
+        'solana' => ['label' => 'Solana', 'short' => 'SOL', 'geckoterminal' => 'solana', 'goplus' => 'solana'],
+        'ethereum' => ['label' => 'Ethereum', 'short' => 'ETH', 'geckoterminal' => 'eth', 'goplus' => '1'],
+        'base' => ['label' => 'Base', 'short' => 'BASE', 'geckoterminal' => 'base', 'goplus' => '8453'],
+        'bsc' => ['label' => 'BNB Chain', 'short' => 'BSC', 'geckoterminal' => 'bsc', 'goplus' => '56'],
+        'arbitrum' => ['label' => 'Arbitrum', 'short' => 'ARB', 'geckoterminal' => 'arbitrum', 'goplus' => '42161'],
+        'polygon' => ['label' => 'Polygon', 'short' => 'POL', 'geckoterminal' => 'polygon_pos', 'goplus' => '137'],
+        'optimism' => ['label' => 'Optimism', 'short' => 'OP', 'geckoterminal' => 'optimism', 'goplus' => '10'],
+        'avalanche' => ['label' => 'Avalanche', 'short' => 'AVAX', 'geckoterminal' => 'avax', 'goplus' => '43114'],
     ],
 
     // API publik GeckoTerminal dibatasi per IP; naikkan jika memakai paket berbayar.

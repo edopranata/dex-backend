@@ -23,6 +23,7 @@ class TokenResource extends JsonResource
             'chain_label' => config("market.chains.{$this->chain_id}.label", $this->chain_id),
             'pair_address' => $this->pair_address,
             'token_address' => $this->token_address,
+            'slug' => $this->slug,
             'symbol' => $this->symbol,
             'name' => $this->name,
             'quote_symbol' => $this->quote_symbol,

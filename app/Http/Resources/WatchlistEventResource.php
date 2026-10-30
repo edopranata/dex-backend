@@ -24,6 +24,7 @@ class WatchlistEventResource extends JsonResource
             'created_at' => $this->created_at,
             'token' => [
                 'id' => $this->token->id,
+                'slug' => $this->token->slug,
                 'symbol' => $this->token->symbol,
                 'chain_id' => $this->token->chain_id,
                 'image_url' => $this->token->image_url,

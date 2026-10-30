@@ -28,6 +28,7 @@ class NewsItemResource extends JsonResource
             'sentiment_provider' => $this->sentiment_provider,
             'tokens' => $this->whenLoaded('tokens', fn () => $this->tokens->map(fn ($token): array => [
                 'id' => $token->id,
+                'slug' => $token->slug,
                 'symbol' => $token->symbol,
             ])),
         ];

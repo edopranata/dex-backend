@@ -28,6 +28,7 @@ class WhaleTradeResource extends JsonResource
             'traded_at' => $this->traded_at,
             'token' => $this->whenLoaded('token', fn (): array => [
                 'id' => $this->token->id,
+                'slug' => $this->token->slug,
                 'symbol' => $this->token->symbol,
                 'chain_id' => $this->token->chain_id,
                 'image_url' => $this->token->image_url,
