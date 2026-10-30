@@ -3,8 +3,8 @@
 #   bash /opt/dex/backend/deploy/deploy.sh            (normal)
 #   bash /opt/dex/backend/deploy/deploy.sh --no-pull  (build dari kode yang sudah ada)
 #   bash /opt/dex/backend/deploy/deploy.sh --force    (deploy walau commit sama dengan deploy terakhir)
-# Urutan: build -> migrasi -> app/scheduler/web (situs langsung pakai versi baru) -> horizon paling akhir,
-# supaya situs tidak pernah menunggu worker queue menyelesaikan job-nya.
+# Urutan: build -> migrasi -> app/web (situs langsung pakai versi baru) -> scheduler -> horizon paling akhir,
+# supaya situs tidak pernah menunggu scheduler atau worker queue berhenti.
 set -euo pipefail
 
 # Wrapped in a function so bash parses the whole script before git pull can change this file.
@@ -29,8 +29,16 @@ main() {
     fi
 
     if [ "$pull" = 1 ]; then
+        local script="$backend/deploy/deploy.sh" before
+        before="$(sha1sum "$script")"
         git -C "$backend" pull --ff-only -q origin main
         git -C "$frontend" pull --ff-only -q origin main
+
+        # This run was parsed from the old file: when the pull changed it, continue with the new one.
+        if [ "$(sha1sum "$script")" != "$before" ]; then
+            echo "deploy.sh berubah, lanjut dengan versi terbaru."
+            DEX_DEPLOY_LOCKED=1 exec bash "$script" --no-pull "$@"
+        fi
     fi
 
     local commits
@@ -47,7 +55,10 @@ main() {
     step "Build image" docker compose build
     step "Database & Redis" docker compose up -d --wait mysql redis
     step "Migrasi" docker compose up --no-deps --exit-code-from migrate migrate
-    step "Ganti app, scheduler, web" docker compose up -d --no-deps app scheduler web
+    step "Ganti app & web" docker compose up -d --no-deps app web
+    # On its own: a running schedule:run finishes its minute (up to the 10 s stop timeout), and in the same
+    # command the new app container would wait for it, taking the site down meanwhile.
+    step "Ganti scheduler" docker compose up -d --no-deps scheduler
 
     # Queue workers last: stopping them may wait for running jobs (stop_grace_period), the site doesn't care.
     step "Ganti horizon" docker compose up -d --no-deps horizon
