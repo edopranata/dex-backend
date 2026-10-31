@@ -42,7 +42,7 @@ class GeckoTerminalClient
      *
      * @return list<array{open_time: int, open: float, high: float, low: float, close: float, volume: float}>
      */
-    public function ohlcv(string $network, string $poolAddress, string $tokenAddress, string $timeframe, int $limit = 300): array
+    public function ohlcv(string $network, string $poolAddress, string $tokenAddress, string $timeframe, int $limit = 300, ?int $beforeTimestamp = null): array
     {
         if (! isset(self::TIMEFRAMES[$timeframe])) {
             throw new InvalidArgumentException("Unsupported timeframe [{$timeframe}].");
@@ -55,6 +55,7 @@ class GeckoTerminalClient
             'limit' => $limit,
             'currency' => 'usd',
             'token' => $tokenAddress,
+            ...($beforeTimestamp !== null ? ['before_timestamp' => $beforeTimestamp] : []),
         ])->json('data.attributes.ohlcv_list') ?? [];
 
         $candles = array_map(fn (array $row): array => [

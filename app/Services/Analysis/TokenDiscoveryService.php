@@ -26,6 +26,17 @@ use Throwable;
  */
 class TokenDiscoveryService
 {
+    /** Upper bounds for values from market data; anything above is broken data (and overflows the columns). */
+    private const PLAUSIBLE_LIMITS = [
+        'price_usd' => 1e12,
+        'price_change_h1' => 1e9,
+        'price_change_h6' => 1e9,
+        'price_change_h24' => 1e9,
+        'volume_h24' => 1e15,
+        'liquidity_usd' => 1e15,
+        'fdv' => 1e18,
+    ];
+
     /**
      * Sources driven by real demand. Paid boosts alone never qualify a token for auto-tracking.
      */
@@ -56,7 +67,8 @@ class TokenDiscoveryService
         $found = $this->collect($config, $trendingSymbols);
         $newsTitles = NewsItem::query()->where('published_at', '>=', now()->subDay())->pluck('title');
 
-        $candidates = $found->map(fn (array $item): ?TokenCandidate => $this->upsert($item, $trendingSymbols, $newsTitles, $config))->filter();
+        // One bad pool must not stop the whole round (and with it deep checks and auto-tracking).
+        $candidates = $found->map(fn (array $item): ?TokenCandidate => rescue(fn () => $this->upsert($item, $trendingSymbols, $newsTitles, $config)))->filter();
 
         $deepChecked = $candidates
             ->filter(fn (TokenCandidate $c): bool => $c->status !== CandidateStatus::Rejected)
@@ -246,6 +258,25 @@ class TokenDiscoveryService
     }
 
     /**
+     * Some pools report broken data (a price of 2.7e26, a 24h change of 2e31 %). They are not real
+     * markets, and such values do not fit the database either.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function hasPlausibleNumbers(array $attributes): bool
+    {
+        foreach (self::PLAUSIBLE_LIMITS as $key => $limit) {
+            if (abs((float) ($attributes[$key] ?? 0)) >= $limit) {
+                Log::notice("Discovery melewati {$attributes['symbol']}: {$key} tidak masuk akal.", ['pair' => $attributes['pair_address'] ?? null, 'value' => $attributes[$key]]);
+
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Apply filters and cheap scores, then store the candidate.
      *
      * @param  array{pair: array<string, mixed>, sources: list<string>, buyers: int|null, sellers: int|null}  $item
@@ -258,7 +289,7 @@ class TokenDiscoveryService
         $attributes = DexScreenerClient::toTokenAttributes($item['pair']);
         $symbol = strtoupper($attributes['symbol']);
 
-        if (in_array($symbol, $config['excluded_symbols'], true) || $attributes['price_usd'] === null) {
+        if (in_array($symbol, $config['excluded_symbols'], true) || $attributes['price_usd'] === null || ! $this->hasPlausibleNumbers($attributes)) {
             return null;
         }
 

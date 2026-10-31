@@ -265,3 +265,27 @@ test('a full market of strong or pinned tokens accepts no replacement', function
 
     expect(app(TokenDiscoveryService::class)->run()['added'])->toBe([]);
 });
+
+test('a pool with broken numbers is skipped without stopping the discovery round', function () {
+    $trades = [['side' => 'buy', 'usd' => 20_000, 'wallet' => 'w1'], ['side' => 'buy', 'usd' => 15_000, 'wallet' => 'w2'], ['side' => 'buy', 'usd' => 12_000, 'wallet' => 'w3']];
+
+    fakeDiscoveryApis([
+        'SOPH' => [
+            'pair' => dexPair('PairBroken11111111111111111111111111111111', 'TokenBroken1111111111111111111111111111111', 'SOPH', [
+                'priceUsd' => '276981337021740000000000000',
+                'priceChange' => ['h1' => 1.8e31, 'h6' => 2e31, 'h24' => 2e31],
+                'liquidity' => ['usd' => 0],
+            ]),
+            'trades' => [],
+        ],
+        'GOOD' => [
+            'pair' => dexPair('PairGood1111111111111111111111111111111111', 'TokenGood111111111111111111111111111111111', 'GOOD'),
+            'trades' => $trades,
+        ],
+    ]);
+
+    app(TokenDiscoveryService::class)->run();
+
+    expect(TokenCandidate::query()->where('symbol', 'SOPH')->exists())->toBeFalse()
+        ->and(TokenCandidate::query()->where('symbol', 'GOOD')->exists())->toBeTrue();
+});
