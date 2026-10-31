@@ -205,6 +205,18 @@ return [
             'max_per_minute' => (int) env('XAI_MAX_PER_MINUTE', 30),
             'max_per_day' => (int) env('XAI_MAX_PER_DAY', 100),
         ],
+        // Model lokal lewat Ollama, khusus development: VPS tidak bisa mengakses laptop dan tidak punya GPU.
+        'ollama' => [
+            'enabled' => env('APP_ENV') === 'local',
+            'key' => 'ollama', // Wajib ada untuk klien; Ollama mengabaikannya.
+            'base_url' => env('OLLAMA_BASE_URL', 'http://127.0.0.1:11434/v1'),
+            'model' => env('OLLAMA_MODEL', 'gemma4:12b'),
+            'max_per_minute' => (int) env('OLLAMA_MAX_PER_MINUTE', 30),
+            'max_per_day' => (int) env('OLLAMA_MAX_PER_DAY', 5000),
+            'timeout' => (int) env('OLLAMA_TIMEOUT', 180),
+            // Tanpa mode thinking: jawaban JSON pendek jauh lebih cepat.
+            'request' => ['reasoning_effort' => 'none'],
+        ],
         'openai' => [
             'key' => env('OPENAI_API_KEY'),
             'base_url' => 'https://api.openai.com/v1',

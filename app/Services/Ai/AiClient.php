@@ -23,7 +23,7 @@ use Throwable;
 class AiClient
 {
     /** Providers this client can talk to; xAI and OpenAI share the OpenAI chat-completions format. */
-    public const PROVIDERS = ['gemini' => 'Google Gemini', 'xai' => 'xAI Grok', 'openai' => 'OpenAI'];
+    public const PROVIDERS = ['gemini' => 'Google Gemini', 'xai' => 'xAI Grok', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
 
     private ?string $lastProvider = null;
 
@@ -38,7 +38,10 @@ class AiClient
 
         return array_values(array_filter(
             $chain,
-            fn ($provider): bool => is_string($provider) && isset(self::PROVIDERS[$provider]) && filled(config("market.ai.{$provider}.key")),
+            fn ($provider): bool => is_string($provider)
+                && isset(self::PROVIDERS[$provider])
+                && filled(config("market.ai.{$provider}.key"))
+                && config("market.ai.{$provider}.enabled", true),
         ));
     }
 
@@ -319,13 +322,14 @@ class AiClient
     }
 
     /**
-     * OpenAI-style chat completions in JSON mode (OpenAI and xAI).
+     * OpenAI-style chat completions in JSON mode (OpenAI, xAI and local Ollama).
      */
     private function chatCompletions(string $provider, string $system, string $prompt): ?string
     {
         return Http::withToken(config("market.ai.{$provider}.key"))
-            ->timeout(60)
+            ->timeout((int) config("market.ai.{$provider}.timeout", 60))
             ->post(rtrim((string) config("market.ai.{$provider}.base_url"), '/').'/chat/completions', [
+                ...config("market.ai.{$provider}.request", []),
                 'model' => config("market.ai.{$provider}.model"),
                 'response_format' => ['type' => 'json_object'],
                 'temperature' => 0.2,

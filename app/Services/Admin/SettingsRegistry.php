@@ -22,8 +22,8 @@ class SettingsRegistry
                 'label' => 'AI (sentimen berita & ringkasan analisis)',
                 'description' => 'Tanpa API key, sentimen memakai kamus kata dan ringkasan memakai template.',
                 'fields' => [
-                    ['key' => 'market.ai.provider', 'label' => 'Provider utama', 'type' => 'select', 'options' => ['none' => 'Nonaktif', 'gemini' => 'Google Gemini', 'xai' => 'xAI Grok', 'openai' => 'OpenAI']],
-                    ['key' => 'market.ai.fallback_provider', 'label' => 'Provider cadangan', 'type' => 'select', 'options' => ['none' => 'Nonaktif', 'gemini' => 'Google Gemini', 'xai' => 'xAI Grok', 'openai' => 'OpenAI'], 'description' => 'Dipakai otomatis saat provider utama terkena limit, kuota habis, atau error.'],
+                    ['key' => 'market.ai.provider', 'label' => 'Provider utama', 'type' => 'select', 'options' => self::aiProviders()],
+                    ['key' => 'market.ai.fallback_provider', 'label' => 'Provider cadangan', 'type' => 'select', 'options' => self::aiProviders(), 'description' => 'Dipakai otomatis saat provider utama terkena limit, kuota habis, atau error.'],
                     ['key' => 'market.ai.gemini.key', 'label' => 'Gemini API key', 'type' => 'secret', 'description' => 'Buat gratis di aistudio.google.com/apikey'],
                     ['key' => 'market.ai.gemini.model', 'label' => 'Model Gemini', 'type' => 'string', 'description' => 'Disarankan gemini-flash-lite-latest (kuota gratis paling longgar, tidak pensiun).'],
                     ['key' => 'market.ai.gemini.max_per_minute', 'label' => 'Gemini: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Sesuaikan dengan batas free tier model (lihat AI Studio → Rate limits).'],
@@ -140,6 +140,22 @@ class SettingsRegistry
                     ['key' => 'market.analysis.min_onchain_score', 'label' => 'Skor keamanan minimum untuk Buy', 'type' => 'int', 'min' => 0, 'max' => 100],
                 ],
             ],
+        ];
+    }
+
+    /**
+     * Ollama runs on the developer's machine, so it is only offered in local development.
+     *
+     * @return array<string, string>
+     */
+    private static function aiProviders(): array
+    {
+        return [
+            'none' => 'Nonaktif',
+            'gemini' => 'Google Gemini',
+            'xai' => 'xAI Grok',
+            'openai' => 'OpenAI',
+            ...(config('market.ai.ollama.enabled') ? ['ollama' => 'Ollama (lokal)'] : []),
         ];
     }
 

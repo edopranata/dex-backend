@@ -226,3 +226,24 @@ test('ping checks every provider in the chain', function () {
         ->and($results[0]['ok'])->toBeTrue()
         ->and($results[1]['ok'])->toBeFalse();
 });
+
+test('ollama is a keyless local provider sent without thinking, and is ignored outside local development', function () {
+    Http::fake(['127.0.0.1:11434/*' => Http::response(['choices' => [['message' => ['content' => '{"ok":true}']]]])]);
+    config(['market.ai.provider' => 'ollama', 'market.ai.fallback_provider' => 'none', 'market.ai.ollama.enabled' => true]);
+
+    $client = app(AiClient::class);
+
+    expect($client->json('system', 'prompt'))->toBe(['ok' => true])
+        ->and($client->lastProvider())->toBe('ollama');
+
+    Http::assertSent(fn ($request): bool => $request->url() === 'http://127.0.0.1:11434/v1/chat/completions'
+        && $request['model'] === 'gemma4:12b'
+        && $request['reasoning_effort'] === 'none'
+        && $request['response_format'] === ['type' => 'json_object']);
+
+    config(['market.ai.ollama.enabled' => false]);
+
+    expect($client->isEnabled())->toBeFalse()
+        ->and($client->json('system', 'prompt'))->toBeNull();
+    Http::assertSentCount(1);
+});
