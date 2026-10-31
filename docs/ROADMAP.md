@@ -86,16 +86,16 @@ Tujuan: membuktikan dengan data apakah sinyal layak dipakai dengan uang sungguha
 Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil bersihnya membaik. Sumber data tetap gratis (GeckoTerminal, DEX Screener, GoPlus, Jupiter).
 
 **2A. Pembanding**
-- [ ] **Backtest**: jalankan mesin analisis pada candle historis (1h/4h, 90 hari), hasilkan win rate, rata-rata R bersih, profit factor, drawdown. Jika SL dan TP kena di candle yang sama, hitung SL. Periode pengembangan dan pengujian dipisah
+- [x] **Backtest**: jalankan mesin analisis pada candle historis (1h/4h, 90 hari), hasilkan win rate, rata-rata R bersih, profit factor, drawdown. Jika SL dan TP kena di candle yang sama, hitung SL. Periode pengembangan dan pengujian dipisah — **31 Okt 2026: `market:backfill-candles` + `market:backtest`. Strategi awal: pengembangan -0,04R (PF 0,93), pengujian -0,21R (PF 0,69), drawdown 107R. Hanya aturan teknikal yang teruji; token mati belum tercakup**
 
 **2B. Penyaring entry** (dampak terbesar menurut data awal)
-- [ ] Gerbang tren 4 jam: sinyal beli hanya saat tren besar mendukung (bullish win 50%, bearish win 13% dari 20 sinyal pertama)
-- [ ] Tolak entry saat harga sudah terlalu jauh naik (`EXTENDED_MOVE`), evaluasi poin RSI 55-65
-- [ ] Jarak SL minimum (semua 5 sinyal dengan SL di bawah 4% kalah), uji TP1 di 1R
+- [x] Gerbang tren 4 jam — **31 Okt 2026: diuji, tidak dipakai. Temuan dari 20 sinyal live tidak terbukti pada ratusan trade (pengujian -0,27R)**
+- [ ] Tolak entry saat harga sudah terlalu jauh naik (`EXTENDED_MOVE`). Batas RSI 55/65 sudah diuji dan tidak berpengaruh
+- [x] Jarak SL minimum 4% (strategi `v2`) — **31 Okt 2026: pengembangan +0,10R (PF 1,21), pengujian -0,12R (PF 0,81), drawdown 41R. TP 1R/2R/3R diuji dan lebih buruk**
 - [ ] Setup entry breakout/pullback dengan hasil `NO_TRADE` jika setup tidak terpenuhi
 
 **2C. Kondisi pasar**
-- [ ] Deteksi regime (bullish, bearish, sideways, volatil) dari data yang sudah direkam; kurangi entry saat bearish
+- [ ] Deteksi regime (bullish, bearish, sideways, volatil) dari data yang sudah direkam — **31 Okt 2026: aturan sederhana tren 4 jam SOL/ETH diuji, belum konsisten (tolak saat bearish: pengujian -0,24R; hanya saat bullish: pengembangan +0,01R, pengujian -0,03R dari 44 trade). Belum dipakai; perlu data di lebih banyak kondisi pasar**
 
 **2D. Risiko & kelayakan keluar**
 - [ ] Status `PASS / REJECTED / REVIEW / INSUFFICIENT_DATA`; data kosong tidak lagi bernilai 50
@@ -104,7 +104,7 @@ Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil 
 **2E. Kualitas volume & bobot**
 - [ ] Tekanan beli per periode, pembeli unik, rasio volume terhadap likuiditas
 - [ ] Halaman laporan performa mingguan (sinyal, R per minggu, per token, per rekomendasi)
-- [ ] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian
+- [ ] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian — **31 Okt 2026: backtest batas posisi: maks. 3 drawdown 15R, maks. 5 27R, tanpa batas 41R**
 - [ ] Mode "paper auto-follow": ikuti semua sinyal otomatis dengan aturan risiko di atas, ukur kurva ekuitasnya
 - [ ] Tuning bobot/ambang di Admin berdasarkan hasil backtest (catat setiap perubahan di bagian 6)
 - [ ] Evaluasi pengaruh AI (sentimen Gemini) vs tanpa AI
@@ -222,6 +222,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 30 Okt 2026 | Monitoring: UptimeRobot (cek dari luar) + Healthchecks.io (heartbeat dari dalam & backup) | Gratis, keduanya kirim ke Telegram; heartbeat menangkap scheduler/Horizon mati yang tidak terlihat dari luar |
 | 30 Okt 2026 | Email transaksional memakai Resend (SMTP), bukan Brevo | Gratis 3.000/bulan tanpa branding; domain diverifikasi lewat DNS Cloudflare |
 | 31 Okt 2026 | Strategi dari blueprint masuk Fase 2-6 sesuai data; token trending X pindah ke Fase 6; target utama expectancy bersih, bukan win rate | 20 sinyal pertama: win 30%, -0,34R. Skor belum memprediksi harga, sentimen belum membedakan, dan semua sumber data tambahan bisa gratis |
+| 31 Okt 2026 | Strategi `v2`: sinyal butuh jarak stop minimal 4%. Gerbang tren 4 jam, batas RSI, dan TP 1R/2R/3R tidak dipakai | Backtest 90 hari: stop di bawah 4% menyumbang -126R; aturan lain tidak membaik di periode pengujian. Belum ada skenario yang untung di periode pengujian |
 | | | |
 
 ---

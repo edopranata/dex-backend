@@ -22,13 +22,19 @@ class Backtester
 
     private const HOUR = 3600;
 
+    /** Market benchmark per chain [chain, symbol]; chains without their own use ETH. */
+    private const BENCHMARKS = ['solana' => ['solana', 'SOL'], 'default' => ['ethereum', 'WETH']];
+
+    /** @var array<string, list<array{closed_at: int, trend: string|null}>> */
+    private array $benchmarkTrends = [];
+
     public function __construct(private TechnicalAnalyzer $technical, private SignalResult $results) {}
 
     /**
      * Technical analysis at every closed candle since $since. Done once per token, because it does not
      * depend on the scenario being tested.
      *
-     * @return array{token: Token, candles: list<Candle>, analyses: array<int, array{score: int, rsi: float|null, trend: string|null, atr: float, swing_low: float}>}
+     * @return array{token: Token, candles: list<Candle>, analyses: array<int, array{score: int, rsi: float|null, trend: string|null, market: string|null, atr: float, swing_low: float}>}
      */
     public function prepare(Token $token, int $since): array
     {
@@ -38,6 +44,8 @@ class Backtester
         $trendSeconds = 4 * self::HOUR;
         $analyses = [];
         $trendEnd = 0;
+        $market = $this->benchmarkTrend($token);
+        $marketEnd = 0;
 
         foreach ($candles as $index => $candle) {
             $closedAt = $candle->open_time + self::HOUR;
@@ -45,6 +53,10 @@ class Backtester
             // Only higher timeframe candles that had already closed at this moment.
             while ($trendEnd < count($trendCandles) && $trendCandles[$trendEnd]->open_time + $trendSeconds <= $closedAt) {
                 $trendEnd++;
+            }
+
+            while ($marketEnd < count($market) && $market[$marketEnd]['closed_at'] <= $closedAt) {
+                $marketEnd++;
             }
 
             if ($candle->open_time < $since || $index + 1 < TechnicalAnalyzer::MIN_CANDLES) {
@@ -62,6 +74,7 @@ class Backtester
                     'score' => $analysis['score'],
                     'rsi' => $analysis['indicators']['rsi'] ?? null,
                     'trend' => $analysis['indicators']['trend_higher_tf'] ?? null,
+                    'market' => $marketEnd > 0 ? $market[$marketEnd - 1]['trend'] : null,
                     'atr' => $analysis['atr'],
                     'swing_low' => $analysis['swing_low'],
                 ];
@@ -75,7 +88,7 @@ class Backtester
      * Trades of one scenario on one prepared token. Like live, a token has one open signal at a time.
      *
      * @param  array{token: Token, candles: list<Candle>, analyses: array<int, array<string, mixed>>}  $prepared
-     * @param  array{require_trend?: string, max_rsi?: float, min_stop_pct?: float, sl_atr_min?: float, tp_r_multiples?: list<float>}  $scenario
+     * @param  array{require_trend?: string, block_market?: string, require_market?: string, max_rsi?: float, min_stop_pct?: float, sl_atr_min?: float, tp_r_multiples?: list<float>}  $scenario
      * @return list<array<string, mixed>>
      */
     public function simulate(array $prepared, array $scenario): array
@@ -134,6 +147,30 @@ class Backtester
         }
 
         return $trades;
+    }
+
+    /**
+     * Keep only the trades that fit a limit on simultaneously open positions, first come first served.
+     *
+     * @param  list<array<string, mixed>>  $trades
+     * @return list<array<string, mixed>>
+     */
+    public static function limitOpenPositions(array $trades, int $limit): array
+    {
+        usort($trades, fn (array $a, array $b): int => [$a['signal_at'], $a['token']] <=> [$b['signal_at'], $b['token']]);
+        $open = [];
+        $kept = [];
+
+        foreach ($trades as $trade) {
+            $open = array_filter($open, fn (int $closedAt): bool => $closedAt > $trade['signal_at']);
+
+            if (count($open) < $limit) {
+                $open[] = $trade['closed_at'];
+                $kept[] = $trade;
+            }
+        }
+
+        return $kept;
     }
 
     /**
@@ -196,6 +233,14 @@ class Backtester
     private function passesGates(array $analysis, array $scenario): bool
     {
         if (isset($scenario['require_trend']) && $analysis['trend'] !== $scenario['require_trend']) {
+            return false;
+        }
+
+        if (isset($scenario['block_market']) && $analysis['market'] === $scenario['block_market']) {
+            return false;
+        }
+
+        if (isset($scenario['require_market']) && $analysis['market'] !== $scenario['require_market']) {
             return false;
         }
 
@@ -280,6 +325,31 @@ class Backtester
     private function notEntered(int $index): array
     {
         return ['result' => null, 'entry_price' => null, 'exit_price' => null, 'tp_hit' => 0, 'closed_at' => null, 'last_index' => $index];
+    }
+
+    /**
+     * Trend of the chain's main asset after each closed higher timeframe candle.
+     *
+     * @return list<array{closed_at: int, trend: string|null}>
+     */
+    private function benchmarkTrend(Token $token): array
+    {
+        [$chain, $symbol] = self::BENCHMARKS[$token->chain_id] ?? self::BENCHMARKS['default'];
+
+        return $this->benchmarkTrends[$symbol] ??= (function () use ($chain, $symbol): array {
+            $benchmark = Token::query()->where('chain_id', $chain)->where('symbol', $symbol)->orderByDesc('liquidity_usd')->first();
+            $candles = $benchmark ? $this->candles($benchmark, config('market.analysis.trend_timeframe')) : [];
+            $trends = [];
+
+            foreach ($candles as $index => $candle) {
+                $trends[] = [
+                    'closed_at' => $candle->open_time + 4 * self::HOUR,
+                    'trend' => $this->technical->higherTimeframeTrend(new Collection(array_slice($candles, max(0, $index - 119), min($index + 1, 120)))),
+                ];
+            }
+
+            return $trends;
+        })();
     }
 
     /**

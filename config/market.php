@@ -290,7 +290,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v1',
+        'strategy_version' => 'v2',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [
@@ -313,6 +313,8 @@ return [
         'rug_liquidity_drop_pct' => 40,
         // Target dalam kelipatan risiko (R = entry - stop loss).
         'tp_r_multiples' => [1.5, 2.5, 4.0],
+        // Jarak stop (%) di bawah ini tidak jadi sinyal: biaya memakan hasilnya (backtest 90 hari: -126R dari 464 trade).
+        'min_stop_pct' => (float) env('SIGNAL_MIN_STOP_PCT', 4.0),
         'sl_atr_min' => 1.0,
         'sl_atr_max' => 3.0,
         'signal_entry_expiry_hours' => 12,

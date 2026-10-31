@@ -137,6 +137,7 @@ class SettingsRegistry
                     ['key' => 'market.analysis.weights.fundamental', 'label' => 'Bobot fundamental', 'type' => 'float', 'min' => 0, 'max' => 1, 'step' => 0.05],
                     ['key' => 'market.analysis.thresholds.STRONG_BUY', 'label' => 'Skor Strong Buy ≥', 'type' => 'int', 'min' => 0, 'max' => 100],
                     ['key' => 'market.analysis.thresholds.BUY', 'label' => 'Skor Buy ≥', 'type' => 'int', 'min' => 0, 'max' => 100],
+                    ['key' => 'market.analysis.min_stop_pct', 'label' => 'Jarak stop minimum untuk sinyal (%)', 'type' => 'float', 'min' => 0, 'max' => 50, 'step' => 0.5, 'description' => 'Stop lebih sempit dari ini tidak menjadi sinyal, karena fee dan slippage memakan hasilnya. 0 = nonaktif.'],
                     ['key' => 'market.analysis.min_onchain_score', 'label' => 'Skor keamanan minimum untuk Buy', 'type' => 'int', 'min' => 0, 'max' => 100],
                 ],
             ],

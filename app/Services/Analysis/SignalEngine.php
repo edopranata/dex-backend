@@ -64,6 +64,16 @@ class SignalEngine
             ? TradeLevels::calculate($price, $technical['atr'], $technical['swing_low'], $config['tp_r_multiples'], $config['sl_atr_min'], $config['sl_atr_max'])
             : [];
 
+        if ($levels !== [] && ($price - $levels['stop_loss']) / $price * 100 < $config['min_stop_pct']) {
+            $overrideReason = sprintf(
+                'Skor mendukung beli, tetapi jarak stop hanya %.1f%% (minimum %.1f%%): biaya akan memakan hasilnya.',
+                ($price - $levels['stop_loss']) / $price * 100,
+                $config['min_stop_pct'],
+            );
+            $recommendation = Recommendation::Hold;
+            $levels = [];
+        }
+
         $reasons = array_values(array_filter([
             $overrideReason,
             ...array_map(fn (string $r): string => "[Teknikal] {$r}", $technical['reasons']),

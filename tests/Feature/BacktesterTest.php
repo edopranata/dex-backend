@@ -156,3 +156,46 @@ test('the backfill walks back page by page and stops at the cutoff', function ()
     Http::assertSentCount(2);
     expect(Candle::query()->where('token_id', $token->id)->count())->toBeGreaterThan(1400);
 });
+
+test('market rules use the benchmark trend known at that moment', function () {
+    $after = [[1.0, 1.5, 0.99, 1.4]];
+    $marketTrades = function (string $trend, array $scenario) use ($after): array {
+        $token = backtestToken($after);
+        $benchmark = Token::factory()->create(['chain_id' => 'ethereum', 'symbol' => 'WETH']);
+        // Closed before the signal; a later candle must not count.
+        Candle::factory()->create(['token_id' => $benchmark->id, 'timeframe' => '4h', 'open_time' => BACKTEST_START, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+        Candle::factory()->create(['token_id' => $benchmark->id, 'timeframe' => '4h', 'open_time' => BACKTEST_START + 60 * 3600, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+        $token->update(['chain_id' => 'base']);
+
+        test()->mock(TechnicalAnalyzer::class, function (MockInterface $mock) use ($trend): void {
+            $calls = 0;
+            $mock->shouldReceive('higherTimeframeTrend')->andReturnUsing(function () use ($trend, &$calls): string {
+                return ++$calls === 1 ? $trend : 'bullish';
+            });
+            $mock->shouldReceive('analyze')->andReturnUsing(fn ($candles): array => [
+                'score' => $candles->count() === 60 ? 95 : 10,
+                'available' => true,
+                'reasons' => [],
+                'indicators' => ['rsi' => 50.0, 'trend_higher_tf' => 'bullish'],
+                'atr' => 0.05,
+                'swing_low' => 0.99,
+                'swing_high' => 1.1,
+            ]);
+        });
+
+        return backtestRun($token, $scenario);
+    };
+
+    expect($marketTrades('bearish', ['block_market' => 'bearish']))->toBe([])
+        ->and($marketTrades('bearish', ['require_market' => 'bullish']))->toBe([])
+        ->and($marketTrades('bullish', ['block_market' => 'bearish']))->toHaveCount(1)
+        ->and($marketTrades('bullish', ['require_market' => 'bullish']))->toHaveCount(1);
+});
+
+test('the open position limit skips trades until a slot is free', function () {
+    $trade = fn (string $token, int $at, int $closed): array => ['token' => $token, 'signal_at' => $at, 'closed_at' => $closed, 'net_r' => 1.0];
+
+    $kept = Backtester::limitOpenPositions([$trade('A', 1, 10), $trade('B', 2, 5), $trade('C', 3, 8), $trade('D', 6, 9), $trade('E', 12, 13)], 2);
+
+    expect(array_column($kept, 'token'))->toBe(['A', 'B', 'D', 'E']);
+});

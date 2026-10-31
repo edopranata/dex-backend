@@ -13,6 +13,8 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     Http::fake(['api.alternative.me/*' => Http::response(['data' => [['value' => '60', 'value_classification' => 'Greed', 'timestamp' => '0']]])]);
     Http::preventStrayRequests();
+    // Most tests use a tight fake stop; the minimum stop rule has its own test.
+    config(['market.analysis.min_stop_pct' => 0.0]);
 });
 
 function fakeTechnical(int $score, bool $available = true): void
@@ -88,8 +90,25 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v1-');
+    expect($version)->toStartWith('v2-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);
+});
+
+test('a buy with a stop too close becomes hold without a signal, and the rule is part of the strategy version', function () {
+    fakeTechnical(95);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 90]);
+    $version = StrategyVersion::current();
+
+    config(['market.analysis.min_stop_pct' => 50.0]);
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+
+    expect($analysis->recommendation)->toBe(Recommendation::Hold)
+        ->and($analysis->stop_loss)->toBeNull()
+        ->and($analysis->reasons[0])->toContain('jarak stop')
+        ->and($token->signals()->count())->toBe(0)
+        ->and(StrategyVersion::current())->not->toBe($version);
 });

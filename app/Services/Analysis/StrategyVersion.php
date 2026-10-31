@@ -12,7 +12,7 @@ class StrategyVersion
     {
         $config = config('market.analysis');
         $parameters = array_intersect_key($config, array_flip([
-            'timeframe', 'trend_timeframe', 'weights', 'thresholds', 'min_onchain_score', 'tp_r_multiples',
+            'timeframe', 'trend_timeframe', 'weights', 'thresholds', 'min_onchain_score', 'tp_r_multiples', 'min_stop_pct',
             'sl_atr_min', 'sl_atr_max', 'signal_entry_expiry_hours', 'signal_max_hours',
         ]));
         ksort($parameters);

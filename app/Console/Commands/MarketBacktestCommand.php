@@ -30,6 +30,14 @@ class MarketBacktestCommand extends Command
         'tp-1-2-3' => ['tp_r_multiples' => [1.0, 2.0, 3.0]],
         'trend+stop' => ['require_trend' => 'bullish', 'min_stop_pct' => 4.0],
         'trend+2atr' => ['require_trend' => 'bullish', 'sl_atr_min' => 2.0],
+        // Fase 2C: market condition on top of the live 4% minimum stop.
+        'stop+pasar-tdk-bearish' => ['min_stop_pct' => 4.0, 'block_market' => 'bearish'],
+        'stop+pasar-bullish' => ['min_stop_pct' => 4.0, 'require_market' => 'bullish'],
+        // Limit on simultaneously open positions, to bring drawdown down.
+        'stop+maks3' => ['min_stop_pct' => 4.0, 'max_open' => 3],
+        'stop+maks5' => ['min_stop_pct' => 4.0, 'max_open' => 5],
+        'stop+maks10' => ['min_stop_pct' => 4.0, 'max_open' => 10],
+        'stop+bearish-off+maks5' => ['min_stop_pct' => 4.0, 'block_market' => 'bearish', 'max_open' => 5],
     ];
 
     public function handle(Backtester $backtester): int
@@ -57,6 +65,10 @@ class MarketBacktestCommand extends Command
 
             foreach ($prepared as $token) {
                 array_push($trades, ...$backtester->simulate($token, self::SCENARIOS[$name] ?? []));
+            }
+
+            if (isset(self::SCENARIOS[$name]['max_open'])) {
+                $trades = Backtester::limitOpenPositions($trades, self::SCENARIOS[$name]['max_open']);
             }
 
             $development = Backtester::summarize(array_values(array_filter($trades, fn (array $t): bool => $t['signal_at'] < $split)));
