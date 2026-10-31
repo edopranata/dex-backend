@@ -11,6 +11,8 @@ use App\Models\Signal;
  */
 class SignalTracker
 {
+    public function __construct(private SignalResult $results) {}
+
     public function track(Signal $signal, float $price): void
     {
         match ($signal->status) {
@@ -49,7 +51,7 @@ class SignalTracker
         }
 
         if ($maxTpHit === 3) {
-            $this->close($signal, SignalStatus::TakeProfit, $price, $maxTpHit, 0.0);
+            $this->close($signal, SignalStatus::TakeProfit, $price, $maxTpHit);
 
             return;
         }
@@ -57,14 +59,13 @@ class SignalTracker
         $stop = $maxTpHit > 0 ? $signal->entry_price : $signal->stop_loss;
 
         if ($price <= $stop) {
-            $status = $maxTpHit > 0 ? SignalStatus::TakeProfit : SignalStatus::StopLoss;
-            $this->close($signal, $status, $price, $maxTpHit, $maxTpHit > 0 ? 0.0 : -1.0);
+            $this->close($signal, $maxTpHit > 0 ? SignalStatus::TakeProfit : SignalStatus::StopLoss, $price, $maxTpHit);
 
             return;
         }
 
         if ($signal->entered_at->lt(now()->subHours(config('market.analysis.signal_max_hours')))) {
-            $this->close($signal, SignalStatus::Expired, $price, $maxTpHit, $this->rMultiple($signal, $price));
+            $this->close($signal, SignalStatus::Expired, $price, $maxTpHit);
 
             return;
         }
@@ -74,33 +75,18 @@ class SignalTracker
         }
     }
 
-    /**
-     * @param  float  $remainderR  Result in R for the part of the position still open when closing.
-     */
-    private function close(Signal $signal, SignalStatus $status, float $price, int $maxTpHit, float $remainderR): void
+    private function close(Signal $signal, SignalStatus $status, float $price, int $maxTpHit): void
     {
-        $targets = $signal->takeProfits();
-        $result = 0.0;
-
-        for ($i = 0; $i < $maxTpHit; $i++) {
-            $result += $this->rMultiple($signal, $targets[$i]) / 3;
-        }
-
-        $result += $remainderR * (3 - $maxTpHit) / 3;
+        $result = $this->results->calculate($signal, $price, $maxTpHit, $signal->token?->liquidity_usd);
 
         $signal->update([
             'status' => $status,
             'max_tp_hit' => $maxTpHit,
             'exit_price' => $price,
-            'result_r' => round($result, 2),
+            'result_r' => $result['gross_r'],
+            'net_r' => $result['net_r'],
+            'cost_r' => $result['cost_r'],
             'closed_at' => now(),
         ]);
-    }
-
-    private function rMultiple(Signal $signal, float $price): float
-    {
-        $risk = $signal->entry_price - $signal->stop_loss;
-
-        return $risk > 0 ? ($price - $signal->entry_price) / $risk : 0.0;
     }
 }

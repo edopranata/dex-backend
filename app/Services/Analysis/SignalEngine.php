@@ -22,6 +22,7 @@ class SignalEngine
         private SentimentAnalyzer $sentiment,
         private FundamentalAnalyzer $fundamental,
         private AnalysisSummarizer $summarizer,
+        private MarketContext $marketContext,
         private TelegramNotifier $notifier,
     ) {}
 
@@ -81,8 +82,12 @@ class SignalEngine
             'news_headlines' => $token->newsItems()->latest('published_at')->limit(5)->pluck('title')->all(),
         ], $previous);
 
+        $strategyVersion = StrategyVersion::current();
+
         $analysis = $token->analyses()->create([
             'timeframe' => $config['timeframe'],
+            'strategy_version' => $strategyVersion,
+            'market_context' => $this->marketContext->snapshot(),
             'recommendation' => $recommendation,
             'final_score' => $finalScore,
             'technical_score' => $scores['technical'],
@@ -113,6 +118,7 @@ class SignalEngine
                 'analysis_id' => $analysis->id,
                 'recommendation' => $recommendation,
                 'status' => SignalStatus::Pending,
+                'strategy_version' => $strategyVersion,
                 ...$levels,
             ]);
         }

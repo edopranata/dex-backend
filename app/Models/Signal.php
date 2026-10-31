@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable([
     'token_id', 'analysis_id', 'recommendation', 'status', 'entry_low', 'entry_high', 'stop_loss',
     'take_profit_1', 'take_profit_2', 'take_profit_3', 'entry_price', 'exit_price', 'max_tp_hit',
-    'result_r', 'entered_at', 'closed_at',
+    'result_r', 'net_r', 'cost_r', 'strategy_version', 'entered_at', 'closed_at',
 ])]
 #[ObservedBy(SignalObserver::class)]
 class Signal extends Model
@@ -50,6 +50,8 @@ class Signal extends Model
             'exit_price' => 'float',
             'max_tp_hit' => 'integer',
             'result_r' => 'float',
+            'net_r' => 'float',
+            'cost_r' => 'float',
             'entered_at' => 'datetime',
             'closed_at' => 'datetime',
         ];

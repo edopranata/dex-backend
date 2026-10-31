@@ -75,7 +75,7 @@ Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 - [x] **Email ke pengguna baru** lewat Resend (`mail.tune-in.trade`, SMTP gratis 3.000/bulan) — **30 Okt 2026: tanpa pendaftaran publik; admin membuat akun dan password sementara (berlaku 72 jam, wajib diganti saat login pertama) dikirim ke email. Lupa password, reset 2FA lewat email (setelah password benar), dan notifikasi keamanan (password diganti, 2FA dimatikan) memakai template email bertema aplikasi.; email tes diterima di inbox, DKIM/SPF/DMARC aktif**
 - [x] Monitor uptime eksternal: UptimeRobot ke `/health` tiap 5 menit (database, Redis, scheduler) + Healthchecks.io `dex-heartbeat` (5 menit, grace 10 menit; ikut melapor Horizon) & `dex-backup` (harian, grace 2 jam), semua ke Telegram — **30 Okt 2026: semua aktif; status tampil di Admin → General Information**
 - [x] Salinan backup ke luar VPS (Cloudflare R2), uji restore sekali — **30 Okt 2026: upload harian ke bucket R2 `dex-bucket` (`deploy/backup.sh`): dump 2,9 MB ±1,9 dtk + upload ±1,1 dtk; uji restore dari R2 ke database sementara (`deploy/restore-check.sh`) LOLOS dalam 6,5 dtk (26/26 tabel, 29/29 migrasi). CPU puncak ±65% selama <2 dtk, RAM +80 MB; status di Admin → Backup**
-- [ ] **Token trending di X** (tahap akhir, butuh pertimbangan): job terjadwal memakai tool *X Search* xAI (Grok) pada daftar akun crypto pilihan; hasil masuk Temukan sebagai kandidat "X trending" dan tetap melewati cek DEX Screener, likuiditas & keamanan; badge "Ramai di X", bukan pemicu beli. Putuskan dulu frekuensi (4 atau 6 jam), daftar akun, dan batas biaya harian — perkiraan $40–60/bulan
+- [x] **Ukur hasil dengan benar** — **31 Okt 2026: hasil sinyal memakai harga keluar sebenarnya, R bersih setelah fee & slippage, versi strategi, dan kondisi pasar (Fear & Greed, tren SOL/ETH, breadth) tersimpan di tiap analisis. Sinyal lama menjadi pembanding `v0`**
 
 **Kriteria lolos:** 7 hari berturut-turut tanpa downtime yang tidak terdeteksi; backup harian ada dan pernah diuji restore.
 
@@ -83,7 +83,26 @@ Tujuan: server berjalan tanpa diawasi, dan Anda **tahu** saat ada masalah.
 
 Tujuan: membuktikan dengan data apakah sinyal layak dipakai dengan uang sungguhan.
 
-- [ ] **Backtest**: jalankan mesin analisis pada candle historis (1h/4h, 90 hari), hasilkan win rate, rata-rata R, drawdown
+Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil bersihnya membaik. Sumber data tetap gratis (GeckoTerminal, DEX Screener, GoPlus, Jupiter).
+
+**2A. Pembanding**
+- [ ] **Backtest**: jalankan mesin analisis pada candle historis (1h/4h, 90 hari), hasilkan win rate, rata-rata R bersih, profit factor, drawdown. Jika SL dan TP kena di candle yang sama, hitung SL. Periode pengembangan dan pengujian dipisah
+
+**2B. Penyaring entry** (dampak terbesar menurut data awal)
+- [ ] Gerbang tren 4 jam: sinyal beli hanya saat tren besar mendukung (bullish win 50%, bearish win 13% dari 20 sinyal pertama)
+- [ ] Tolak entry saat harga sudah terlalu jauh naik (`EXTENDED_MOVE`), evaluasi poin RSI 55-65
+- [ ] Jarak SL minimum (semua 5 sinyal dengan SL di bawah 4% kalah), uji TP1 di 1R
+- [ ] Setup entry breakout/pullback dengan hasil `NO_TRADE` jika setup tidak terpenuhi
+
+**2C. Kondisi pasar**
+- [ ] Deteksi regime (bullish, bearish, sideways, volatil) dari data yang sudah direkam; kurangi entry saat bearish
+
+**2D. Risiko & kelayakan keluar**
+- [ ] Status `PASS / REJECTED / REVIEW / INSUFFICIENT_DATA`; data kosong tidak lagi bernilai 50
+- [ ] Cek kemampuan keluar posisi (Jupiter untuk Solana, rumus AMM untuk EVM)
+
+**2E. Kualitas volume & bobot**
+- [ ] Tekanan beli per periode, pembeli unik, rasio volume terhadap likuiditas
 - [ ] Halaman laporan performa mingguan (sinyal, R per minggu, per token, per rekomendasi)
 - [ ] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian
 - [ ] Mode "paper auto-follow": ikuti semua sinyal otomatis dengan aturan risiko di atas, ukur kurva ekuitasnya
@@ -95,8 +114,9 @@ Tujuan: membuktikan dengan data apakah sinyal layak dipakai dengan uang sungguha
 | Metrik | Ambang minimum |
 |---|---|
 | Sinyal selesai (live, bukan backtest) | ≥ 30 |
-| Rata-rata hasil per sinyal | > +0,2R |
-| Total R live | Positif |
+| Rata-rata hasil bersih per sinyal | > +0,2R |
+| Total R bersih live | Positif |
+| Profit factor bersih | > 1,3 |
 | Backtest 90 hari | Rata-rata > +0,2R, konsisten dengan hasil live |
 | Drawdown maksimum paper auto-follow | < 15% ekuitas |
 
@@ -111,7 +131,7 @@ Tujuan: server siap memegang API key exchange.
 - [x] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`) — **29 Okt 2026: `https://dexsim.tune-in.trade`, port 8080 hanya localhost, firewall hanya SSH, cookie `secure`**
 - [ ] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia
 - [ ] **2FA (TOTP)** untuk login, wajib untuk admin
-- [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa)
+- [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa), serta keputusan sistem (kenapa sinyal ditolak, kenapa token diganti)
 - [ ] Batasi sesi: logout otomatis, satu perangkat admin
 - [ ] Review keamanan kode (endpoint admin, validasi, rahasia di log)
 
@@ -151,6 +171,8 @@ Tujuan: eksekusi sungguhan dengan modal kecil dan pengaman berlapis.
 - [ ] Wallet Solana khusus trading (terpisah dari wallet utama) + **Jupiter** Swap API & Trigger API (OTOCO, trailing stop)
 - [ ] Otomasi penuh opsional dengan *circuit breaker* (berhenti sendiri jika rugi harian/drawdown melewati batas)
 - [ ] Wallet EVM (Base/ETH/BSC) — paling akhir, karena stop loss bergantung pada server
+- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas
+- [ ] **Token trending di X** lewat X Search xAI (±$40–60/bulan): hanya jika sentimen terbukti membantu di Fase 2
 
 ---
 
@@ -199,6 +221,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 30 Okt 2026 | Backup ke luar VPS memakai Cloudflare R2, bukan Google Drive | Gratis 10 GB, key S3 dibatasi satu bucket, tanpa login OAuth yang bisa kedaluwarsa |
 | 30 Okt 2026 | Monitoring: UptimeRobot (cek dari luar) + Healthchecks.io (heartbeat dari dalam & backup) | Gratis, keduanya kirim ke Telegram; heartbeat menangkap scheduler/Horizon mati yang tidak terlihat dari luar |
 | 30 Okt 2026 | Email transaksional memakai Resend (SMTP), bukan Brevo | Gratis 3.000/bulan tanpa branding; domain diverifikasi lewat DNS Cloudflare |
+| 31 Okt 2026 | Strategi dari blueprint masuk Fase 2-6 sesuai data; token trending X pindah ke Fase 6; target utama expectancy bersih, bukan win rate | 20 sinyal pertama: win 30%, -0,34R. Skor belum memprediksi harga, sentimen belum membedakan, dan semua sumber data tambahan bisa gratis |
 | | | |
 
 ---

@@ -172,7 +172,7 @@ class TelegramNotifier
     {
         $since = now()->subDay();
         $closed = Signal::query()->with('token')->where('closed_at', '>=', $since)->whereNotNull('result_r')->get();
-        $wins = $closed->filter(fn (Signal $s): bool => $s->result_r > 0)->count();
+        $wins = $closed->filter(fn (Signal $s): bool => ($s->net_r ?? $s->result_r) > 0)->count();
 
         $lines = [
             '📊 <b>Ringkasan 24 jam — '.now('Asia/Jakarta')->locale('id')->translatedFormat('d M Y').'</b>',
@@ -183,11 +183,11 @@ class TelegramNotifier
             'Sinyal terbuka: '.Signal::query()->open()->count(),
             $closed->isEmpty()
                 ? 'Sinyal selesai: 0'
-                : sprintf('Sinyal selesai: %d (menang %d) · total %s', $closed->count(), $wins, self::r((float) $closed->sum('result_r'))),
+                : sprintf('Sinyal selesai: %d (menang %d) · total %s', $closed->count(), $wins, self::r((float) $closed->sum(fn (Signal $s): float => (float) ($s->net_r ?? $s->result_r)))),
         ];
 
-        foreach ($closed->sortByDesc('result_r')->take(5) as $signal) {
-            $lines[] = '• '.$this->symbol($signal->token).' '.self::r((float) $signal->result_r);
+        foreach ($closed->sortByDesc(fn (Signal $s): float => (float) ($s->net_r ?? $s->result_r))->take(5) as $signal) {
+            $lines[] = '• '.$this->symbol($signal->token).' '.self::r((float) ($signal->net_r ?? $signal->result_r));
         }
 
         $top = Analysis::query()
@@ -300,7 +300,7 @@ class TelegramNotifier
     private function progressMessage(Signal $signal, SignalStatus $previousStatus, int $previousTpHit): ?string
     {
         $symbol = '<b>'.$this->symbol($signal->token).'</b>';
-        $result = 'Hasil '.self::r((float) $signal->result_r);
+        $result = 'Hasil '.self::r((float) ($signal->net_r ?? $signal->result_r)).' (setelah biaya)';
 
         if ($signal->status === SignalStatus::Active && $previousStatus === SignalStatus::Pending) {
             return "▶️ {$symbol} masuk zona entry di ".self::price($signal->entry_price)

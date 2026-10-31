@@ -277,6 +277,8 @@ return [
     ],
 
     'analysis' => [
+        // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
+        'strategy_version' => 'v1',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [

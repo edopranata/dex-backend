@@ -150,7 +150,7 @@ class TechnicalAnalyzer
     /**
      * @param  Collection<int, Candle>  $candles
      */
-    private function higherTimeframeTrend(Collection $candles): ?string
+    public function higherTimeframeTrend(Collection $candles): ?string
     {
         if ($candles->count() < 50) {
             return null;

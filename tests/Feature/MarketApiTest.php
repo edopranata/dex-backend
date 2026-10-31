@@ -105,14 +105,18 @@ test('users cannot cancel orders of other users', function () {
 });
 
 test('signal stats summarize closed signals', function () {
-    Signal::factory()->active()->create(['status' => 'take_profit', 'result_r' => 2.0, 'max_tp_hit' => 3, 'closed_at' => now()]);
-    Signal::factory()->active()->create(['status' => 'stop_loss', 'result_r' => -1.0, 'closed_at' => now()]);
+    Signal::factory()->active()->create(['status' => 'take_profit', 'result_r' => 2.2, 'net_r' => 2.0, 'cost_r' => 0.2, 'max_tp_hit' => 3, 'closed_at' => now(), 'strategy_version' => 'v1-abc']);
+    Signal::factory()->active()->create(['status' => 'stop_loss', 'result_r' => -0.8, 'net_r' => -1.0, 'cost_r' => 0.2, 'closed_at' => now(), 'strategy_version' => 'v0']);
 
     $this->actingAs(User::factory()->create())
         ->getJson('/api/signals/stats')
         ->assertOk()
         ->assertJsonPath('win_rate', 50)
-        ->assertJsonPath('total_r', 1);
+        ->assertJsonPath('total_r', 1)
+        ->assertJsonPath('gross_total_r', 1.4)
+        ->assertJsonPath('avg_cost_r', 0.2)
+        ->assertJsonPath('profit_factor', 2)
+        ->assertJsonCount(2, 'versions');
 });
 
 test('admins create users from the command line', function () {

@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
-    'token_id', 'timeframe', 'recommendation', 'final_score', 'technical_score', 'onchain_score',
+    'token_id', 'timeframe', 'strategy_version', 'market_context', 'recommendation', 'final_score', 'technical_score', 'onchain_score',
     'whale_score', 'sentiment_score', 'fundamental_score', 'price', 'entry_low', 'entry_high',
     'stop_loss', 'take_profit_1', 'take_profit_2', 'take_profit_3', 'indicators', 'reasons',
     'summary', 'summary_provider',
@@ -41,6 +41,7 @@ class Analysis extends Model
     {
         return [
             'recommendation' => Recommendation::class,
+            'market_context' => 'array',
             'final_score' => 'integer',
             'technical_score' => 'integer',
             'onchain_score' => 'integer',
