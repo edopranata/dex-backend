@@ -46,7 +46,7 @@ test('the auto-follow account cannot log in', function () {
 
 test('waiting signal buys are cancelled when the signal closes before entry', function () {
     $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7, 'take_profit_1' => 2.1, 'take_profit_2' => 2.3, 'take_profit_3' => 2.6]);
-    $buy = Order::where('signal_id', $signal->id)->where('side', 'buy')->sole();
+    $buy = User::autoFollower()->orders()->where('signal_id', $signal->id)->where('side', 'buy')->sole();
 
     expect($buy->status)->toBe(OrderStatus::Pending);
 
@@ -61,7 +61,7 @@ test('a retried auto-follow job does not buy the same signal twice', function ()
 
     (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
 
-    expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(1);
+    expect(User::autoFollower()->orders()->where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(1);
 });
 
 test('the position limit stops new buys, counting limit buys still waiting', function () {
@@ -113,8 +113,51 @@ test('the daily loss limit stops new buys until the next local day, and only rea
         ->and($risk->dailyLossReached($bot))->toBeTrue();
 
     $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
-    expect(Order::where('signal_id', $signal->id)->exists())->toBeFalse();
+    expect($bot->orders()->where('signal_id', $signal->id)->exists())->toBeFalse();
 
     $this->travelTo(now('Asia/Jakarta')->addDay()->setTime(0, 5));
     expect($risk->dailyLossReached($bot))->toBeFalse();
+});
+
+test('each account only buys the recommendations it follows, within its own limits', function () {
+    app(SettingsStore::class)->set(['market.autofollow.max_open_positions' => 1]);
+    $make = fn (string $recommendation) => Signal::factory()->for(Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]))
+        ->create(['recommendation' => $recommendation, 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    $bought = fn (string $key) => User::autoFollower($key)->orders()->where('side', 'buy')->pluck('signal_id')->all();
+
+    $buy = $make('BUY');
+
+    expect($bought('all'))->toBe([$buy->id])
+        ->and($bought('buy'))->toBe([$buy->id])
+        ->and($bought('strong_buy'))->toBe([]);
+
+    // The combined account is full now, but the Strong Buy account still has room.
+    $strong = $make('STRONG_BUY');
+
+    expect($bought('all'))->toBe([$buy->id])
+        ->and($bought('strong_buy'))->toBe([$strong->id])
+        ->and($bought('buy'))->toBe([$buy->id]);
+});
+
+test('every auto-follow account is a system account that cannot log in', function () {
+    foreach (array_keys(User::AUTO_FOLLOW_ACCOUNTS) as $key) {
+        $account = User::autoFollower($key);
+        $account->forceFill(['password' => 'password'])->save();
+
+        expect($account->is_system)->toBeTrue();
+
+        $this->withHeader('Origin', 'http://localhost:5173')
+            ->postJson('/api/auth/login', ['email' => $account->email, 'password' => 'password'])
+            ->assertJsonValidationErrors('email');
+    }
+
+    expect(User::autoFollower('all')->email)->toBe('auto-follow@system.invalid');
+});
+
+test('a retried job does not buy twice in any account', function () {
+    $signal = Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+
+    (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
+
+    expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(2);
 });

@@ -1,6 +1,9 @@
 <?php
 
+use App\Enums\OrderSide;
+use App\Enums\OrderStatus;
 use App\Models\EquitySnapshot;
+use App\Models\Order;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
@@ -84,17 +87,18 @@ test('snapshots build the equity curve and the drawdown from the peak', function
     $this->artisan('market:equity-snapshot')->assertSuccessful();
     $bot = User::autoFollower();
 
-    expect(EquitySnapshot::query()->where('user_id', $bot->id)->sole()->equity_usd)->toEqual(10000.0);
+    expect(EquitySnapshot::query()->where('user_id', $bot->id)->sole()->equity_usd)->toEqual(10000.0)
+        ->and(EquitySnapshot::query()->count())->toBe(count(User::AUTO_FOLLOW_ACCOUNTS));
 
     foreach ([11000, 8800, 9500] as $i => $equity) {
         EquitySnapshot::query()->create(['user_id' => $bot->id, 'equity_usd' => $equity, 'balance_usd' => $equity, 'holdings_usd' => 0, 'open_positions' => 0, 'sampled_at' => now()->addHours($i + 1)]);
     }
 
     $this->actingAs($this->user)->getJson('/api/reports/performance')
-        ->assertJsonCount(4, 'auto_follow.curve')
+        ->assertJsonCount(4, 'accounts.0.curve')
         // From the peak of 11,000 down to 8,800.
-        ->assertJsonPath('auto_follow.max_drawdown_pct', 20)
-        ->assertJsonPath('auto_follow.curve.3.equity', 9500);
+        ->assertJsonPath('accounts.0.max_drawdown_pct', 20)
+        ->assertJsonPath('accounts.0.curve.3.equity', 9500);
 });
 
 test('a long history is thinned for the chart but keeps the latest point', function () {
@@ -103,7 +107,7 @@ test('a long history is thinned for the chart but keeps the latest point', funct
         EquitySnapshot::query()->create(['user_id' => $bot->id, 'equity_usd' => 10000 + $i, 'balance_usd' => 0, 'holdings_usd' => 0, 'open_positions' => 0, 'sampled_at' => now()->subHours(701 - $i)]);
     }
 
-    $curve = $this->actingAs($this->user)->getJson('/api/reports/performance')->json('auto_follow.curve');
+    $curve = $this->actingAs($this->user)->getJson('/api/reports/performance')->json('accounts.0.curve');
 
     expect(count($curve))->toBeLessThanOrEqual(301)
         ->and(end($curve)['equity'])->toEqual(10700);
@@ -121,4 +125,31 @@ test('the current strategy version can be chosen before it has a signal', functi
         ->assertJsonPath('versions.0', StrategyVersion::current())
         ->assertJsonPath('version', StrategyVersion::current())
         ->assertJsonPath('summary.trades', 0);
+});
+
+test('the accounts are compared by what they bought and earned on finished signals', function () {
+    $token = $this->token;
+    $trade = function (string $key, Signal $signal, float $pnl) use ($token): void {
+        $account = User::autoFollower($key);
+        Order::factory()->for($account)->for($token)->create(['signal_id' => $signal->id, 'side' => OrderSide::Buy, 'status' => OrderStatus::Filled, 'filled_at' => now()]);
+        Order::factory()->for($account)->for($token)->create(['signal_id' => $signal->id, 'side' => OrderSide::Sell, 'status' => OrderStatus::Filled, 'realized_pnl' => $pnl, 'filled_at' => now()]);
+    };
+    $won = reportSignal($token, 1.5, now()->subDay()->toDateTimeString(), ['recommendation' => 'STRONG_BUY']);
+    $lost = reportSignal($token, -1.0, now()->subDay()->toDateTimeString());
+    $open = Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['status' => 'active']));
+    $trade('strong_buy', $won, 80);
+    $trade('buy', $lost, -50);
+    $trade('buy', $open, 5);
+
+    $accounts = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('accounts'))->keyBy('key');
+
+    expect($accounts->keys()->all())->toBe(['all', 'strong_buy', 'buy'])
+        ->and($accounts['strong_buy']['closed_signals'])->toBe(1)
+        ->and($accounts['strong_buy']['win_rate'])->toEqual(100)
+        ->and($accounts['strong_buy']['total_r'])->toEqual(1.5)
+        ->and($accounts['buy']['closed_signals'])->toBe(1)
+        ->and($accounts['buy']['win_rate'])->toEqual(0)
+        ->and($accounts['all']['closed_signals'])->toBe(0)
+        ->and($accounts['all']['win_rate'])->toBeNull()
+        ->and($accounts['strong_buy']['recommendations'])->toBe(['STRONG_BUY']);
 });

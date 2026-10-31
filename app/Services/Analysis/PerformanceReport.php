@@ -2,6 +2,8 @@
 
 namespace App\Services\Analysis;
 
+use App\Enums\OrderSide;
+use App\Enums\OrderStatus;
 use App\Models\EquitySnapshot;
 use App\Models\Signal;
 use App\Models\User;
@@ -41,7 +43,8 @@ class PerformanceReport
             ->get();
 
         $summary = $this->summarize($signals);
-        $autoFollow = $this->autoFollow();
+        $accounts = collect(User::AUTO_FOLLOW_ACCOUNTS)->map(fn (array $definition, string $key): array => $this->autoFollow($key, $definition))->values();
+        $autoFollow = $accounts->firstWhere('key', 'all');
 
         return [
             'version' => $version,
@@ -58,7 +61,7 @@ class PerformanceReport
                 ->map(fn (Collection $group): array => ['symbol' => $group->first()->token->symbol, 'slug' => $group->first()->token->slug, ...$this->summarize($group)])
                 ->sortByDesc('total_r')
                 ->values(),
-            'auto_follow' => $autoFollow,
+            'accounts' => $accounts,
         ];
     }
 
@@ -126,11 +129,12 @@ class PerformanceReport
     }
 
     /**
+     * @param  array{label: string, recommendations: list<string>}  $definition
      * @return array<string, mixed>
      */
-    private function autoFollow(): array
+    private function autoFollow(string $key, array $definition): array
     {
-        $account = User::autoFollower();
+        $account = User::autoFollower($key);
         $summary = $this->portfolio->for($account);
         $snapshots = EquitySnapshot::query()->where('user_id', $account->id)->orderBy('sampled_at')->get(['equity_usd', 'sampled_at']);
 
@@ -149,7 +153,12 @@ class PerformanceReport
             ->values();
 
         return [
+            'key' => $key,
+            'label' => $definition['label'],
+            'recommendations' => $definition['recommendations'],
+            'started_at' => $account->created_at?->toIso8601String(),
             ...$summary,
+            ...$this->closedSignals($account),
             'max_drawdown_pct' => $drawdown === null ? null : round($drawdown, 2),
             'curve_started_at' => $snapshots->first()?->sampled_at?->toIso8601String(),
             'curve' => $curve,
@@ -161,6 +170,30 @@ class PerformanceReport
             'realized_today' => round($this->risk->realizedToday($account), 2),
             'daily_loss_reached' => $this->risk->dailyLossReached($account),
             'has_room' => $this->risk->hasRoom($account),
+        ];
+    }
+
+    /**
+     * Results of the signals this account really bought, and that have finished. A win is what the
+     * account itself earned on the signal, because its own size and costs apply.
+     *
+     * @return array{closed_signals: int, wins: int, win_rate: float|null, avg_r: float|null, total_r: float}
+     */
+    private function closedSignals(User $account): array
+    {
+        $filled = $account->orders()->where('status', OrderStatus::Filled)->whereNotNull('signal_id')->get(['signal_id', 'side', 'realized_pnl']);
+        $bought = $filled->where('side', OrderSide::Buy)->pluck('signal_id')->unique();
+
+        $signals = Signal::query()->whereIn('id', $bought)->whereNotNull('closed_at')->whereNotNull('net_r')->get(['id', 'net_r']);
+        $wins = $signals->filter(fn (Signal $signal): bool => (float) $filled->where('signal_id', $signal->id)->sum('realized_pnl') > 0)->count();
+        $count = $signals->count();
+
+        return [
+            'closed_signals' => $count,
+            'wins' => $wins,
+            'win_rate' => $count ? round($wins / $count * 100, 1) : null,
+            'avg_r' => $count ? round((float) $signals->avg('net_r'), 2) : null,
+            'total_r' => round((float) $signals->sum('net_r'), 2),
         ];
     }
 }

@@ -17,6 +17,18 @@ use Illuminate\Support\Str;
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable
 {
+    /**
+     * Paper accounts that buy signals automatically, one per way of choosing them, so their results
+     * can be compared. They cannot log in.
+     *
+     * @var array<string, array{email: string, name: string, label: string, recommendations: list<string>}>
+     */
+    public const AUTO_FOLLOW_ACCOUNTS = [
+        'all' => ['email' => 'auto-follow@system.invalid', 'name' => 'Auto-follow (sistem)', 'label' => 'Gabungan', 'recommendations' => ['BUY', 'STRONG_BUY']],
+        'strong_buy' => ['email' => 'auto-follow-strong-buy@system.invalid', 'name' => 'Auto-follow Strong Buy (sistem)', 'label' => 'Hanya Strong Buy', 'recommendations' => ['STRONG_BUY']],
+        'buy' => ['email' => 'auto-follow-buy@system.invalid', 'name' => 'Auto-follow Buy (sistem)', 'label' => 'Hanya Buy', 'recommendations' => ['BUY']],
+    ];
+
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
@@ -46,14 +58,14 @@ class User extends Authenticatable
     /**
      * The paper account that follows every signal (created on first use; it cannot log in).
      */
-    public static function autoFollower(): self
+    public static function autoFollower(string $key = 'all'): self
     {
-        $email = 'auto-follow@system.invalid';
+        $account = self::AUTO_FOLLOW_ACCOUNTS[$key];
 
-        return static::query()->where('email', $email)->first()
+        return static::query()->where('email', $account['email'])->first()
             ?? tap(new static, fn (self $user) => $user->forceFill([
-                'name' => 'Auto-follow (sistem)',
-                'email' => $email,
+                'name' => $account['name'],
+                'email' => $account['email'],
                 'password' => Str::random(64),
                 'balance_usd' => config('market.simulator.starting_balance'),
                 'is_system' => true,

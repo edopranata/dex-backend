@@ -229,6 +229,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 31 Okt 2026 | Setup entry (breakout, pullback, volume, `EXTENDED_MOVE`) tidak masuk strategi; tetap `v2` | Tidak ada yang positif di periode pengujian, dan selisihnya masih dalam batas noise. Menambah aturan sekarang berisiko overfitting |
 | 31 Okt 2026 | Pemantauan container di Admin → Container: script di host mengirim data ke MySQL, interval 10–60 detik (default 15), riwayat 7 hari, tanpa ikut backup | Tanpa MongoDB karena butuh container dan backup tambahan untuk satu tabel; tanpa `docker.sock` di aplikasi karena setara akses root |
 | 31 Okt 2026 | VPS diperpanjang 25 Nov 2026; IP dedicated diputuskan saat Fase 4/5 bersama pindah ke Biznet Gio | Exchange butuh IP whitelist yang andal, dan perpindahan harus minim downtime |
+| 31 Okt 2026 | Tiga akun Auto-follow: gabungan, hanya Strong Buy, dan hanya Buy, dengan modal dan batas risiko sama | Membandingkan rekomendasi sebagai akun: data awal Strong Buy 60% (5 sinyal), Buy 19% (16 sinyal), sampel masih kecil |
 | | | |
 
 ---
