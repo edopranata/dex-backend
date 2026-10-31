@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Runs on the host (systemd: dex-monitor.service) and sends container status and resource use to the app.
-# The app has no access to Docker; it answers with the interval chosen in Admin > Pengaturan.
+# Shown in Admin > Container. The app has no access to Docker; it answers with the interval chosen in Admin > Pengaturan.
 # Only the fields below leave Docker: never the whole inspect output, which holds environment secrets.
 set -uo pipefail
 

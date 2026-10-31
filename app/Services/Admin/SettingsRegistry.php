@@ -74,9 +74,17 @@ class SettingsRegistry
             [
                 'key' => 'containers',
                 'label' => 'Pemantauan container',
-                'description' => 'Status, CPU, dan memori setiap container tampil di Admin → Sistem. Riwayat disimpan 7 hari dan tidak ikut backup.',
+                'description' => 'Status, CPU, dan memori setiap container tampil di Admin → Container. Riwayat disimpan 7 hari dan tidak ikut backup.',
                 'fields' => [
                     ['key' => 'market.monitoring.container_interval_seconds', 'label' => 'Interval pengambilan data', 'type' => 'select', 'options' => self::containerIntervals(), 'description' => 'Interval lebih pendek menambah data: 10 detik sekitar 78 ribu baris per hari, 15 detik 52 ribu, 60 detik 13 ribu. Di atas 60 detik, container yang mati sebentar lalu restart mudah terlewat.'],
+                ],
+            ],
+            [
+                'key' => 'feed',
+                'label' => 'Running text & notifikasi',
+                'description' => 'Setiap pengguna bisa mematikan running text dan tiap jenis notifikasi dari ikon lonceng di toolbar.',
+                'fields' => [
+                    ['key' => 'market.feed.whale_min_usd', 'label' => 'Notifikasi whale minimal (USD)', 'type' => 'int', 'min' => 10000, 'max' => 10000000, 'description' => 'Per transaksi. Pada 31 Okt 2026, $100.000 berarti sekitar 7 transaksi per jam; yang datang bersamaan digabung per token.'],
                 ],
             ],
             [

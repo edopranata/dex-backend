@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ContainerMetricController;
 use App\Http\Controllers\Api\DiscoveryController;
+use App\Http\Controllers\Api\FeedController;
 use App\Http\Controllers\Api\MarketController;
 use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\OrderController;
@@ -67,6 +68,8 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::post('profile/telegram', [ProfileTelegramController::class, 'link'])->middleware('throttle:10,1')->name('profile.telegram.link');
     Route::delete('profile/telegram', [ProfileTelegramController::class, 'destroy'])->name('profile.telegram.destroy');
     Route::post('profile/telegram/test', [ProfileTelegramController::class, 'test'])->middleware('throttle:10,1')->name('profile.telegram.test');
+
+    Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
 
     Route::get('market/overview', [MarketController::class, 'overview'])->name('market.overview');
 

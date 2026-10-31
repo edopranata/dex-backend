@@ -277,6 +277,11 @@ return [
         'container_retention_days' => 7,
     ],
 
+    // Running text dan notifikasi melayang: whale di bawah nilai ini tidak dinotifikasi.
+    'feed' => [
+        'whale_min_usd' => (int) env('FEED_WHALE_MIN_USD', 100000),
+    ],
+
     'telegram' => [
         'enabled' => (bool) env('TELEGRAM_ENABLED', false),
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
