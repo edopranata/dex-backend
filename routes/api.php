@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\SignalController;
 use App\Http\Controllers\Api\TelegramWebhookController;
 use App\Http\Controllers\Api\TokenController;
 use App\Http\Controllers\Api\TwoFactorController;
+use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\WhaleController;
 use Illuminate\Support\Facades\Route;
 
@@ -91,6 +92,8 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::post('discovery/{candidate}/track', [DiscoveryController::class, 'track'])->middleware('throttle:10,1')->name('discovery.track');
 
     Route::get('whales', [WhaleController::class, 'index'])->name('whales.index');
+    Route::get('wallets', [WalletController::class, 'index'])->name('wallets.index');
+    Route::get('wallets/{chain}/{wallet}', [WalletController::class, 'show'])->where('wallet', '[A-Za-z0-9]+')->name('wallets.show');
     Route::get('news', [NewsController::class, 'index'])->name('news.index');
 
     Route::get('signals', [SignalController::class, 'index'])->name('signals.index');

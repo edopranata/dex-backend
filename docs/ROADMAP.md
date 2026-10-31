@@ -173,7 +173,7 @@ Tujuan: eksekusi sungguhan dengan modal kecil dan pengaman berlapis.
 - [ ] Wallet Solana khusus trading (terpisah dari wallet utama) + **Jupiter** Swap API & Trigger API (OTOCO, trailing stop)
 - [ ] Otomasi penuh opsional dengan *circuit breaker* (berhenti sendiri jika rugi harian/drawdown melewati batas)
 - [ ] Wallet EVM (Base/ETH/BSC) — paling akhir, karena stop loss bergantung pada server
-- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas
+- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas — **31 Okt 2026: menu Wallet menampilkan alamat dari transaksi whale (tanpa skor atau label pemilik); skor baru dibuat jika data ini terbukti membantu**
 - [ ] **Token trending di X** lewat X Search xAI (±$40–60/bulan): hanya jika sentimen terbukti membantu di Fase 2
 
 ---
