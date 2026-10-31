@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\PortfolioController;
 use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\ProfileTelegramController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SignalController;
 use App\Http\Controllers\Api\TelegramWebhookController;
 use App\Http\Controllers\Api\TokenController;
@@ -70,6 +71,7 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::post('profile/telegram/test', [ProfileTelegramController::class, 'test'])->middleware('throttle:10,1')->name('profile.telegram.test');
 
     Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
+    Route::get('reports/performance', [ReportController::class, 'performance'])->name('reports.performance');
 
     Route::get('market/overview', [MarketController::class, 'overview'])->name('market.overview');
 

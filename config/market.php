@@ -246,6 +246,8 @@ return [
         'amount_usd' => (float) env('AUTO_FOLLOW_AMOUNT_USD', 100),
         // Maksimal posisi terbuka + order beli menunggu (0 = tanpa batas).
         'max_open_positions' => (int) env('AUTO_FOLLOW_MAX_OPEN', 3),
+        // Rugi terealisasi per hari (WIB), dalam % ekuitas, sebelum pembelian baru dijeda (0 = tanpa batas).
+        'max_daily_loss_pct' => (float) env('AUTO_FOLLOW_MAX_DAILY_LOSS_PCT', 3.0),
         // Rugi saat kena stop, dalam % ekuitas.
         'risk_pct' => (float) env('AUTO_FOLLOW_RISK_PCT', 1.0),
         'max_position_pct' => 25.0,

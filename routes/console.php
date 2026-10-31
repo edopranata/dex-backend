@@ -44,5 +44,8 @@ Schedule::command('horizon:snapshot')->everyFiveMinutes();
 // Healthchecks.io: a missing ping means the server or scheduler is down; /fail means a service is unhealthy.
 Schedule::command('app:heartbeat')->everyFiveMinutes();
 
+// Equity of the auto-follow account: the curve and drawdown in Laporan.
+Schedule::command('market:equity-snapshot')->everyFifteenMinutes();
+
 Schedule::command('model:prune')->dailyAt('03:00');
 Schedule::command('queue:prune-failed --hours=168')->dailyAt('03:30');

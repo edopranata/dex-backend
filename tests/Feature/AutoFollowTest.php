@@ -97,3 +97,24 @@ test('the position is sized from the risk, and capped by equity and pool liquidi
         // 0.25% of a $100,000 pool.
         ->and($risk->amountFor($bot, $signal($thin, 1.8)))->toEqual(250.0);
 });
+
+test('the daily loss limit stops new buys until the next local day, and only realized losses count', function () {
+    app(SettingsStore::class)->set(['market.autofollow.max_daily_loss_pct' => 3, 'market.simulator.starting_balance' => 10_000]);
+    $bot = User::autoFollower();
+    $risk = app(AutoFollowRisk::class);
+    $this->travelTo(now('Asia/Jakarta')->setTime(10, 0));
+    $loss = fn (float $usd) => Order::factory()->for($bot)->for($this->token)->create(['side' => 'sell', 'status' => OrderStatus::Filled, 'realized_pnl' => $usd, 'filled_at' => now()]);
+
+    $loss(-200);
+    expect($risk->dailyLossReached($bot))->toBeFalse();
+
+    $loss(-150);
+    expect($risk->realizedToday($bot))->toEqual(-350.0)
+        ->and($risk->dailyLossReached($bot))->toBeTrue();
+
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    expect(Order::where('signal_id', $signal->id)->exists())->toBeFalse();
+
+    $this->travelTo(now('Asia/Jakarta')->addDay()->setTime(0, 5));
+    expect($risk->dailyLossReached($bot))->toBeFalse();
+});

@@ -10,7 +10,7 @@ Dokumen kerja untuk 2 bulan ke depan (**30 Oktober – 24 Desember 2026**). Serv
 
 ---
 
-## 1. Status saat ini (29 Oktober 2026)
+## 1. Status saat ini (31 Oktober 2026)
 
 | Area | Status |
 |---|---|
@@ -19,6 +19,8 @@ Dokumen kerja untuk 2 bulan ke depan (**30 Oktober – 24 Desember 2026**). Serv
 | Deploy | Push ke `main` (dex-backend / dex-frontend) → GitHub Actions (tes/build) → deploy otomatis |
 | Keandalan | Auto-start saat boot (`dex.service`), watchdog `/up` tiap 2 menit, restart container otomatis |
 | Backup | Cron harian 02:30 WIB (14 hari), download & backup manual dari Admin (jeda 60 menit) |
+| Pemantauan | UptimeRobot, Healthchecks.io, dan status container di Admin → Container |
+| Backup ke luar VPS | Salinan harian ke Cloudflare R2, uji restore lolos |
 | Uang sungguhan | **Belum ada.** Semua transaksi masih virtual. |
 
 ---
@@ -103,9 +105,9 @@ Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil 
 
 **2E. Kualitas volume & bobot**
 - [ ] Tekanan beli per periode, pembeli unik, rasio volume terhadap likuiditas
-- [ ] Halaman laporan performa mingguan (sinyal, R per minggu, per token, per rekomendasi)
-- [ ] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian — **31 Okt 2026: backtest batas posisi: maks. 3 drawdown 15R, maks. 5 27R, tanpa batas 41R. Akun Auto-follow memakai maks. 3 posisi dan risiko 1% per trade; batas rugi harian belum ada**
-- [ ] Mode "paper auto-follow": ikuti semua sinyal otomatis dengan aturan risiko di atas, ukur kurva ekuitasnya
+- [x] Halaman laporan performa mingguan (sinyal, R per minggu, per token, per rekomendasi) — **31 Okt 2026: menu Laporan, dengan kriteria Fase 2 yang dihitung otomatis per versi strategi**
+- [x] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian — **31 Okt 2026: backtest batas posisi: maks. 3 drawdown 15R, maks. 5 27R, tanpa batas 41R. Akun Auto-follow memakai maks. 3 posisi, risiko 1% per trade, dan batas rugi harian 3% ekuitas (rugi terealisasi per hari WIB; batas rugi harian belum diuji di backtest)**
+- [x] Mode "paper auto-follow": ikuti semua sinyal otomatis dengan aturan risiko di atas, ukur kurva ekuitasnya — **31 Okt 2026: ekuitas dicatat tiap 15 menit; riwayat sebelum tanggal ini tidak bisa dibuat ulang**
 - [ ] Tuning bobot/ambang di Admin berdasarkan hasil backtest (catat setiap perubahan di bagian 6)
 - [ ] Evaluasi pengaruh AI (sentimen Gemini) vs tanpa AI
 
@@ -126,11 +128,11 @@ Jika belum terpenuhi pada 30 Nov: lanjutkan Fase 2 (perbaiki strategi), Fase 3 &
 
 Tujuan: server siap memegang API key exchange.
 
-- [ ] **Perpanjang VPS** (sebelum 29 Nov). Pertimbangkan paket 12 bulan (hemat 15%) jika Fase 1 stabil
-- [ ] **IP dedicated** (opsi provider) — IP NAT bersama melemahkan IP whitelist API exchange
+- [ ] **Perpanjang VPS** (sebelum 29 Nov) — **dijadwalkan pemilik pada 25 Nov 2026**. Paket pendek saja, karena akan pindah VPS sebelum Fase 4/5
+- [ ] **IP dedicated** — IP NAT bersama melemahkan IP whitelist API exchange. **Diputuskan saat masuk Fase 4/5, bersama pindah VPS ke Biznet Gio dengan downtime minimal**
 - [x] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`) — **29 Okt 2026: `https://dexsim.tune-in.trade`, port 8080 hanya localhost, firewall hanya SSH, cookie `secure`**
-- [ ] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia
-- [ ] **2FA (TOTP)** untuk login, wajib untuk admin
+- [x] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia — **31 Okt 2026: HTTP dialihkan 301 ke HTTPS; port 30040 dan 8080 tidak terjangkau dari luar**
+- [ ] **2FA (TOTP)** untuk login, wajib untuk admin — 2FA sudah tersedia sejak Fase 1, tinggal mewajibkannya untuk admin
 - [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa), serta keputusan sistem (kenapa sinyal ditolak, kenapa token diganti)
 - [ ] Batasi sesi: logout otomatis, satu perangkat admin
 - [ ] Review keamanan kode (endpoint admin, validasi, rahasia di log)
@@ -226,6 +228,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 31 Okt 2026 | Akun Auto-follow: maks. 3 posisi terbuka, risiko 1% ekuitas per trade, order dibatasi 25% ekuitas dan 0,25% likuiditas pool. Pencatatan sinyal tidak dibatasi | Batas posisi menurunkan drawdown backtest dari 41R ke 15R tanpa mengubah cara sinyal diukur |
 | 31 Okt 2026 | Setup entry (breakout, pullback, volume, `EXTENDED_MOVE`) tidak masuk strategi; tetap `v2` | Tidak ada yang positif di periode pengujian, dan selisihnya masih dalam batas noise. Menambah aturan sekarang berisiko overfitting |
 | 31 Okt 2026 | Pemantauan container di Admin → Container: script di host mengirim data ke MySQL, interval 10–60 detik (default 15), riwayat 7 hari, tanpa ikut backup | Tanpa MongoDB karena butuh container dan backup tambahan untuk satu tabel; tanpa `docker.sock` di aplikasi karena setara akses root |
+| 31 Okt 2026 | VPS diperpanjang 25 Nov 2026; IP dedicated diputuskan saat Fase 4/5 bersama pindah ke Biznet Gio | Exchange butuh IP whitelist yang andal, dan perpindahan harus minim downtime |
 | | | |
 
 ---

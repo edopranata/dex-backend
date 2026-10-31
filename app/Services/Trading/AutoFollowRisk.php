@@ -9,8 +9,9 @@ use App\Models\User;
 
 /**
  * Risk rules of the auto-follow paper account: a limit on open positions (backtest: 3 positions keep
- * the worst drawdown near 15R, against 41R without a limit) and a position size that loses a fixed
- * share of equity at the stop, capped so the order stays small against equity and pool liquidity.
+ * the worst drawdown near 15R, against 41R without a limit), a limit on the loss per day, and a position
+ * size that loses a fixed share of equity at the stop, capped so the order stays small against equity
+ * and pool liquidity.
  */
 class AutoFollowRisk
 {
@@ -30,6 +31,30 @@ class AutoFollowRisk
         $waiting = $account->orders()->where('side', OrderSide::Buy)->where('status', OrderStatus::Pending)->count();
 
         return $account->positions()->where('quantity', '>', 0)->count() + $waiting < $limit;
+    }
+
+    /**
+     * Profit or loss realized today in local time. Open positions do not count: their stops still decide.
+     */
+    public function realizedToday(User $account): float
+    {
+        $today = now(config('market.backup.timezone'))->startOfDay()->setTimezone(config('app.timezone'));
+
+        return (float) $account->orders()->where('status', OrderStatus::Filled)->where('filled_at', '>=', $today)->sum('realized_pnl');
+    }
+
+    /**
+     * After this share of equity is lost in one day no new positions open until the next day; 0 means no limit.
+     */
+    public function dailyLossReached(User $account): bool
+    {
+        $limitPct = (float) config('market.autofollow.max_daily_loss_pct');
+
+        if ($limitPct <= 0) {
+            return false;
+        }
+
+        return -$this->realizedToday($account) >= $this->portfolio->for($account)['equity_usd'] * $limitPct / 100;
     }
 
     /**

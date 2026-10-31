@@ -43,6 +43,12 @@ class FollowSignalAutomatically implements ShouldQueue
 
         // Signals can arrive together: one at a time, so the position limit holds.
         Cache::lock('autofollow', 30)->block(20, function () use ($risk, $account, $signal, $trading): void {
+            if ($risk->dailyLossReached($account)) {
+                Log::info("Auto-follow melewati sinyal #{$signal->id}: batas rugi harian tercapai.");
+
+                return;
+            }
+
             if (! $risk->hasRoom($account)) {
                 Log::info("Auto-follow melewati sinyal #{$signal->id}: batas posisi terbuka tercapai.");
 
