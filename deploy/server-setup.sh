@@ -207,10 +207,16 @@ if [ -n "$TUNNEL_TOKEN" ]; then
 fi
 
 step "Auto-start saat boot & watchdog"
+# Token for deploy/monitor.sh: added before the stack starts, so the app containers read it.
+if ! grep -q '^MONITOR_TOKEN=' "$APP_ROOT/backend/.env"; then
+    as_deploy sh -c "echo MONITOR_TOKEN=$(openssl rand -hex 32) >> '$APP_ROOT/backend/.env'"
+fi
 install -m 644 "$APP_ROOT/backend/deploy/systemd/dex.service" /etc/systemd/system/dex.service
+install -m 644 "$APP_ROOT/backend/deploy/systemd/dex-monitor.service" /etc/systemd/system/dex-monitor.service
 systemctl daemon-reload
 systemctl enable dex.service >/dev/null 2>&1
 systemctl start dex.service
+systemctl enable --now dex-monitor.service >/dev/null 2>&1
 echo "*/2 * * * * root $APP_ROOT/backend/deploy/watchdog.sh >> /var/log/dex-watchdog.log 2>&1" > /etc/cron.d/dex-watchdog
 ok "dex.service aktif saat boot; watchdog cek /up tiap 2 menit"
 

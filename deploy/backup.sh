@@ -33,7 +33,8 @@ trap 'notify "Backup database gagal" "backup.sh berhenti di baris $LINENO ($(dat
 mkdir -p "$BACKUP_DIR"
 
 FILE="$BACKUP_DIR/dex-$(date +%F-%H%M%S).sql.gz"
-docker compose exec -T mysql sh -c 'exec mysqldump --single-transaction --no-tablespaces -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" 2>/dev/null' </dev/null | gzip -9 > "$FILE"
+# Container metrics are short-lived history: structure only, so a restore stays complete.
+docker compose exec -T mysql sh -c 'mysqldump --single-transaction --no-tablespaces --ignore-table="$MYSQL_DATABASE.container_metrics" -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" 2>/dev/null && exec mysqldump --no-data --no-tablespaces -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" container_metrics 2>/dev/null' </dev/null | gzip -9 > "$FILE"
 find "$BACKUP_DIR" -name 'dex-*.sql.gz' -mtime +"$KEEP_DAYS" -delete
 
 chown -R "$APP_UID:$APP_UID" "$BACKUP_DIR"

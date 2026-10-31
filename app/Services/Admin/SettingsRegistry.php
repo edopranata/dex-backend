@@ -72,6 +72,14 @@ class SettingsRegistry
                 ],
             ],
             [
+                'key' => 'containers',
+                'label' => 'Pemantauan container',
+                'description' => 'Status, CPU, dan memori setiap container tampil di Admin → Sistem. Riwayat disimpan 7 hari dan tidak ikut backup.',
+                'fields' => [
+                    ['key' => 'market.monitoring.container_interval_seconds', 'label' => 'Interval pengambilan data', 'type' => 'select', 'options' => self::containerIntervals(), 'description' => 'Interval lebih pendek menambah data: 10 detik sekitar 78 ribu baris per hari, 15 detik 52 ribu, 60 detik 13 ribu. Di atas 60 detik, container yang mati sebentar lalu restart mudah terlewat.'],
+                ],
+            ],
+            [
                 'key' => 'data',
                 'label' => 'Sumber data',
                 'description' => 'Batas request dan ambang data pasar.',
@@ -160,6 +168,18 @@ class SettingsRegistry
             'openai' => 'OpenAI',
             ...(config('market.ai.ollama.enabled') ? ['ollama' => 'Ollama (lokal)'] : []),
         ];
+    }
+
+    /**
+     * Every 5 seconds from 10 to 60.
+     *
+     * @return array<string, string>
+     */
+    private static function containerIntervals(): array
+    {
+        return collect(range(10, 60, 5))
+            ->mapWithKeys(fn (int $seconds): array => [(string) $seconds => $seconds === 15 ? '15 detik (disarankan)' : "{$seconds} detik"])
+            ->all();
     }
 
     /**

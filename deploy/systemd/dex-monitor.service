@@ -1,0 +1,18 @@
+# Sends container status and resource use to the app (deploy/monitor.sh).
+# Installed by deploy/server-setup.sh to /etc/systemd/system/dex-monitor.service.
+[Unit]
+Description=DEX Simulator container monitor
+Requires=docker.service
+After=docker.service network-online.target dex.service
+
+[Service]
+User=deploy
+ExecStart=/bin/bash /opt/dex/backend/deploy/monitor.sh
+Restart=always
+RestartSec=15
+# Restarts every hour, so a deploy's new monitor.sh takes effect without root access.
+RuntimeMaxSec=1h
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

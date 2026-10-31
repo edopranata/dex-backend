@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Services\Admin\ContainerMonitor;
 use App\Services\Admin\SystemInfo;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Artisan;
@@ -23,6 +24,11 @@ class SystemController extends Controller
             ]);
 
         return response()->json([...$system->overview(), 'failed_jobs' => $failed]);
+    }
+
+    public function containers(ContainerMonitor $monitor): JsonResponse
+    {
+        return response()->json($monitor->overview());
     }
 
     public function retryFailed(string $uuid): JsonResponse

@@ -115,7 +115,8 @@ class BackupService
         $path = $this->directory().'/'.$name;
 
         $process = Process::fromShellCommandline(
-            'mariadb-dump --single-transaction --quick --no-tablespaces --skip-ssl --routines '
+            // Container metrics are short-lived history: structure only, so a restore stays complete.
+            'mariadb-dump --single-transaction --quick --no-tablespaces --skip-ssl --routines --ignore-table-data="$DB_NAME.container_metrics" '
             .'-h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" "$DB_NAME" | gzip -9 > "$OUT"',
             null,
             [

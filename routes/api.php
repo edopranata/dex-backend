@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\Admin\TaskController;
 use App\Http\Controllers\Api\Admin\TelegramController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ContainerMetricController;
 use App\Http\Controllers\Api\DiscoveryController;
 use App\Http\Controllers\Api\MarketController;
 use App\Http\Controllers\Api\NewsController;
@@ -48,6 +49,8 @@ Route::prefix('auth')->name('auth.')->group(function () {
 });
 
 // Called by Telegram's servers (no session); authenticated by the webhook secret header.
+Route::post('internal/container-metrics', [ContainerMetricController::class, 'store'])->middleware('throttle:60,1')->name('internal.container-metrics');
+
 Route::post('telegram/webhook', TelegramWebhookController::class)->middleware('throttle:120,1')->name('telegram.webhook');
 
 Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
@@ -129,6 +132,7 @@ Route::middleware(['auth:sanctum', 'password.changed', 'can:admin'])->prefix('ad
     Route::post('tasks/run', [TaskController::class, 'run'])->middleware('throttle:20,1')->name('tasks.run');
 
     Route::get('system', [SystemController::class, 'index'])->name('system.index');
+    Route::get('system/containers', [SystemController::class, 'containers'])->name('system.containers');
     Route::post('system/failed-jobs/{uuid}/retry', [SystemController::class, 'retryFailed'])->name('system.failed.retry');
     Route::delete('system/failed-jobs/{uuid}', [SystemController::class, 'forgetFailed'])->name('system.failed.forget');
     Route::post('system/cache/clear', [SystemController::class, 'clearCache'])->name('system.cache.clear');

@@ -271,6 +271,10 @@ return [
         'uptimerobot_key' => env('UPTIMEROBOT_API_KEY'),
         // Scheduler dianggap mati jika tidak ada tugas terjadwal selesai selama ini.
         'scheduler_stale_minutes' => 10,
+        // Pemantauan container dari host (deploy/monitor.sh). String: pilihan dropdown di Admin → Pengaturan.
+        'container_interval_seconds' => (string) env('MONITOR_INTERVAL_SECONDS', '15'),
+        'container_token' => env('MONITOR_TOKEN'),
+        'container_retention_days' => 7,
     ],
 
     'telegram' => [
