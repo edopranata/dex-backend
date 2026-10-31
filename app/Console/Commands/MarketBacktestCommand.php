@@ -38,6 +38,14 @@ class MarketBacktestCommand extends Command
         'stop+maks5' => ['min_stop_pct' => 4.0, 'max_open' => 5],
         'stop+maks10' => ['min_stop_pct' => 4.0, 'max_open' => 10],
         'stop+bearish-off+maks5' => ['min_stop_pct' => 4.0, 'block_market' => 'bearish', 'max_open' => 5],
+        // Fase 2B: entry setups on top of the live 4% minimum stop.
+        'stop+tdk-jauh-2atr' => ['min_stop_pct' => 4.0, 'max_extension_atr' => 2.0],
+        'stop+dekat-ema-1atr' => ['min_stop_pct' => 4.0, 'max_extension_atr' => 1.0],
+        'stop+breakout' => ['min_stop_pct' => 4.0, 'require_breakout' => true],
+        'stop+volume1.5' => ['min_stop_pct' => 4.0, 'min_volume_ratio' => 1.5],
+        'stop+breakout+vol' => ['min_stop_pct' => 4.0, 'require_breakout' => true, 'min_volume_ratio' => 1.5],
+        'stop+pullback0.25' => ['min_stop_pct' => 4.0, 'pullback_atr' => 0.25],
+        'stop+pullback0.5' => ['min_stop_pct' => 4.0, 'pullback_atr' => 0.5],
     ];
 
     public function handle(Backtester $backtester): int
@@ -77,6 +85,9 @@ class MarketBacktestCommand extends Command
 
             $rows[] = [$name, ...$this->cells($development), ...$this->cells($test), $report['scenarios'][$name]['all']['max_drawdown_r']];
         }
+
+        // The candles are no longer needed, and encoding many scenarios next to them runs out of memory.
+        unset($prepared);
 
         $this->table(['Skenario', 'Dev n', 'win%', 'avgR', 'PF', 'Uji n', 'win%', 'avgR', 'PF', 'DD R'], $rows);
 

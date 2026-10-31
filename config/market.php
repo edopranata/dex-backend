@@ -242,7 +242,15 @@ return [
     // supaya win rate & P&L aplikasi terukur apa adanya, termasuk fee dan slippage.
     'autofollow' => [
         'enabled' => (bool) env('AUTO_FOLLOW_ENABLED', true),
+        // Nominal tetap saat risk_pct = 0; juga ukuran acuan biaya pada hasil R bersih sinyal.
         'amount_usd' => (float) env('AUTO_FOLLOW_AMOUNT_USD', 100),
+        // Maksimal posisi terbuka + order beli menunggu (0 = tanpa batas).
+        'max_open_positions' => (int) env('AUTO_FOLLOW_MAX_OPEN', 3),
+        // Rugi saat kena stop, dalam % ekuitas.
+        'risk_pct' => (float) env('AUTO_FOLLOW_RISK_PCT', 1.0),
+        'max_position_pct' => 25.0,
+        // Order dibatasi % likuiditas pool supaya slippage tetap kecil.
+        'max_liquidity_pct' => 0.25,
     ],
 
     /*

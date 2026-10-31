@@ -199,3 +199,20 @@ test('the open position limit skips trades until a slot is free', function () {
 
     expect(array_column($kept, 'token'))->toBe(['A', 'B', 'D', 'E']);
 });
+
+test('entry setups: pullback waits for a lower entry, and extension and breakout rules filter signals', function () {
+    // Stays above the pullback entry, then the data ends: never entered.
+    backtestBuyAtSignalCandle();
+    expect(backtestRun(backtestToken([[1.0, 1.2, 0.99, 1.1]]), ['pullback_atr' => 0.5]))->toBe([]);
+
+    // Dips to the pullback entry of 0.975, then the targets are reached.
+    backtestBuyAtSignalCandle();
+    $trade = backtestRun(backtestToken([[1.0, 1.0, 0.97, 1.0], [1.0, 1.5, 0.99, 1.4]]), ['pullback_atr' => 0.5])[0];
+    expect($trade['entry_price'])->toBe(0.975)->and($trade['result'])->toBe('take_profit');
+
+    // The flat history has no new high, so no breakout; no EMA in the fake analysis counts as extended.
+    backtestBuyAtSignalCandle();
+    expect(backtestRun(backtestToken([[1.0, 1.5, 0.99, 1.4]]), ['require_breakout' => true]))->toBe([])
+        ->and(backtestRun(backtestToken([[1.0, 1.5, 0.99, 1.4]]), ['max_extension_atr' => 2.0]))->toBe([])
+        ->and(backtestRun(backtestToken([[1.0, 1.5, 0.99, 1.4]]), ['min_volume_ratio' => 1.5]))->toBe([]);
+});

@@ -95,10 +95,12 @@ class SettingsRegistry
             [
                 'key' => 'autofollow',
                 'label' => 'Auto-follow (pengukur kinerja)',
-                'description' => 'Akun sistem "Auto-follow" membeli setiap sinyal baru dengan nominal tetap memakai aturan sinyal (limit di zona entry, SL, TP1–TP3). Hasilnya mengukur win rate aplikasi tanpa pilih-pilih.',
+                'description' => 'Akun sistem "Auto-follow" membeli sinyal baru sesuai batas posisi dan risiko di bawah, memakai aturan sinyal (limit di zona entry, SL, TP1–TP3). Hasilnya mengukur win rate aplikasi tanpa pilih-pilih.',
                 'fields' => [
                     ['key' => 'market.autofollow.enabled', 'label' => 'Ikuti semua sinyal otomatis', 'type' => 'bool'],
-                    ['key' => 'market.autofollow.amount_usd', 'label' => 'Nominal per sinyal (USD)', 'type' => 'float', 'min' => 1, 'max' => 100000, 'description' => 'Saldo awal akun mengikuti "Saldo awal" simulator.'],
+                    ['key' => 'market.autofollow.max_open_positions', 'label' => 'Maksimal posisi terbuka', 'type' => 'int', 'min' => 0, 'max' => 100, 'description' => 'Termasuk order beli yang menunggu entry. 0 = tanpa batas. Sinyal tetap dicatat walau tidak dibeli.'],
+                    ['key' => 'market.autofollow.risk_pct', 'label' => 'Risiko per sinyal (% ekuitas)', 'type' => 'float', 'min' => 0, 'max' => 10, 'step' => 0.25, 'description' => 'Ukuran posisi dihitung supaya rugi sebesar ini saat kena stop. Dibatasi 25% ekuitas dan 0,25% likuiditas pool. 0 = pakai nominal tetap.'],
+                    ['key' => 'market.autofollow.amount_usd', 'label' => 'Nominal tetap (USD), saat risiko 0', 'type' => 'float', 'min' => 1, 'max' => 100000, 'description' => 'Saldo awal akun mengikuti "Saldo awal" simulator.'],
                 ],
             ],
             [

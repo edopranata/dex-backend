@@ -90,9 +90,9 @@ Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil 
 
 **2B. Penyaring entry** (dampak terbesar menurut data awal)
 - [x] Gerbang tren 4 jam — **31 Okt 2026: diuji, tidak dipakai. Temuan dari 20 sinyal live tidak terbukti pada ratusan trade (pengujian -0,27R)**
-- [ ] Tolak entry saat harga sudah terlalu jauh naik (`EXTENDED_MOVE`). Batas RSI 55/65 sudah diuji dan tidak berpengaruh
+- [x] Tolak entry saat harga sudah terlalu jauh naik (`EXTENDED_MOVE`). Batas RSI 55/65 sudah diuji dan tidak berpengaruh — **31 Okt 2026: diuji, belum dipakai. Maks. 1 ATR di atas EMA20: pengembangan +0,13R, pengujian -0,08R. Maks. 2 ATR lebih buruk (pengujian -0,18R)**
 - [x] Jarak SL minimum 4% (strategi `v2`) — **31 Okt 2026: pengembangan +0,10R (PF 1,21), pengujian -0,12R (PF 0,81), drawdown 41R. TP 1R/2R/3R diuji dan lebih buruk**
-- [ ] Setup entry breakout/pullback dengan hasil `NO_TRADE` jika setup tidak terpenuhi
+- [x] Setup entry breakout/pullback dengan hasil `NO_TRADE` jika setup tidak terpenuhi — **31 Okt 2026: diuji, belum dipakai. Breakout 24 jam: -0,01R / -0,11R. Pullback 0,25 ATR: +0,11R / -0,05R. Volume 1,5x: +0,15R / -0,14R. Semua pengujian masih negatif dan selisihnya masih dalam batas noise**
 
 **2C. Kondisi pasar**
 - [ ] Deteksi regime (bullish, bearish, sideways, volatil) dari data yang sudah direkam — **31 Okt 2026: aturan sederhana tren 4 jam SOL/ETH diuji, belum konsisten (tolak saat bearish: pengujian -0,24R; hanya saat bullish: pengembangan +0,01R, pengujian -0,03R dari 44 trade). Belum dipakai; perlu data di lebih banyak kondisi pasar**
@@ -104,7 +104,7 @@ Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil 
 **2E. Kualitas volume & bobot**
 - [ ] Tekanan beli per periode, pembeli unik, rasio volume terhadap likuiditas
 - [ ] Halaman laporan performa mingguan (sinyal, R per minggu, per token, per rekomendasi)
-- [ ] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian — **31 Okt 2026: backtest batas posisi: maks. 3 drawdown 15R, maks. 5 27R, tanpa batas 41R**
+- [ ] Aturan risiko di simulator: ukuran posisi % ekuitas, maksimum posisi terbuka, batas rugi harian — **31 Okt 2026: backtest batas posisi: maks. 3 drawdown 15R, maks. 5 27R, tanpa batas 41R. Akun Auto-follow memakai maks. 3 posisi dan risiko 1% per trade; batas rugi harian belum ada**
 - [ ] Mode "paper auto-follow": ikuti semua sinyal otomatis dengan aturan risiko di atas, ukur kurva ekuitasnya
 - [ ] Tuning bobot/ambang di Admin berdasarkan hasil backtest (catat setiap perubahan di bagian 6)
 - [ ] Evaluasi pengaruh AI (sentimen Gemini) vs tanpa AI
@@ -223,6 +223,8 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 30 Okt 2026 | Email transaksional memakai Resend (SMTP), bukan Brevo | Gratis 3.000/bulan tanpa branding; domain diverifikasi lewat DNS Cloudflare |
 | 31 Okt 2026 | Strategi dari blueprint masuk Fase 2-6 sesuai data; token trending X pindah ke Fase 6; target utama expectancy bersih, bukan win rate | 20 sinyal pertama: win 30%, -0,34R. Skor belum memprediksi harga, sentimen belum membedakan, dan semua sumber data tambahan bisa gratis |
 | 31 Okt 2026 | Strategi `v2`: sinyal butuh jarak stop minimal 4%. Gerbang tren 4 jam, batas RSI, dan TP 1R/2R/3R tidak dipakai | Backtest 90 hari: stop di bawah 4% menyumbang -126R; aturan lain tidak membaik di periode pengujian. Belum ada skenario yang untung di periode pengujian |
+| 31 Okt 2026 | Akun Auto-follow: maks. 3 posisi terbuka, risiko 1% ekuitas per trade, order dibatasi 25% ekuitas dan 0,25% likuiditas pool. Pencatatan sinyal tidak dibatasi | Batas posisi menurunkan drawdown backtest dari 41R ke 15R tanpa mengubah cara sinyal diukur |
+| 31 Okt 2026 | Setup entry (breakout, pullback, volume, `EXTENDED_MOVE`) tidak masuk strategi; tetap `v2` | Tidak ada yang positif di periode pengujian, dan selisihnya masih dalam batas noise. Menambah aturan sekarang berisiko overfitting |
 | | | |
 
 ---

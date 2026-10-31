@@ -75,6 +75,9 @@ class Backtester
                     'rsi' => $analysis['indicators']['rsi'] ?? null,
                     'trend' => $analysis['indicators']['trend_higher_tf'] ?? null,
                     'market' => $marketEnd > 0 ? $market[$marketEnd - 1]['trend'] : null,
+                    'ema20' => $analysis['indicators']['ema20'] ?? null,
+                    'volume_ratio' => $analysis['indicators']['volume_ratio'] ?? null,
+                    'breakout' => $candle->close > max(array_map(fn (Candle $c): float => $c->high, array_slice($candles, max(0, $index - 24), min($index, 24))) ?: [INF]),
                     'atr' => $analysis['atr'],
                     'swing_low' => $analysis['swing_low'],
                 ];
@@ -88,7 +91,7 @@ class Backtester
      * Trades of one scenario on one prepared token. Like live, a token has one open signal at a time.
      *
      * @param  array{token: Token, candles: list<Candle>, analyses: array<int, array<string, mixed>>}  $prepared
-     * @param  array{require_trend?: string, block_market?: string, require_market?: string, max_rsi?: float, min_stop_pct?: float, sl_atr_min?: float, tp_r_multiples?: list<float>}  $scenario
+     * @param  array{require_trend?: string, block_market?: string, require_market?: string, max_rsi?: float, min_stop_pct?: float, sl_atr_min?: float, tp_r_multiples?: list<float>, max_extension_atr?: float, require_breakout?: bool, min_volume_ratio?: float, pullback_atr?: float}  $scenario
      * @return list<array<string, mixed>>
      */
     public function simulate(array $prepared, array $scenario): array
@@ -103,7 +106,7 @@ class Backtester
                 continue;
             }
 
-            if (! $this->passesGates($analysis, $scenario)) {
+            if (! $this->passesGates($analysis, $scenario, $candles[$index]->close)) {
                 continue;
             }
 
@@ -117,7 +120,12 @@ class Backtester
                 $config['sl_atr_max'],
             );
 
-            if (isset($scenario['min_stop_pct']) && ($price - $levels['stop_loss']) / $price * 100 < $scenario['min_stop_pct']) {
+            // Pullback setup: wait below the signal price instead of buying right away.
+            if (isset($scenario['pullback_atr'])) {
+                $levels['entry_high'] = $price - $scenario['pullback_atr'] * $analysis['atr'];
+            }
+
+            if (isset($scenario['min_stop_pct']) && ($levels['entry_high'] - $levels['stop_loss']) / $levels['entry_high'] * 100 < $scenario['min_stop_pct']) {
                 continue;
             }
 
@@ -230,7 +238,7 @@ class Backtester
      * @param  array<string, mixed>  $analysis
      * @param  array<string, mixed>  $scenario
      */
-    private function passesGates(array $analysis, array $scenario): bool
+    private function passesGates(array $analysis, array $scenario, float $closePrice): bool
     {
         if (isset($scenario['require_trend']) && $analysis['trend'] !== $scenario['require_trend']) {
             return false;
@@ -241,6 +249,19 @@ class Backtester
         }
 
         if (isset($scenario['require_market']) && $analysis['market'] !== $scenario['require_market']) {
+            return false;
+        }
+
+        // Extended: how far the close is above EMA20, in ATR.
+        if (isset($scenario['max_extension_atr']) && ($analysis['ema20'] === null || ($closePrice - $analysis['ema20']) / $analysis['atr'] > $scenario['max_extension_atr'])) {
+            return false;
+        }
+
+        if (! empty($scenario['require_breakout']) && ! $analysis['breakout']) {
+            return false;
+        }
+
+        if (isset($scenario['min_volume_ratio']) && ($analysis['volume_ratio'] ?? 0) < $scenario['min_volume_ratio']) {
             return false;
         }
 
