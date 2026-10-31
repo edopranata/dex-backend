@@ -84,6 +84,22 @@ services:
       - app-logs:/var/www/html/storage/logs
       - ${BACKUP_HOST_PATH:-./storage/app/backups}:/var/www/html/storage/app/backups
       - public-assets:/var/www/public-shared
+    healthcheck: &fpm-healthcheck
+      test: ["CMD", "php", "-r", "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      start_interval: 1s
+
+  # Second PHP-FPM under the same DNS name: a deploy replaces app and app2 one at a time, and nginx
+  # moves to the other one when a connection is refused, so the site stays up during the swap.
+  app2:
+    <<: *app
+    networks:
+      default:
+        aliases:
+          - app
+    healthcheck: *fpm-healthcheck
 
   # Queue workers, managed by Laravel Horizon (config/horizon.php): "default" for fast jobs
   # (analysis, Telegram, security, news), "market-data" with one process for GeckoTerminal.

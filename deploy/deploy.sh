@@ -3,7 +3,7 @@
 #   bash /opt/dex/backend/deploy/deploy.sh            (normal)
 #   bash /opt/dex/backend/deploy/deploy.sh --no-pull  (build dari kode yang sudah ada)
 #   bash /opt/dex/backend/deploy/deploy.sh --force    (deploy walau commit sama dengan deploy terakhir)
-# Urutan: build -> migrasi -> app/web (situs langsung pakai versi baru) -> scheduler -> horizon paling akhir,
+# Urutan: build -> migrasi -> app, app2, web (situs langsung pakai versi baru) -> scheduler -> horizon paling akhir,
 # supaya situs tidak pernah menunggu scheduler atau worker queue berhenti.
 set -euo pipefail
 
@@ -55,7 +55,12 @@ main() {
     step "Build image" docker compose build
     step "Database & Redis" docker compose up -d --wait mysql redis
     step "Migrasi" docker compose up --no-deps --exit-code-from migrate migrate
-    step "Ganti app & web" docker compose up -d --no-deps app web
+    # One at a time, so one PHP-FPM always answers: wait until the new app is ready and nginx has resolved
+    # its address (resolver valid=5s) before replacing app2. app first: it publishes the new frontend assets.
+    step "Ganti app" docker compose up -d --no-deps --wait app
+    sleep 6
+    step "Ganti app2" docker compose up -d --no-deps --wait app2
+    step "Ganti web" docker compose up -d --no-deps web
     # On its own: a running schedule:run finishes its minute (up to the 10 s stop timeout), and in the same
     # command the new app container would wait for it, taking the site down meanwhile.
     step "Ganti scheduler" docker compose up -d --no-deps scheduler

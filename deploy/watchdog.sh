@@ -36,7 +36,7 @@ main() {
 
     if ! curl -fsS -m 10 -o /dev/null "$url" 2>/dev/null; then
         log "masih gagal: restart web & app"
-        docker compose restart web app >/dev/null 2>&1
+        docker compose restart web app app2 >/dev/null 2>&1
         sleep 15
     fi
 
