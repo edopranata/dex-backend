@@ -253,6 +253,16 @@ test('a full market replaces its weakest unpinned token with a strong discovery'
         ->and(Token::query()->active()->count())->toBe(2);
 });
 
+test('the reason says net selling when whales sold more than they bought', function () {
+    $reason = fn (float $buy, float $sell): string => (new ReflectionMethod(TokenDiscoveryService::class, 'additionReason'))->invoke(
+        app(TokenDiscoveryService::class),
+        new TokenCandidate(['discovery_score' => 65, 'trend_score' => 85, 'whale_score' => 54, 'security_score' => 75, 'whale_buy_usd' => $buy, 'whale_sell_usd' => $sell, 'price_change_h24' => 3.3]),
+    );
+
+    expect($reason(10_000, 139_640))->toContain('whale net jual $129,640')
+        ->and($reason(31_422, 0))->toContain('whale net beli $31,422');
+});
+
 test('a token that just came in is not thrown out by the next candidate of the same round', function () {
     config(['market.simulator.max_tokens' => 2, 'market.discovery.max_new_per_run' => 3]);
 

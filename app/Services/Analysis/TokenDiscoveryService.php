@@ -603,12 +603,13 @@ class TokenDiscoveryService
         $whaleNet = (float) $candidate->whale_buy_usd - (float) $candidate->whale_sell_usd;
 
         return sprintf(
-            'Ditemukan otomatis: skor discovery %d (tren %d, whale %d, keamanan %d), whale net beli $%s, %+.1f%% dalam 24 jam.',
+            'Ditemukan otomatis: skor discovery %d (tren %d, whale %d, keamanan %d), whale net %s $%s, %+.1f%% dalam 24 jam.',
             $candidate->discovery_score,
             $candidate->trend_score,
             $candidate->whale_score,
             $candidate->security_score,
-            number_format($whaleNet),
+            $whaleNet < 0 ? 'jual' : 'beli',
+            number_format(abs($whaleNet)),
             $candidate->price_change_h24,
         );
     }
