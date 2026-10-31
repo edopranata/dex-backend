@@ -66,7 +66,7 @@ class TokenController extends Controller
 
     public function events(): AnonymousResourceCollection
     {
-        return WatchlistEventResource::collection(WatchlistEvent::query()->with('token')->latest()->limit(40)->get());
+        return WatchlistEventResource::collection(WatchlistEvent::query()->with('token')->latest()->limit(80)->get());
     }
 
     /**

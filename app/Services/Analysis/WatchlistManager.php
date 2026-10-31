@@ -145,13 +145,17 @@ class WatchlistManager
     }
 
     /**
-     * The weakest unpinned, unused token that a better discovery may replace.
+     * The weakest unpinned, unused token that a better discovery may replace. A token that just came in
+     * has no analysis yet, which would rank it as the weakest of all and throw it out again at once.
      */
     public function replaceable(): ?Token
     {
         return Token::query()
             ->active()
             ->where('is_pinned', false)
+            ->whereDoesntHave('watchlistEvents', fn ($query) => $query
+                ->where('action', WatchlistAction::Added)
+                ->where('created_at', '>=', now()->subHours(config('market.watchlist.replace_grace_hours'))))
             ->with('latestAnalysis')
             ->get()
             ->filter(fn (Token $token): bool => ! $this->isInUse($token)

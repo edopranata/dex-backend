@@ -139,6 +139,8 @@ return [
         'keep_if_score_at_least' => 60,
         // Saat Market penuh, hanya token dengan skor di bawah ini yang boleh digantikan.
         'replace_below_score' => 50,
+        // Token yang baru masuk tidak boleh digantikan selama ini, supaya sempat dianalisis.
+        'replace_grace_hours' => 24,
         // Token yang baru dikeluarkan tidak dimasukkan lagi selama ini.
         're_add_cooldown_days' => 3,
     ],

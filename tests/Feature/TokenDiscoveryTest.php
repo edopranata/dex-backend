@@ -1,11 +1,13 @@
 <?php
 
 use App\Enums\CandidateStatus;
+use App\Enums\WatchlistAction;
 use App\Models\Analysis;
 use App\Models\Token;
 use App\Models\TokenCandidate;
 use App\Models\User;
 use App\Services\Analysis\TokenDiscoveryService;
+use App\Services\Analysis\WatchlistManager;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
@@ -249,6 +251,42 @@ test('a full market replaces its weakest unpinned token with a strong discovery'
         ->and($result['added'])->toBe(['GOOD'])
         ->and($weak->refresh()->is_active)->toBeFalse()
         ->and(Token::query()->active()->count())->toBe(2);
+});
+
+test('a token that just came in is not thrown out by the next candidate of the same round', function () {
+    config(['market.simulator.max_tokens' => 2, 'market.discovery.max_new_per_run' => 3]);
+
+    Token::factory()->create(['is_pinned' => true]);
+    $weak = Token::factory()->create(['is_pinned' => false, 'source' => 'discovery']);
+    Analysis::factory()->for($weak)->create(['final_score' => 35, 'recommendation' => 'HOLD']);
+
+    $trades = [['side' => 'buy', 'usd' => 20_000, 'wallet' => 'w1'], ['side' => 'buy', 'usd' => 15_000, 'wallet' => 'w2'], ['side' => 'buy', 'usd' => 12_000, 'wallet' => 'w3']];
+
+    fakeDiscoveryApis([
+        'GOOD' => ['pair' => dexPair('PairGood1111111111111111111111111111111111', 'TokenGood111111111111111111111111111111111', 'GOOD'), 'trades' => $trades, 'security' => ['holder_count' => '25000']],
+        'NEXT' => ['pair' => dexPair('PairNext1111111111111111111111111111111111', 'TokenNext111111111111111111111111111111111', 'NEXT'), 'trades' => $trades, 'security' => ['holder_count' => '25000']],
+    ]);
+
+    $result = app(TokenDiscoveryService::class)->run();
+
+    expect($result['added'])->toHaveCount(1)
+        ->and($result['replaced'])->toBe([$weak->symbol])
+        ->and(Token::query()->active()->where('symbol', $result['added'][0])->exists())->toBeTrue();
+
+    $this->assertDatabaseMissing('watchlist_events', ['action' => 'removed', 'token_id' => Token::query()->where('symbol', $result['added'][0])->value('id')]);
+});
+
+test('after the grace period a weak newcomer can be replaced again', function () {
+    config(['market.simulator.max_tokens' => 1, 'market.watchlist.replace_grace_hours' => 24]);
+    $token = Token::factory()->create(['is_pinned' => false, 'source' => 'discovery']);
+    Analysis::factory()->for($token)->create(['final_score' => 35, 'recommendation' => 'HOLD']);
+    app(WatchlistManager::class)->log($token, WatchlistAction::Added, 'Masuk.');
+
+    expect(app(WatchlistManager::class)->replaceable())->toBeNull();
+
+    $this->travel(25)->hours();
+
+    expect(app(WatchlistManager::class)->replaceable()?->id)->toBe($token->id);
 });
 
 test('a full market of strong or pinned tokens accepts no replacement', function () {
