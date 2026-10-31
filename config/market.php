@@ -198,6 +198,19 @@ return [
             'max_per_minute' => (int) env('GEMINI_MAX_PER_MINUTE', env('AI_MAX_REQUESTS_PER_MINUTE', 5)),
             'max_per_day' => (int) env('GEMINI_MAX_PER_DAY', env('AI_MAX_REQUESTS_PER_DAY', 250)),
         ],
+        'groq' => [
+            'key' => env('GROQ_API_KEY'),
+            'base_url' => 'https://api.groq.com/openai/v1',
+            // Model produksi dengan batas publik; Llama di Groq kini tertulis "contact sales".
+            'model' => env('GROQ_MODEL', 'openai/gpt-oss-20b'),
+            // Di bawah batas Groq (8K token/menit, 200K token/hari) dengan perkiraan ±1.800 token per request.
+            'max_per_minute' => (int) env('GROQ_MAX_PER_MINUTE', 4),
+            'max_per_day' => (int) env('GROQ_MAX_PER_DAY', 100),
+            // GPT-OSS berpikir dulu dan token itu ikut dihitung; cukup singkat untuk sentimen & ringkasan.
+            'request_by_model' => [
+                'openai/gpt-oss' => ['reasoning_effort' => 'low', 'include_reasoning' => false],
+            ],
+        ],
         'xai' => [
             'key' => env('XAI_API_KEY'),
             'base_url' => 'https://api.x.ai/v1',

@@ -28,6 +28,10 @@ class SettingsRegistry
                     ['key' => 'market.ai.gemini.model', 'label' => 'Model Gemini', 'type' => 'string', 'description' => 'Disarankan gemini-flash-lite-latest (kuota gratis paling longgar, tidak pensiun).'],
                     ['key' => 'market.ai.gemini.max_per_minute', 'label' => 'Gemini: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Sesuaikan dengan batas free tier model (lihat AI Studio → Rate limits).'],
                     ['key' => 'market.ai.gemini.max_per_day', 'label' => 'Gemini: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000],
+                    ['key' => 'market.ai.groq.key', 'label' => 'Groq API key', 'type' => 'secret', 'description' => 'Dari console.groq.com/keys.'],
+                    ['key' => 'market.ai.groq.model', 'label' => 'Model Groq', 'type' => 'string', 'description' => 'Disarankan openai/gpt-oss-20b. Daftar model: console.groq.com/docs/models.'],
+                    ['key' => 'market.ai.groq.max_per_minute', 'label' => 'Groq: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Batas Groq dihitung juga per token, jadi jangan dinaikkan tanpa melihat halaman Limits di akun Groq.'],
+                    ['key' => 'market.ai.groq.max_per_day', 'label' => 'Groq: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000],
                     ['key' => 'market.ai.xai.key', 'label' => 'xAI API key', 'type' => 'secret', 'description' => 'Dari console.x.ai (berbayar per token, isi kredit dulu).'],
                     ['key' => 'market.ai.xai.model', 'label' => 'Model xAI', 'type' => 'string', 'description' => 'Disarankan grok-4.20-0309-non-reasoning (murah, tanpa token reasoning).'],
                     ['key' => 'market.ai.xai.max_per_minute', 'label' => 'xAI: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000],
@@ -173,6 +177,7 @@ class SettingsRegistry
         return [
             'none' => 'Nonaktif',
             'gemini' => 'Google Gemini',
+            'groq' => 'Groq',
             'xai' => 'xAI Grok',
             'openai' => 'OpenAI',
             ...(config('market.ai.ollama.enabled') ? ['ollama' => 'Ollama (lokal)'] : []),

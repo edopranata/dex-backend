@@ -18,6 +18,7 @@ Dokumen kerja untuk 2 bulan ke depan (**30 Oktober – 24 Desember 2026**). Serv
 | Server | VPS NAT vpsindonesia (3 vCPU / 6 GB), Docker, akses **`https://dexsim.tune-in.trade`** (Cloudflare Tunnel) — **aktif s/d 29 Nov 2026** |
 | Deploy | Push ke `main` (dex-backend / dex-frontend) → GitHub Actions (tes/build) → deploy otomatis |
 | Keandalan | Auto-start saat boot (`dex.service`), watchdog `/up` tiap 2 menit, restart container otomatis |
+| AI | Gemini utama, Groq cadangan; xAI dan OpenAI opsional |
 | Backup | Cron harian 02:30 WIB (14 hari), download & backup manual dari Admin (jeda 60 menit) |
 | Pemantauan | UptimeRobot, Healthchecks.io, dan status container di Admin → Container |
 | Backup ke luar VPS | Salinan harian ke Cloudflare R2, uji restore lolos |
@@ -230,6 +231,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 31 Okt 2026 | Pemantauan container di Admin → Container: script di host mengirim data ke MySQL, interval 10–60 detik (default 15), riwayat 7 hari, tanpa ikut backup | Tanpa MongoDB karena butuh container dan backup tambahan untuk satu tabel; tanpa `docker.sock` di aplikasi karena setara akses root |
 | 31 Okt 2026 | VPS diperpanjang 25 Nov 2026; IP dedicated diputuskan saat Fase 4/5 bersama pindah ke Biznet Gio | Exchange butuh IP whitelist yang andal, dan perpindahan harus minim downtime |
 | 31 Okt 2026 | Tiga akun Auto-follow: gabungan, hanya Strong Buy, dan hanya Buy, dengan modal dan batas risiko sama | Membandingkan rekomendasi sebagai akun: data awal Strong Buy 60% (5 sinyal), Buy 19% (16 sinyal), sampel masih kecil |
+| 31 Okt 2026 | Groq ditambahkan sebagai pilihan provider AI (cadangan Gemini); xAI tetap tersedia | Akun xAI belum punya kredit, sehingga cadangan AI tidak berfungsi |
 | | | |
 
 ---

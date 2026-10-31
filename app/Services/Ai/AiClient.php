@@ -14,7 +14,7 @@ use Throwable;
 
 /**
  * Minimal JSON-mode client over a chain of LLM providers: the primary one first, then the fallback
- * (e.g. free Gemini, then paid xAI) whenever the primary is paused or out of budget.
+ * (e.g. Gemini, then Groq) whenever the primary is paused or out of budget.
  *
  * Every provider has its own per-minute and per-day budget, and its own pause after errors (quota,
  * overload, unknown model, rejected key), so a limit on one never stops the other. Callers fall back
@@ -22,8 +22,8 @@ use Throwable;
  */
 class AiClient
 {
-    /** Providers this client can talk to; xAI and OpenAI share the OpenAI chat-completions format. */
-    public const PROVIDERS = ['gemini' => 'Google Gemini', 'xai' => 'xAI Grok', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
+    /** Providers this client can talk to; all but Gemini share the OpenAI chat-completions format. */
+    public const PROVIDERS = ['gemini' => 'Google Gemini', 'groq' => 'Groq', 'xai' => 'xAI Grok', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
 
     private ?string $lastProvider = null;
 
@@ -130,7 +130,10 @@ class AiClient
             try {
                 $text = $this->send($provider, $system, $prompt);
             } catch (RequestException $e) {
-                $this->pauseAfter($provider, $e->response);
+                // One bad answer from the model says nothing about the provider, so it stays available.
+                if (! str_contains($e->response->body(), 'json_validate_failed')) {
+                    $this->pauseAfter($provider, $e->response);
+                }
 
                 continue;
             } catch (Throwable $e) {
@@ -272,7 +275,7 @@ class AiClient
     {
         $body = $response->body();
 
-        return str_contains($body, 'PerDay') || str_contains($body, 'insufficient_quota');
+        return str_contains($body, 'PerDay') || str_contains($body, 'insufficient_quota') || preg_match('/per day|\b(TPD|RPD)\b/i', $body) === 1;
     }
 
     private function isOutOfCredits(Response $response): bool
@@ -301,6 +304,24 @@ class AiClient
         return "ai:requests:{$provider}:".now('Asia/Jakarta')->format('Y-m-d');
     }
 
+    /**
+     * Options only some models accept, by model name prefix, so a changed model cannot break the request.
+     *
+     * @return array<string, mixed>
+     */
+    private function modelRequest(string $provider): array
+    {
+        $model = (string) config("market.ai.{$provider}.model");
+
+        foreach (config("market.ai.{$provider}.request_by_model", []) as $prefix => $options) {
+            if (str_starts_with($model, $prefix)) {
+                return $options;
+            }
+        }
+
+        return [];
+    }
+
     private function send(string $provider, string $system, string $prompt): ?string
     {
         return $provider === 'gemini' ? $this->gemini($system, $prompt) : $this->chatCompletions($provider, $system, $prompt);
@@ -322,7 +343,7 @@ class AiClient
     }
 
     /**
-     * OpenAI-style chat completions in JSON mode (OpenAI, xAI and local Ollama).
+     * OpenAI-style chat completions in JSON mode (OpenAI, Groq, xAI and local Ollama).
      */
     private function chatCompletions(string $provider, string $system, string $prompt): ?string
     {
@@ -330,6 +351,7 @@ class AiClient
             ->timeout((int) config("market.ai.{$provider}.timeout", 60))
             ->post(rtrim((string) config("market.ai.{$provider}.base_url"), '/').'/chat/completions', [
                 ...config("market.ai.{$provider}.request", []),
+                ...$this->modelRequest($provider),
                 'model' => config("market.ai.{$provider}.model"),
                 'response_format' => ['type' => 'json_object'],
                 'temperature' => 0.2,

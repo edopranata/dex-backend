@@ -2,10 +2,12 @@
 
 use App\Models\User;
 use App\Services\Ai\AiClient;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Http;
 
 const GEMINI_URL = 'generativelanguage.googleapis.com/*';
 const XAI_URL = 'api.x.ai/*';
+const GROQ_URL = 'api.groq.com/*';
 
 beforeEach(function () {
     config([
@@ -148,6 +150,81 @@ test('changing an ai setting in the admin panel lifts the pause and reports stat
         ->assertOk()
         ->assertJsonPath('ai_status.providers.0.paused_until', null)
         ->assertJsonPath('ai_status.providers.0.model', 'gemini-3.5-flash-lite');
+});
+
+test('groq is called through its openai-compatible endpoint with short reasoning that is not returned', function () {
+    config(['market.ai.provider' => 'groq', 'market.ai.groq.key' => 'groq-test-key', 'market.ai.groq.model' => 'openai/gpt-oss-20b']);
+    Http::fake([GROQ_URL => Http::response(xaiOk('{"summary": "naik"}'))]);
+    $ai = app(AiClient::class);
+
+    expect($ai->json('system', 'prompt'))->toBe(['summary' => 'naik'])
+        ->and($ai->lastProvider())->toBe('groq');
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://api.groq.com/openai/v1/chat/completions'
+        && $request->hasHeader('Authorization', 'Bearer groq-test-key')
+        && $request['model'] === 'openai/gpt-oss-20b'
+        && $request['response_format'] === ['type' => 'json_object']
+        && $request['reasoning_effort'] === 'low'
+        && $request['include_reasoning'] === false);
+});
+
+test('a groq model without reasoning is not sent the reasoning options', function () {
+    config(['market.ai.provider' => 'groq', 'market.ai.groq.key' => 'groq-test-key', 'market.ai.groq.model' => 'llama-3.3-70b-versatile']);
+    Http::fake([GROQ_URL => Http::response(xaiOk())]);
+
+    app(AiClient::class)->json('system', 'prompt');
+
+    Http::assertSent(fn ($request) => ! isset($request['reasoning_effort']) && ! isset($request['include_reasoning']));
+});
+
+test('groq and xai can take turns as fallback, and xai stays selectable', function () {
+    config([
+        'market.ai.fallback_provider' => 'groq',
+        'market.ai.groq.key' => 'groq-test-key',
+        'market.ai.groq.max_per_minute' => 4,
+        'market.ai.groq.max_per_day' => 100,
+    ]);
+    Http::fake([GEMINI_URL => Http::response(['error' => ['message' => 'quota', 'status' => 'RESOURCE_EXHAUSTED', 'details' => [['quotaId' => 'GenerateRequestsPerDay']]]], 429), GROQ_URL => Http::response(xaiOk())]);
+    $ai = app(AiClient::class);
+
+    expect($ai->json('system', 'prompt'))->toBe(['ok' => true])
+        ->and($ai->lastProvider())->toBe('groq');
+
+    $this->actingAs(User::factory()->create(['is_admin' => true]))
+        ->putJson('/api/admin/settings', ['values' => ['market.ai.fallback_provider' => 'xai']])
+        ->assertOk();
+
+    expect(config('market.ai.fallback_provider'))->toBe('xai');
+});
+
+test('invalid json from the model moves on to the fallback without pausing the provider', function () {
+    config(['market.ai.provider' => 'groq', 'market.ai.fallback_provider' => 'xai', 'market.ai.groq.key' => 'groq-test-key', 'market.ai.groq.max_per_minute' => 4, 'market.ai.groq.max_per_day' => 100]);
+    Http::fake([
+        GROQ_URL => Http::response(['error' => ['message' => 'Failed to generate JSON', 'type' => 'invalid_request_error', 'code' => 'json_validate_failed']], 400),
+        XAI_URL => Http::response(xaiOk()),
+    ]);
+    $ai = app(AiClient::class);
+
+    expect($ai->json('system', 'prompt'))->toBe(['ok' => true])
+        ->and($ai->lastProvider())->toBe('xai')
+        ->and(aiStatusOf('groq')['paused_until'])->toBeNull();
+});
+
+test('a groq daily limit pauses until tomorrow, a per-minute limit only briefly', function () {
+    config(['market.ai.provider' => 'groq', 'market.ai.groq.key' => 'groq-test-key', 'market.ai.groq.max_per_minute' => 4, 'market.ai.groq.max_per_day' => 100]);
+    Http::fake([GROQ_URL => Http::sequence()
+        ->push(['error' => ['message' => 'Rate limit reached on tokens per minute (TPM)', 'code' => 'rate_limit_exceeded']], 429, ['retry-after' => '7'])
+        ->push(['error' => ['message' => 'Rate limit reached on tokens per day (TPD)', 'code' => 'rate_limit_exceeded']], 429),
+    ]);
+    $ai = app(AiClient::class);
+
+    $ai->json('system', 'prompt');
+    expect(Carbon::parse(aiStatusOf('groq')['paused_until'])->lte(now()->addMinutes(2)))->toBeTrue();
+
+    $this->travel(3)->minutes();
+    $ai->json('system', 'prompt');
+    expect(Carbon::parse(aiStatusOf('groq')['paused_until'])->gt(now()->addHour()))->toBeTrue()
+        ->and(aiStatusOf('groq')['reason'])->toContain('Kuota harian');
 });
 
 test('xai is called through its openai-compatible endpoint in json mode', function () {
