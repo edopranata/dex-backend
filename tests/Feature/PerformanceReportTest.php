@@ -4,6 +4,7 @@ use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
 use App\Models\EquitySnapshot;
 use App\Models\Order;
+use App\Models\Position;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
@@ -152,4 +153,40 @@ test('the accounts are compared by what they bought and earned on finished signa
         ->and($accounts['all']['closed_signals'])->toBe(0)
         ->and($accounts['all']['win_rate'])->toBeNull()
         ->and($accounts['strong_buy']['recommendations'])->toBe(['STRONG_BUY']);
+});
+
+test('the portfolio of an auto-follow account is only its own, and only for looking at', function () {
+    $account = User::autoFollower('buy');
+    Position::factory()->for($account)->for($this->token)->create(['quantity' => 5]);
+    Position::factory()->for($account)->for(Token::factory()->create())->create(['quantity' => 0]);
+    Position::factory()->for(User::autoFollower('strong_buy'))->for(Token::factory()->create())->create(['quantity' => 7]);
+    Order::factory()->for($account, 'user')->for($this->token)->create(['status' => OrderStatus::Pending]);
+    Order::factory()->count(21)->for($account, 'user')->for($this->token)->create(['status' => OrderStatus::Filled]);
+    Order::factory()->for($this->user, 'user')->for($this->token)->create(['status' => OrderStatus::Filled]);
+
+    $this->getJson('/api/reports/accounts/buy/portfolio')->assertUnauthorized();
+
+    $this->actingAs($this->user);
+
+    $this->getJson('/api/reports/accounts/buy/portfolio')->assertOk()
+        ->assertJsonCount(1, 'positions')
+        ->assertJsonPath('positions.0.token.symbol', 'PEPE')
+        ->assertJsonCount(1, 'pending')
+        ->assertJsonPath('pending.0.status', 'pending')
+        ->assertJsonCount(20, 'orders.data')
+        ->assertJsonPath('orders.meta.total', 21)
+        ->assertJsonPath('orders.meta.last_page', 2);
+
+    $this->getJson('/api/reports/accounts/buy/portfolio?page=2')->assertOk()->assertJsonCount(1, 'orders.data');
+    $this->getJson('/api/reports/accounts/strong_buy/portfolio')->assertOk()->assertJsonCount(1, 'positions')->assertJsonCount(0, 'pending');
+
+    // Nothing but the three system accounts, so a person's portfolio can never be reached this way.
+    $this->getJson('/api/reports/accounts/'.$this->user->id.'/portfolio')->assertNotFound();
+    $this->getJson('/api/reports/accounts/nope/portfolio')->assertNotFound();
+
+    // Only ever read.
+    $this->postJson('/api/reports/accounts/buy/portfolio')->assertStatus(405);
+    $this->deleteJson('/api/reports/accounts/buy/portfolio')->assertStatus(405);
+    expect($account->positions()->count())->toBe(2)
+        ->and($account->orders()->count())->toBe(22);
 });
