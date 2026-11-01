@@ -134,7 +134,7 @@ Tujuan: server siap memegang API key exchange.
 - [x] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`) — **29 Okt 2026: `https://dexsim.tune-in.trade`, port 8080 hanya localhost, firewall hanya SSH, cookie `secure`**
 - [x] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia — **31 Okt 2026: HTTP dialihkan 301 ke HTTPS; port 30040 dan 8080 tidak terjangkau dari luar**
 - [ ] **2FA (TOTP)** untuk login, wajib untuk admin — 2FA sudah tersedia sejak Fase 1, tinggal mewajibkannya untuk admin
-- [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa), serta keputusan sistem (kenapa sinyal ditolak, kenapa token diganti)
+- [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa), serta keputusan sistem (kenapa sinyal ditolak, kenapa token diganti). Mencakup semua pengguna dan akun sistem auto-follow, tidak bisa diubah atau dihapus, dan **hanya admin yang bisa melihat**. Bukti harga tiap order terisi sudah berjalan sejak 1 Nov 2026 (`order_fill_evidence`)
 - [ ] Batasi sesi: logout otomatis, satu perangkat admin
 - [ ] Review keamanan kode (endpoint admin, validasi, rahasia di log)
 
