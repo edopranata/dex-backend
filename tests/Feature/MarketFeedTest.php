@@ -124,3 +124,9 @@ test('a tab that was hidden for hours does not replay old events', function () {
 
     expect(feedTitles($this))->toBeEmpty();
 });
+
+test('a window with signals entering or closing but no new one still loads', function () {
+    feedSignal($this->token, ['status' => 'active', 'entry_price' => 1, 'created_at' => now()->subHours(3), 'entered_at' => now()->subSeconds(5)]);
+
+    expect(feedTitles($this))->toContain('Entry tercapai: PEPE');
+});

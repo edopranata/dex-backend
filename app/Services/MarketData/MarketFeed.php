@@ -151,7 +151,8 @@ class MarketFeed
                 $signal->token,
             ));
 
-        return $created->merge($entered)->merge($closed);
+        // An empty result stays an Eloquent collection, whose merge only takes models, so start from a plain one.
+        return collect()->merge($created)->merge($entered)->merge($closed);
     }
 
     private function watchlist(Carbon $since, Carbon $until): Collection
