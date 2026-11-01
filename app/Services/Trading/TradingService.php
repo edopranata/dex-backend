@@ -25,6 +25,8 @@ class TradingService
      */
     private const DUST = 1e-12;
 
+    private const DUST_OF_SALE = 1e-9;
+
     public function __construct(private PriceService $prices) {}
 
     /**
@@ -292,9 +294,12 @@ class TradingService
         $pnl = $net - $quantity * $position->avg_price;
 
         $remaining = $position->quantity - $quantity;
+        // Thirds of a position do not add up exactly. What rounding leaves is tiny next to the sale itself,
+        // whatever the token's scale, and must not keep the position open and take up a slot.
+        $closed = $remaining <= max(self::DUST, $quantity * self::DUST_OF_SALE);
         $position->update([
-            'quantity' => $remaining <= self::DUST ? 0 : $remaining,
-            'avg_price' => $remaining <= self::DUST ? 0 : $position->avg_price,
+            'quantity' => $closed ? 0 : $remaining,
+            'avg_price' => $closed ? 0 : $position->avg_price,
             'realized_pnl' => $position->realized_pnl + $pnl,
         ]);
 
@@ -311,7 +316,7 @@ class TradingService
             'filled_at' => now(),
         ]);
 
-        if ($remaining <= self::DUST) {
+        if ($closed) {
             $user->orders()
                 ->where('token_id', $token->id)
                 ->where('side', OrderSide::Sell)

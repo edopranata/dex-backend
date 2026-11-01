@@ -62,7 +62,7 @@ class OrderController extends Controller
             ->first();
 
         return OrderResource::collection(
-            $query->with('token')->latest()->latest('id')->paginate($filters['per_page'] ?? 50),
+            $query->with('token')->orderByRaw('COALESCE(filled_at, created_at) DESC')->latest('id')->paginate($filters['per_page'] ?? 50),
         )->additional(['summary' => [
             'orders' => (int) $summary->orders,
             'realized_pnl' => round((float) $summary->realized_pnl, 2),

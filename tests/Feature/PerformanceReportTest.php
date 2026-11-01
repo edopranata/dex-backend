@@ -190,3 +190,16 @@ test('the portfolio of an auto-follow account is only its own, and only for look
     expect($account->positions()->count())->toBe(2)
         ->and($account->orders()->count())->toBe(22);
 });
+
+test('order history reads by the time it shows, not by when the order was placed', function () {
+    $account = User::autoFollower('buy');
+    $placed = '2026-11-01 02:00:00';
+    $early = Order::factory()->for($account, 'user')->for($this->token)->create(['status' => OrderStatus::Filled, 'created_at' => $placed, 'filled_at' => '2026-11-01 03:00:00']);
+    $late = Order::factory()->for($account, 'user')->for($this->token)->create(['status' => OrderStatus::Filled, 'created_at' => $placed, 'filled_at' => '2026-11-01 08:00:00']);
+    $cancelled = Order::factory()->for($account, 'user')->for($this->token)->create(['status' => OrderStatus::Cancelled, 'created_at' => '2026-11-01 05:00:00', 'filled_at' => null]);
+
+    $this->actingAs($this->user)->getJson('/api/reports/accounts/buy/portfolio')->assertOk()
+        ->assertJsonPath('orders.data.0.id', $late->id)
+        ->assertJsonPath('orders.data.1.id', $cancelled->id)
+        ->assertJsonPath('orders.data.2.id', $early->id);
+});

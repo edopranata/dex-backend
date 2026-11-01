@@ -37,7 +37,7 @@ class ReportController extends Controller
         return response()->json([
             'positions' => PositionResource::collection($account->positions()->with('token')->where('quantity', '>', 0)->get()),
             'pending' => OrderResource::collection($account->orders()->with('token')->where('status', OrderStatus::Pending)->latest()->latest('id')->get()),
-            'orders' => OrderResource::collection($account->orders()->with('token')->where('status', '!=', OrderStatus::Pending)->latest()->latest('id')->paginate(self::ORDERS_PER_PAGE))->response()->getData(true),
+            'orders' => OrderResource::collection($account->orders()->with('token')->where('status', '!=', OrderStatus::Pending)->orderByRaw('COALESCE(filled_at, created_at) DESC')->latest('id')->paginate(self::ORDERS_PER_PAGE))->response()->getData(true),
         ]);
     }
 }

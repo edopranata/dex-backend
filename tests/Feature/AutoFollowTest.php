@@ -3,6 +3,7 @@
 use App\Enums\OrderStatus;
 use App\Jobs\FollowSignalAutomatically;
 use App\Models\Order;
+use App\Models\Position;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
@@ -160,4 +161,35 @@ test('a retried job does not buy twice in any account', function () {
     (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
 
     expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(2);
+});
+
+test('rounding left over from selling in thirds closes the position and frees its slot', function () {
+    $user = User::factory()->create(['balance_usd' => 10000]);
+    $token = Token::factory()->create(['price_usd' => 0.008, 'liquidity_usd' => 10_000_000]);
+    $position = Position::factory()->for($user)->for($token)->create(['quantity' => 115923.44243394, 'avg_price' => 0.008]);
+    $sell = fn (float $quantity) => Order::factory()->for($user, 'user')->for($token)->create(['side' => 'sell', 'type' => 'market', 'status' => 'pending', 'quantity' => $quantity]);
+
+    $trading = app(TradingService::class);
+    $trading->execute($sell(38641.147477979), 0.008);
+    $trading->execute($sell(38641.147477979), 0.008);
+
+    // A real remainder stays open.
+    expect((float) $position->refresh()->quantity)->toBeGreaterThan(38000.0);
+
+    // What the last third leaves is the 0.000000003 that blocked a slot on production.
+    $trading->execute($sell(38641.147477979), 0.008);
+
+    expect((float) $position->refresh()->quantity)->toEqual(0.0)
+        ->and((float) $position->avg_price)->toEqual(0.0)
+        ->and($user->positions()->where('quantity', '>', 0)->count())->toBe(0);
+});
+
+test('a small but real sale does not close what is left of a big position', function () {
+    $user = User::factory()->create(['balance_usd' => 10000]);
+    $token = Token::factory()->create(['price_usd' => 1, 'liquidity_usd' => 10_000_000]);
+    $position = Position::factory()->for($user)->for($token)->create(['quantity' => 1000, 'avg_price' => 1]);
+
+    app(TradingService::class)->execute(Order::factory()->for($user, 'user')->for($token)->create(['side' => 'sell', 'type' => 'market', 'status' => 'pending', 'quantity' => 1]), 1);
+
+    expect((float) $position->refresh()->quantity)->toEqual(999.0);
 });
