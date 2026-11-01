@@ -13,24 +13,32 @@ class SignalTracker
 {
     public function __construct(private SignalResult $results) {}
 
-    public function track(Signal $signal, float $price): void
+    /**
+     * @param  float|null  $confirming  The check before this one. A level only counts once both reached it, so
+     *                                  a single stray price cannot settle a signal.
+     */
+    public function track(Signal $signal, float $price, ?float $confirming = null): void
     {
+        $confirming ??= $price;
+        $fallen = max($price, $confirming);
+        $risen = min($price, $confirming);
+
         match ($signal->status) {
-            SignalStatus::Pending => $this->trackPending($signal, $price),
-            SignalStatus::Active => $this->trackActive($signal, $price),
+            SignalStatus::Pending => $this->trackPending($signal, $price, $fallen),
+            SignalStatus::Active => $this->trackActive($signal, $price, $fallen, $risen),
             default => null,
         };
     }
 
-    private function trackPending(Signal $signal, float $price): void
+    private function trackPending(Signal $signal, float $price, float $fallen): void
     {
-        if ($price <= $signal->stop_loss) {
+        if ($fallen <= $signal->stop_loss) {
             $signal->update(['status' => SignalStatus::Invalidated, 'closed_at' => now()]);
 
             return;
         }
 
-        if ($price <= $signal->entry_high) {
+        if ($fallen <= $signal->entry_high) {
             $signal->update(['status' => SignalStatus::Active, 'entry_price' => $price, 'entered_at' => now()]);
 
             return;
@@ -41,12 +49,12 @@ class SignalTracker
         }
     }
 
-    private function trackActive(Signal $signal, float $price): void
+    private function trackActive(Signal $signal, float $price, float $fallen, float $risen): void
     {
         $targets = $signal->takeProfits();
         $maxTpHit = (int) $signal->max_tp_hit;
 
-        while ($maxTpHit < 3 && $price >= $targets[$maxTpHit]) {
+        while ($maxTpHit < 3 && $risen >= $targets[$maxTpHit]) {
             $maxTpHit++;
         }
 
@@ -58,7 +66,7 @@ class SignalTracker
 
         $stop = $maxTpHit > 0 ? $signal->entry_price : $signal->stop_loss;
 
-        if ($price <= $stop) {
+        if ($fallen <= $stop) {
             $this->close($signal, $maxTpHit > 0 ? SignalStatus::TakeProfit : SignalStatus::StopLoss, $price, $maxTpHit);
 
             return;

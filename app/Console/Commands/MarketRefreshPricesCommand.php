@@ -21,10 +21,11 @@ class MarketRefreshPricesCommand extends Command
 
         $filled = $trading->matchPendingOrders($tokens);
 
-        $priceById = $tokens->pluck('price_usd', 'id');
+        // A token without a recent earlier check waits for its next one, like its orders do.
+        $confirmed = $tokens->filter(fn (Token $token): bool => $token->price_usd !== null && $token->confirmingPrice() !== null)->keyBy('id');
 
-        Signal::query()->open()->whereIn('token_id', $priceById->filter()->keys())->each(
-            fn (Signal $signal) => $tracker->track($signal, (float) $priceById[$signal->token_id]),
+        Signal::query()->open()->whereIn('token_id', $confirmed->keys())->each(
+            fn (Signal $signal) => $tracker->track($signal, (float) $confirmed[$signal->token_id]->price_usd, $confirmed[$signal->token_id]->confirmingPrice()),
         );
 
         $this->components->info("{$tokens->count()} harga diperbarui, {$filled} order tereksekusi.");

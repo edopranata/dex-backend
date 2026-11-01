@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 
 #[Fillable([
     'chain_id', 'pair_address', 'token_address', 'symbol', 'name', 'quote_symbol', 'dex_id',
-    'image_url', 'url', 'price_usd', 'price_change_m5', 'price_change_h1', 'price_change_h6',
+    'image_url', 'url', 'price_usd', 'previous_price_usd', 'previous_price_at', 'price_change_m5', 'price_change_h1', 'price_change_h6',
     'price_change_h24', 'volume_h24', 'liquidity_usd', 'fdv', 'market_cap', 'txns_h24_buys',
     'txns_h24_sells', 'pair_created_at', 'price_updated_at', 'is_active', 'is_pinned', 'source', 'discovered_at',
 ])]
@@ -30,6 +30,8 @@ class Token extends Model
     {
         return [
             'price_usd' => 'float',
+            'previous_price_usd' => 'float',
+            'previous_price_at' => 'datetime',
             'price_change_m5' => 'float',
             'price_change_h1' => 'float',
             'price_change_h6' => 'float',
@@ -190,6 +192,19 @@ class Token extends Model
     public function watchlistEvents(): HasMany
     {
         return $this->hasMany(WatchlistEvent::class);
+    }
+
+    /**
+     * The check before the latest one, when it is recent enough that the two really were in a row.
+     * One price alone is not trusted to fill an order or settle a signal.
+     */
+    public function confirmingPrice(): ?float
+    {
+        $maxGap = (int) config('market.simulator.confirmation_max_gap_seconds');
+
+        return $this->previous_price_usd !== null && $this->previous_price_at?->gte(now()->subSeconds($maxGap))
+            ? $this->previous_price_usd
+            : null;
     }
 
     public function isPriceStale(int $maxAgeSeconds): bool

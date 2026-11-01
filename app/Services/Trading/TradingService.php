@@ -6,6 +6,7 @@ use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Models\Order;
+use App\Models\OrderFillEvidence;
 use App\Models\Position;
 use App\Models\Signal;
 use App\Models\Token;
@@ -117,6 +118,8 @@ class TradingService
                 $this->afterExitFill($order);
             }
 
+            $this->recordEvidence($order, $token, $marketPrice);
+
             return $order;
         });
     }
@@ -146,9 +149,14 @@ class TradingService
             ->with('token')
             ->orderBy('id')
             ->each(function (Order $order) use ($pricedTokens, &$filled): void {
-                $price = $pricedTokens[$order->token_id]->price_usd;
+                $token = $pricedTokens[$order->token_id];
+                $price = $token->price_usd;
+                $confirming = $token->confirmingPrice();
 
-                if ($order->type->isTriggered($order->side, (float) $order->trigger_price, $price)) {
+                // Both checks in a row have to agree, so a single stray price cannot fill an order.
+                if ($confirming !== null
+                    && $order->type->isTriggered($order->side, (float) $order->trigger_price, $confirming)
+                    && $order->type->isTriggered($order->side, (float) $order->trigger_price, $price)) {
                     $this->execute($order, $price);
                     $filled++;
                 }
@@ -452,6 +460,31 @@ class TradingService
         }
 
         $pending()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis (OCO): pasangannya #{$order->id} sudah terisi."]);
+    }
+
+    private function recordEvidence(Order $order, Token $token, float $marketPrice): void
+    {
+        if ($order->status !== OrderStatus::Filled) {
+            return;
+        }
+
+        OrderFillEvidence::query()->create([
+            'order_id' => $order->id,
+            'user_id' => $order->user_id,
+            'token_id' => $token->id,
+            'side' => $order->side->value,
+            'type' => $order->type->value,
+            'source' => 'dexscreener',
+            'pair_address' => $token->pair_address,
+            'trigger_price' => $order->trigger_price,
+            'market_price' => $marketPrice,
+            'filled_price' => $order->filled_price,
+            'price_at' => $token->price_updated_at,
+            'previous_price' => $token->previous_price_usd,
+            'previous_price_at' => $token->previous_price_at,
+            'liquidity_usd' => $token->liquidity_usd,
+            'created_at' => now(),
+        ]);
     }
 
     private function reject(Order $order, string $reason): void

@@ -39,7 +39,7 @@ test('selling the whole position realizes pnl and cancels other pending sells', 
     $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => 1000]);
     $stop = $this->trading->place($this->user, $this->token, ['side' => 'sell', 'type' => 'stop_loss', 'quantity' => $buy->filled_quantity, 'trigger_price' => 1.5]);
 
-    $this->token->update(['price_usd' => 2.2]);
+    priceHeld($this->token, 2.2);
     $sell = $this->trading->place($this->user, $this->token, ['side' => 'sell', 'type' => 'market', 'quantity' => $buy->filled_quantity]);
 
     expect($sell->status)->toBe(OrderStatus::Filled)
@@ -63,13 +63,13 @@ test('pending orders fill only when their trigger is reached', function () {
     expect($this->trading->matchPendingOrders(new Collection([$this->token])))->toBe(0)
         ->and($limit->refresh()->status)->toBe(OrderStatus::Pending);
 
-    $this->token->update(['price_usd' => 1.79]);
+    priceHeld($this->token, 1.79);
 
     expect($this->trading->matchPendingOrders(new Collection([$this->token->refresh()])))->toBe(1)
         ->and($limit->refresh()->status)->toBe(OrderStatus::Filled);
 
     $stop = $this->trading->place($this->user, $this->token, ['side' => 'sell', 'type' => 'stop_loss', 'quantity' => $limit->filled_quantity, 'trigger_price' => 1.6]);
-    $this->token->update(['price_usd' => 1.59]);
+    priceHeld($this->token, 1.59);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect($stop->refresh()->status)->toBe(OrderStatus::Filled)
@@ -108,7 +108,7 @@ test('when the stop loss fills its take profit is cancelled even if other tokens
     $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'market', 'amount_usd' => 1000, 'take_profit_price' => 2.6, 'stop_loss_price' => 1.8]);
     [$takeProfit, $stopLoss] = [Order::firstWhere(['parent_id' => $buy->id, 'type' => 'take_profit']), Order::firstWhere(['parent_id' => $buy->id, 'type' => 'stop_loss'])];
 
-    $this->token->update(['price_usd' => 1.79]);
+    priceHeld($this->token, 1.79);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect($stopLoss->refresh()->status)->toBe(OrderStatus::Filled)
@@ -122,7 +122,7 @@ test('a limit buy places its tp and sl only after it fills', function () {
 
     expect(Order::where('parent_id', $buy->id)->count())->toBe(0);
 
-    $this->token->update(['price_usd' => 1.79]);
+    priceHeld($this->token, 1.79);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect($buy->refresh()->status)->toBe(OrderStatus::Filled)
@@ -133,7 +133,7 @@ test('a cancelled limit buy never places its exits', function () {
     $buy = $this->trading->place($this->user, $this->token, ['side' => 'buy', 'type' => 'limit', 'amount_usd' => 500, 'trigger_price' => 1.8, 'stop_loss_price' => 1.6]);
     $this->trading->cancel($buy);
 
-    $this->token->update(['price_usd' => 1.5]);
+    priceHeld($this->token, 1.5);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect(Order::where('parent_id', $buy->id)->count())->toBe(0);
@@ -182,7 +182,7 @@ test('a signal limit above the market waits and places its exits only when fille
     expect($buy->status)->toBe(OrderStatus::Pending)
         ->and(Order::where('parent_id', $buy->id)->count())->toBe(0);
 
-    $this->token->update(['price_usd' => 1.89]);
+    priceHeld($this->token, 1.89);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect($buy->refresh()->status)->toBe(OrderStatus::Filled)
@@ -194,14 +194,14 @@ test('after the first target the stop moves to the entry price for what is left,
     [$buy] = $this->trading->followSignal($this->user, $signal, 300, limit: true);
     $stop = Order::firstWhere(['parent_id' => $buy->id, 'type' => 'stop_loss']);
 
-    $this->token->update(['price_usd' => 2.31]);
+    priceHeld($this->token, 2.31);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect($stop->refresh()->status)->toBe(OrderStatus::Pending)
         ->and($stop->trigger_price)->toEqualWithDelta($buy->filled_price, 1e-9)
         ->and($stop->quantity)->toEqualWithDelta($buy->filled_quantity * 2 / 3, 1e-9);
 
-    $this->token->update(['price_usd' => 1.99]);
+    priceHeld($this->token, 1.99);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect($stop->refresh()->status)->toBe(OrderStatus::Filled)
@@ -213,7 +213,7 @@ test('the last target cancels the remaining stop', function () {
     $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
     [$buy] = $this->trading->followSignal($this->user, $signal, 300, limit: true);
 
-    $this->token->update(['price_usd' => 2.9]);
+    priceHeld($this->token, 2.9);
     $this->trading->matchPendingOrders(new Collection([$this->token->refresh()]));
 
     expect(Order::where('parent_id', $buy->id)->where('type', 'take_profit')->where('status', OrderStatus::Filled)->count())->toBe(3)
@@ -227,3 +227,11 @@ test('a closed signal or a price below its stop cannot be followed', function ()
     expect(fn () => $this->trading->followSignal($this->user, $closed, 100, limit: true))->toThrow(ValidationException::class, 'sudah ditutup')
         ->and(fn () => $this->trading->followSignal($this->user, $broken, 100, limit: true))->toThrow(ValidationException::class, 'di bawah stop loss');
 });
+
+/**
+ * The price stood at this level on two checks in a row, as a real move would.
+ */
+function priceHeld(Token $token, float $price): void
+{
+    $token->update(['price_usd' => $price, 'previous_price_usd' => $price, 'previous_price_at' => now()->subSeconds(15), 'price_updated_at' => now()]);
+}

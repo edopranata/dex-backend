@@ -22,6 +22,8 @@ return [
         'min_order_usd' => 1,
         // Harga lebih tua dari ini dianggap basi dan diambil ulang sebelum order dieksekusi.
         'max_price_age_seconds' => 30,
+        // Dua pengecekan harga berurutan harus setuju sebelum order terisi; jeda lebih lama berarti menunggu lagi.
+        'confirmation_max_gap_seconds' => 120,
     ],
 
     /*
@@ -324,7 +326,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v2',
+        'strategy_version' => 'v3',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [

@@ -90,7 +90,7 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v2-');
+    expect($version)->toStartWith('v3-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);

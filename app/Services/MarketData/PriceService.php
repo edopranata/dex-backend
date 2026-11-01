@@ -45,7 +45,11 @@ class PriceService
 
                 if ($pair !== null && isset($pair['priceUsd'])) {
                     $attributes = DexScreenerClient::toTokenAttributes($pair);
-                    $token->update(array_intersect_key($attributes, array_flip(self::LIVE_ATTRIBUTES)));
+                    $token->update([
+                        ...array_intersect_key($attributes, array_flip(self::LIVE_ATTRIBUTES)),
+                        'previous_price_usd' => $token->price_usd,
+                        'previous_price_at' => $token->price_updated_at,
+                    ]);
                 }
             }
         }
