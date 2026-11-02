@@ -91,18 +91,62 @@ test('a double tap on confirm buys only once', function () {
         ->and(collect(telegramCalls('answerCallbackQuery'))->last()['text'])->toBe('Order ini sudah diproses.');
 });
 
-test('a custom amount is typed as a reply and then confirmed', function () {
+test('a custom amount is typed and then confirmed', function () {
     tapButton("buy:{$this->signal->id}:custom");
 
-    expect(collect(telegramCalls('sendMessage'))->last()['reply_markup']['force_reply'])->toBeTrue();
+    $prompt = collect(telegramCalls('sendMessage'))->last();
+    expect($prompt['reply_markup'])->not->toHaveKey('force_reply')
+        ->and($prompt['reply_markup']['inline_keyboard'][0][0]['callback_data'])->toBe('no');
 
-    replyText('abc')->assertJsonPath('text', fn (string $t) => str_contains($t, 'Ketik angka'));
+    expect($prompt['text'])->toContain('<code>0</code> untuk batal');
+
+    replyText('abc')->assertJsonPath('text', fn (string $t) => str_contains($t, 'Ketik angka') && str_contains($t, '<code>0</code>'));
     replyText('$150,5')
         ->assertOk()
         ->assertJsonPath('text', fn (string $t) => str_contains($t, 'Konfirmasi beli BRETT') && str_contains($t, '$150.50'))
         ->assertJsonPath('reply_markup.inline_keyboard.0.0.callback_data', "ok:{$this->signal->id}:150.5");
 
+    expect(collect(telegramCalls('editMessageText'))->last()['message_id'])->toBe(99)
+        ->and(collect(telegramCalls('editMessageText'))->last()->data())->not->toHaveKey('reply_markup');
+
     replyText('/status')->assertJsonPath('text', fn (string $t) => str_contains($t, 'Ekuitas'));
+});
+
+test('the wait for an amount can be ended, and a number afterwards buys nothing', function (string $cancel) {
+    tapButton("buy:{$this->signal->id}:custom");
+
+    $response = $cancel === 'button' ? tapButton('no', messageId: 99) : replyText($cancel);
+
+    if ($cancel !== 'button') {
+        $response->assertJsonPath('text', fn (string $t) => str_contains($t, 'dibatalkan'));
+    }
+
+    expect(collect(telegramCalls('editMessageText'))->last()['text'])->toContain('dibatalkan');
+
+    replyText('150')->assertJsonPath('text', fn (string $t) => ! str_contains($t, 'Konfirmasi beli'));
+
+    expect(Order::count())->toBe(0);
+})->with(['0', '/batal', '/batal@DexBot', 'batal', 'Cancel', 'button']);
+
+test('/batal says so when nothing is waiting', function () {
+    replyText('/batal')->assertJsonPath('text', fn (string $t) => str_contains($t, 'Tidak ada pembelian'));
+
+    expect(telegramCalls('editMessageText'))->toBe([]);
+});
+
+test('other commands keep the wait for an amount going', function () {
+    tapButton("buy:{$this->signal->id}:custom");
+
+    replyText('/status')->assertJsonPath('text', fn (string $t) => str_contains($t, 'Ekuitas'));
+    replyText('50')->assertJsonPath('text', fn (string $t) => str_contains($t, 'Konfirmasi beli'));
+});
+
+test('the wait for an amount ends by itself after ten minutes', function () {
+    tapButton("buy:{$this->signal->id}:custom");
+
+    $this->travel(11)->minutes();
+
+    replyText('150')->assertJsonPath('text', fn (string $t) => ! str_contains($t, 'Konfirmasi beli'));
 });
 
 test('closed signals, low balances and unlinked chats are refused', function () {

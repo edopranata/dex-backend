@@ -20,6 +20,8 @@ class TelegramBot
      */
     public const COMMANDS = [
         'status' => 'Ringkasan portofolio Anda',
+        'market' => 'Lihat token menurut rekomendasi',
+        'batal' => 'Batalkan input nominal pembelian',
         'help' => 'Daftar perintah',
         'stop' => 'Berhenti menerima notifikasi',
     ];
@@ -37,6 +39,7 @@ class TelegramBot
         private TelegramLinker $linker,
         private TelegramNotifier $notifier,
         private TelegramBuyFlow $buyFlow,
+        private TelegramMarket $market,
         private HorizonStatus $horizonStatus,
     ) {}
 
@@ -47,7 +50,9 @@ class TelegramBot
     public function handle(array $update): ?array
     {
         if (is_array($update['callback_query'] ?? null)) {
-            $this->buyFlow->handleCallback($update['callback_query']);
+            TelegramMarket::owns((string) ($update['callback_query']['data'] ?? ''))
+                ? $this->market->handleCallback($update['callback_query'])
+                : $this->buyFlow->handleCallback($update['callback_query']);
 
             return null;
         }
@@ -60,7 +65,7 @@ class TelegramBot
 
         $chatId = (string) $message['chat']['id'];
 
-        // An amount typed after "Nominal lain" (commands still work and cancel nothing).
+        // An amount typed after "Nominal lain". Commands still work, and only /batal ends the wait.
         if (! str_starts_with(trim((string) $message['text']), '/') && ($reply = $this->buyFlow->handleAmount($chatId, (string) $message['text'])) !== null) {
             return $reply;
         }
@@ -68,8 +73,15 @@ class TelegramBot
         $username = $message['from']['username'] ?? null;
         [$command, $argument] = $this->parse((string) $message['text']);
 
+        if ($command === '/market') {
+            return $this->linkedUsers($chatId) === []
+                ? ['chat_id' => $chatId, 'text' => $this->notLinked()]
+                : ['chat_id' => $chatId, ...$this->market->view($argument)];
+        }
+
         $reply = match (true) {
             $command === '/start' && $argument !== '' => $this->link($chatId, $argument, $username),
+            $command === '/batal' => $this->buyFlow->cancelAmount($chatId),
             $command === '/status' => $this->status($chatId),
             $command === '/stop' => $this->stop($chatId),
             $command === '/horizon' => $this->horizon($chatId),

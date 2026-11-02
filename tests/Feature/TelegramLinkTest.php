@@ -142,7 +142,7 @@ test('the command menu is synced for everyone and for admin chats', function () 
     $calls = collect(Http::recorded())->map(fn (array $pair): Request => $pair[0])->filter(fn (Request $r): bool => str_ends_with($r->url(), '/setMyCommands'))->values();
 
     expect($calls)->toHaveCount(2)
-        ->and(collect($calls[0]['commands'])->pluck('command')->all())->toBe(['status', 'help', 'stop'])
+        ->and(collect($calls[0]['commands'])->pluck('command')->all())->toBe(['status', 'market', 'batal', 'help', 'stop'])
         ->and($calls[0]->data())->not->toHaveKey('scope')
         ->and($calls[1]['scope'])->toBe(['type' => 'chat', 'chat_id' => '888'])
         ->and(collect($calls[1]['commands'])->pluck('command')->all())->toContain('horizon');

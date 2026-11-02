@@ -6,6 +6,7 @@ use App\Enums\OrderStatus;
 use App\Models\Signal;
 use App\Models\User;
 use App\Services\Trading\TradingService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -76,17 +77,35 @@ class TelegramBuyFlow
             return null;
         }
 
+        if (in_array(strtolower(trim($text)), ['0', 'batal', 'cancel'], true)) {
+            return ['chat_id' => $chatId, 'text' => $this->cancelAmount($chatId)];
+        }
+
         $amount = self::parseAmount($text);
 
         if ($amount === null) {
-            return ['chat_id' => $chatId, 'text' => 'Ketik angka nominal dalam USD, misalnya <code>150</code>.'];
+            return ['chat_id' => $chatId, 'text' => 'Ketik angka nominal dalam USD, misalnya <code>150</code>, atau balas <code>0</code> untuk membatalkan.'];
         }
 
-        Cache::forget("telegram:buy-amount:{$chatId}");
+        $this->closePrompt($chatId, 'Nominal diterima: '.TelegramNotifier::usd($amount).'.');
         $user = User::query()->where('telegram_chat_id', $chatId)->first();
         $confirmation = $user ? $this->confirmation($user, (int) $signalId, $amount) : ['text' => 'Chat ini belum terhubung.', 'reply_markup' => null];
 
         return array_filter(['chat_id' => $chatId, ...$confirmation]);
+    }
+
+    /**
+     * Stop waiting for a typed amount, for "/batal".
+     */
+    public function cancelAmount(string $chatId): string
+    {
+        if (! Cache::has("telegram:buy-amount:{$chatId}")) {
+            return 'Tidak ada pembelian yang sedang menunggu nominal.';
+        }
+
+        $this->closePrompt($chatId, '✖️ Input nominal dibatalkan.');
+
+        return '✖️ Input nominal dibatalkan. Tidak ada order yang dibuat.';
     }
 
     /**
@@ -104,14 +123,36 @@ class TelegramBuyFlow
      */
     private function askAmount(string $chatId, int $signalId): ?array
     {
-        Cache::put("telegram:buy-amount:{$chatId}", $signalId, now()->addMinutes(10));
+        Cache::put("telegram:buy-amount:{$chatId}", $signalId, self::amountDeadline());
 
-        $sent = $this->ui(fn () => $this->telegram->send($chatId, 'Ketik nominal pembelian dalam USD (contoh: <code>150</code>):', replyMarkup: [
-            'force_reply' => true,
-            'input_field_placeholder' => 'Nominal USD',
-        ]));
+        // Not force_reply: Telegram keeps that open in the app, long after this wait has ended here.
+        $sent = $this->ui(function () use ($chatId): void {
+            $message = $this->telegram->send($chatId, "Ketik nominal pembelian dalam USD (contoh: <code>150</code>).\nBalas <code>0</code> untuk batal. Berlaku 10 menit.", replyMarkup: [
+                'inline_keyboard' => [[['text' => '✖️ Batal', 'callback_data' => 'no']]],
+            ]);
+
+            Cache::put("telegram:buy-amount-prompt:{$chatId}", (int) ($message['message_id'] ?? 0), self::amountDeadline());
+        });
 
         return $sent ? null : [self::UNREACHABLE, true];
+    }
+
+    private static function amountDeadline(): Carbon
+    {
+        return now()->addMinutes(10);
+    }
+
+    /**
+     * End the wait for a typed amount and take the Batal button off its message.
+     */
+    private function closePrompt(string $chatId, string $text): void
+    {
+        Cache::forget("telegram:buy-amount:{$chatId}");
+        $messageId = Cache::pull("telegram:buy-amount-prompt:{$chatId}");
+
+        if ($messageId) {
+            $this->ui(fn () => $this->telegram->edit($chatId, (int) $messageId, $text));
+        }
     }
 
     /**
@@ -209,6 +250,9 @@ class TelegramBuyFlow
      */
     private function cancel(string $chatId, int $messageId): ?array
     {
+        Cache::forget("telegram:buy-amount:{$chatId}");
+        Cache::forget("telegram:buy-amount-prompt:{$chatId}");
+
         $this->ui(fn () => $this->telegram->edit($chatId, $messageId, '✖️ Pembelian dibatalkan.'));
 
         return ['Dibatalkan', false];
