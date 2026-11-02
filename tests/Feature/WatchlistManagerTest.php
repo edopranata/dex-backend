@@ -2,13 +2,20 @@
 
 use App\Enums\OrderStatus;
 use App\Enums\Recommendation;
+use App\Enums\SignalStatus;
 use App\Enums\WatchlistAction;
+use App\Jobs\FollowSignalAutomatically;
 use App\Models\Analysis;
 use App\Models\Order;
 use App\Models\Position;
+use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
+use App\Services\Analysis\SignalEngine;
 use App\Services\Analysis\WatchlistManager;
+use App\Services\Trading\TradingService;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Validation\ValidationException;
 
 /**
  * One analysis per day, oldest first, ending today.
@@ -84,6 +91,94 @@ test('avoid or strong sell recommendations leave immediately', function () {
     scoreHistory($token, [20], Recommendation::Avoid);
 
     expect(app(WatchlistManager::class)->prune())->toBe([$token->symbol]);
+});
+
+test('a token in use by any account cannot be removed, by any path', function (string $use) {
+    $user = User::factory()->create();
+    $token = Token::factory()->create(['is_pinned' => false]);
+
+    match ($use) {
+        'position' => Position::factory()->for($token)->for($user)->create(['quantity' => 10]),
+        'pending order' => Order::factory()->for($token)->create(['status' => OrderStatus::Pending]),
+        'auto-follow order' => Order::factory()->for($token)->for(User::autoFollower('buy'))->create(['status' => OrderStatus::Pending]),
+        'open signal' => Signal::factory()->for($token)->create(['status' => SignalStatus::Pending]),
+    };
+
+    $manager = app(WatchlistManager::class);
+
+    expect($manager->remove($token, 'uji'))->toBeFalse()
+        ->and($token->fresh()->is_active)->toBeTrue()
+        ->and($token->watchlistEvents()->where('action', WatchlistAction::Removed)->exists())->toBeFalse()
+        ->and($manager->replaceable())->toBeNull();
+
+    $this->actingAs($user)->deleteJson("/api/tokens/{$token->id}")
+        ->assertUnprocessable()
+        ->assertJsonPath('message', fn (string $message): bool => str_contains($message, 'belum bisa dikeluarkan'));
+
+    expect($token->fresh()->is_active)->toBeTrue();
+})->with(['position', 'pending order', 'auto-follow order', 'open signal']);
+
+test('a token nobody uses can still be removed by hand', function () {
+    $user = User::factory()->create();
+    $token = Token::factory()->create(['is_pinned' => false]);
+    Order::factory()->for($token)->create(['status' => OrderStatus::Filled]);
+
+    $this->actingAs($user)->deleteJson("/api/tokens/{$token->id}")->assertOk();
+
+    expect($token->fresh()->is_active)->toBeFalse()
+        ->and($token->watchlistEvents()->where('action', WatchlistAction::Removed)->exists())->toBeTrue();
+});
+
+test('a replacement stops when the weakest token gained an order at the last moment', function () {
+    $token = Token::factory()->create(['is_pinned' => false]);
+    $manager = app(WatchlistManager::class);
+
+    expect($manager->replaceable()?->id)->toBe($token->id);
+
+    Order::factory()->for($token)->create(['status' => OrderStatus::Pending]);
+
+    expect($manager->remove($token, 'Digantikan'))->toBeFalse()
+        ->and($token->fresh()->is_active)->toBeTrue();
+});
+
+test('orders cannot be placed on a token outside the market', function (array $data) {
+    $user = User::factory()->create(['balance_usd' => 1000]);
+    $token = Token::factory()->create(['is_active' => false, 'price_usd' => 1.0]);
+    Position::factory()->for($token)->for($user)->create(['quantity' => 10]);
+
+    expect(fn () => app(TradingService::class)->place($user, $token, $data))
+        ->toThrow(ValidationException::class, 'tidak lagi ada di Market');
+
+    expect($token->orders()->count())->toBe(0);
+})->with([
+    'market buy' => [['side' => 'buy', 'type' => 'market', 'amount_usd' => 10]],
+    'limit buy' => [['side' => 'buy', 'type' => 'limit', 'amount_usd' => 10, 'trigger_price' => 0.5]],
+    'market sell' => [['side' => 'sell', 'type' => 'market', 'quantity' => 1]],
+]);
+
+test('an order placed with an old copy of the token is refused once it left the market', function () {
+    $user = User::factory()->create(['balance_usd' => 1000]);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    $stale = Token::query()->find($token->id);
+
+    app(WatchlistManager::class)->remove($token, 'uji');
+
+    expect(fn () => app(TradingService::class)->place($user, $stale, ['side' => 'buy', 'type' => 'limit', 'amount_usd' => 10, 'trigger_price' => 0.5]))
+        ->toThrow(ValidationException::class);
+});
+
+test('an analysis queued before the token left creates no analysis, signal or auto-follow order', function () {
+    Queue::fake();
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    $stale = Token::query()->find($token->id);
+
+    app(WatchlistManager::class)->remove($token, 'uji');
+
+    expect(app(SignalEngine::class)->analyze($stale))->toBeNull()
+        ->and($token->signals()->count())->toBe(0)
+        ->and($token->analyses()->count())->toBe(0);
+
+    Queue::assertNotPushed(FollowSignalAutomatically::class);
 });
 
 test('market api exposes score history, capacity and pinning', function () {

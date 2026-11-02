@@ -135,8 +135,9 @@ class WatchlistManager
         $removed = [];
 
         foreach (Token::query()->active()->where('is_pinned', false)->get() as $token) {
-            if ($reason = $this->removalReason($token)) {
-                $this->remove($token, $reason);
+            $reason = $this->removalReason($token);
+
+            if ($reason !== null && $this->remove($token, $reason)) {
                 $removed[] = $token->symbol;
             }
         }
@@ -181,11 +182,24 @@ class WatchlistManager
             ->exists();
     }
 
-    public function remove(Token $token, string $reason): void
+    /**
+     * The only way out of the Market. A token still in use stays, whoever asks.
+     *
+     * @return bool Whether the token left.
+     */
+    public function remove(Token $token, string $reason): bool
     {
-        $token->update(['is_active' => false]);
-        TokenCandidate::query()->where('token_id', $token->id)->update(['status' => CandidateStatus::Candidate]);
-        $this->log($token, WatchlistAction::Removed, $reason, $token->latestAnalysis()->value('final_score'));
+        return $token->withMembershipLock(function () use ($token, $reason): bool {
+            if ($this->isInUse($token)) {
+                return false;
+            }
+
+            $token->update(['is_active' => false]);
+            TokenCandidate::query()->where('token_id', $token->id)->update(['status' => CandidateStatus::Candidate]);
+            $this->log($token, WatchlistAction::Removed, $reason, $token->latestAnalysis()->value('final_score'));
+
+            return true;
+        });
     }
 
     public function log(Token $token, WatchlistAction $action, string $reason, ?int $score = null): WatchlistEvent

@@ -576,7 +576,10 @@ class TokenDiscoveryService
                     break;
                 }
 
-                $this->watchlist->remove($weakest, "Digantikan {$candidate->symbol} (skor discovery {$candidate->discovery_score}) karena Market penuh.");
+                if (! $this->watchlist->remove($weakest, "Digantikan {$candidate->symbol} (skor discovery {$candidate->discovery_score}) karena Market penuh.")) {
+                    break;
+                }
+
                 $replaced[] = $weakest->symbol;
             }
 

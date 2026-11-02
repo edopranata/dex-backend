@@ -131,7 +131,9 @@ class TokenController extends Controller
 
     public function destroy(Request $request, Token $token, WatchlistManager $watchlist): JsonResponse
     {
-        $watchlist->remove($token, 'Dikeluarkan manual oleh '.$request->user()->name.'.');
+        if (! $watchlist->remove($token, 'Dikeluarkan manual oleh '.$request->user()->name.'.')) {
+            return response()->json(['message' => "{$token->symbol} masih punya posisi, order, atau sinyal aktif, jadi belum bisa dikeluarkan."], 422);
+        }
 
         return response()->json(['message' => "{$token->symbol} tidak lagi dipantau."]);
     }

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 #[Fillable([
@@ -96,6 +97,28 @@ class Token extends Model
     public function scopeActive(Builder $query): void
     {
         $query->where('is_active', true);
+    }
+
+    /**
+     * Run a change to this token's Market membership, or to what depends on it, one at a time. Leaving the
+     * Market and gaining a new order or signal share this lock, so a token can never leave while being used.
+     *
+     * @template TReturn
+     *
+     * @param  callable(): TReturn  $callback
+     * @return TReturn
+     */
+    public function withMembershipLock(callable $callback): mixed
+    {
+        return Cache::lock("token-membership:{$this->id}", 30)->block(10, $callback);
+    }
+
+    /**
+     * Asks the database, because a long job may hold a copy from before the token left the Market.
+     */
+    public function isInMarket(): bool
+    {
+        return (bool) static::query()->whereKey($this->id)->value('is_active');
     }
 
     /**

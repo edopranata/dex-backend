@@ -232,6 +232,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 31 Okt 2026 | VPS diperpanjang 25 Nov 2026; IP dedicated diputuskan saat Fase 4/5 bersama pindah ke Biznet Gio | Exchange butuh IP whitelist yang andal, dan perpindahan harus minim downtime |
 | 31 Okt 2026 | Tiga akun Auto-follow: gabungan, hanya Strong Buy, dan hanya Buy, dengan modal dan batas risiko sama | Membandingkan rekomendasi sebagai akun: data awal Strong Buy 60% (5 sinyal), Buy 19% (16 sinyal), sampel masih kecil |
 | 31 Okt 2026 | Groq ditambahkan sebagai pilihan provider AI (cadangan Gemini); xAI tetap tersedia | Akun xAI belum punya kredit, sehingga cadangan AI tidak berfungsi |
+| 2 Nov 2026 | Token yang masih punya posisi, order tertunda, atau sinyal terbuka tidak bisa keluar dari Market lewat jalur apa pun; order dan sinyal baru ditolak untuk token di luar Market | Temuan produksi: `three`, `IDOL`, `worth`, `TRUE`, `AIN` keluar saat analisisnya masih di antrean, sehingga posisi, order, dan sinyalnya beku dan menahan slot auto-follow. Kelima token diputuskan terpisah |
 | | | |
 
 ---

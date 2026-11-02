@@ -6,7 +6,9 @@ use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Analysis;
 use App\Models\Candle;
+use App\Models\Signal;
 use App\Models\Token;
+use App\Observers\SignalObserver;
 use App\Services\Notifications\TelegramNotifier;
 use Illuminate\Support\Collection;
 
@@ -28,7 +30,8 @@ class SignalEngine
 
     public function analyze(Token $token): ?Analysis
     {
-        if ($token->price_usd === null) {
+        // A job queued when the token joined can run after it left, and must not start a signal on it.
+        if ($token->price_usd === null || ! $token->isInMarket()) {
             return null;
         }
 
@@ -123,14 +126,28 @@ class SignalEngine
             $this->notifier->riskAlert($token, $onchain['reasons']);
         }
 
-        if ($levels !== [] && ! $token->signals()->open()->exists()) {
-            $token->signals()->create([
-                'analysis_id' => $analysis->id,
-                'recommendation' => $recommendation,
-                'status' => SignalStatus::Pending,
-                'strategy_version' => $strategyVersion,
-                ...$levels,
-            ]);
+        if ($levels !== []) {
+            $signal = $token->withMembershipLock(function () use ($token, $analysis, $recommendation, $strategyVersion, $levels): ?Signal {
+                if (! $token->isInMarket() || $token->signals()->open()->exists()) {
+                    return null;
+                }
+
+                $signal = $token->signals()->make([
+                    'analysis_id' => $analysis->id,
+                    'recommendation' => $recommendation,
+                    'status' => SignalStatus::Pending,
+                    'strategy_version' => $strategyVersion,
+                    ...$levels,
+                ]);
+                $signal->saveQuietly();
+
+                return $signal;
+            });
+
+            // After the lock: following the signal places orders, which take the same lock.
+            if ($signal !== null) {
+                app(SignalObserver::class)->created($signal);
+            }
         }
 
         return $analysis;

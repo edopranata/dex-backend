@@ -58,20 +58,27 @@ class TradingService
             throw ValidationException::withMessages(['amount_usd' => 'Saldo USD tidak cukup.']);
         }
 
-        $order = $user->orders()->create([
-            'token_id' => $token->id,
-            'signal_id' => $signal?->id,
-            'side' => $side,
-            'type' => $type,
-            'status' => OrderStatus::Pending,
-            'amount_usd' => $side === OrderSide::Buy ? $data['amount_usd'] : null,
-            'quantity' => $side === OrderSide::Sell ? $data['quantity'] : null,
-            'trigger_price' => $type === OrderType::Market ? null : $data['trigger_price'],
-            'take_profit_price' => $takeProfit,
-            'stop_loss_price' => $stopLoss,
-            'exit_plan' => $side === OrderSide::Buy ? ($data['exit_plan'] ?? null) : null,
-            'note' => $data['note'] ?? null,
-        ]);
+        // A token outside the Market gets no prices, so an order on it could never fill or would fill on an old price.
+        $order = $token->withMembershipLock(function () use ($user, $token, $signal, $side, $type, $takeProfit, $stopLoss, $data): Order {
+            if (! $token->isInMarket()) {
+                throw ValidationException::withMessages(['token_id' => "{$token->symbol} tidak lagi ada di Market, jadi order tidak bisa dibuat."]);
+            }
+
+            return $user->orders()->create([
+                'token_id' => $token->id,
+                'signal_id' => $signal?->id,
+                'side' => $side,
+                'type' => $type,
+                'status' => OrderStatus::Pending,
+                'amount_usd' => $side === OrderSide::Buy ? $data['amount_usd'] : null,
+                'quantity' => $side === OrderSide::Sell ? $data['quantity'] : null,
+                'trigger_price' => $type === OrderType::Market ? null : $data['trigger_price'],
+                'take_profit_price' => $takeProfit,
+                'stop_loss_price' => $stopLoss,
+                'exit_plan' => $side === OrderSide::Buy ? ($data['exit_plan'] ?? null) : null,
+                'note' => $data['note'] ?? null,
+            ]);
+        });
 
         // A limit buy at or above the current price is marketable: fill it now, like an exchange would.
         if ($type === OrderType::Limit && $token->price_usd !== null && $type->isTriggered($side, (float) $order->trigger_price, $token->price_usd)) {
