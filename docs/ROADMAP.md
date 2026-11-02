@@ -233,6 +233,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 31 Okt 2026 | Tiga akun Auto-follow: gabungan, hanya Strong Buy, dan hanya Buy, dengan modal dan batas risiko sama | Membandingkan rekomendasi sebagai akun: data awal Strong Buy 60% (5 sinyal), Buy 19% (16 sinyal), sampel masih kecil |
 | 31 Okt 2026 | Groq ditambahkan sebagai pilihan provider AI (cadangan Gemini); xAI tetap tersedia | Akun xAI belum punya kredit, sehingga cadangan AI tidak berfungsi |
 | 2 Nov 2026 | Token yang masih punya posisi, order tertunda, atau sinyal terbuka tidak bisa keluar dari Market lewat jalur apa pun; order dan sinyal baru ditolak untuk token di luar Market | Temuan produksi: `three`, `IDOL`, `worth`, `TRUE`, `AIN` keluar saat analisisnya masih di antrean, sehingga posisi, order, dan sinyalnya beku dan menahan slot auto-follow. Kelima token diputuskan terpisah |
+| 2 Nov 2026 | Lima token beku dibersihkan atas persetujuan pemilik: 9 order dibatalkan, sinyal 33, 34, 35, 39, 40 ditutup `expired` tanpa R, posisi `three` dan `IDOL` akun `all` dijual di harga terakhir (order 202 dan 203, rugi total $0,39). Simulasi tidak dimulai ulang | Semua sinyalnya v0 dan v2, jadi v3 tidak terkena. Backup sebelum perubahan: `dex-2026-11-02-220928`. Kedua order jual juga tercatat di bukti fill dengan `price_at` lama, jadi jangan dibaca sebagai eksekusi pasar normal |
 | | | |
 
 ---
