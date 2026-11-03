@@ -2,6 +2,7 @@
 
 namespace App\Services\Analysis;
 
+use App\Enums\WatchlistAction;
 use App\Models\Candle;
 use App\Models\Signal;
 use App\Models\Token;
@@ -34,10 +35,16 @@ class Backtester
      * Technical analysis at every closed candle since $since. Done once per token, because it does not
      * depend on the scenario being tested.
      *
+     * Only moments when the token was in the Market count, as live: a discovered token joined because
+     * it was rising, so its history before that would let the backtest pick winners in hindsight.
+     * $allHistory turns this off, to compare with earlier results.
+     *
      * @return array{token: Token, candles: list<Candle>, analyses: array<int, array{score: int, rsi: float|null, trend: string|null, market: string|null, atr: float, swing_low: float}>}
      */
-    public function prepare(Token $token, int $since): array
+    public function prepare(Token $token, int $since, bool $allHistory = false): array
     {
+        $windows = $allHistory ? [[PHP_INT_MIN, null]] : $this->marketWindows($token);
+
         $config = config('market.analysis');
         $candles = $this->candles($token, $config['timeframe']);
         $trendCandles = $this->candles($token, $config['trend_timeframe']);
@@ -59,7 +66,7 @@ class Backtester
                 $marketEnd++;
             }
 
-            if ($candle->open_time < $since || $index + 1 < TechnicalAnalyzer::MIN_CANDLES) {
+            if ($candle->open_time < $since || $index + 1 < TechnicalAnalyzer::MIN_CANDLES || ! self::inWindows($windows, $closedAt)) {
                 continue;
             }
 
@@ -157,6 +164,54 @@ class Backtester
         }
 
         return $trades;
+    }
+
+    /**
+     * When the token was in the Market, from its added and removed events. A seed token was picked by
+     * hand, not for a rise, so it counts from the start of its history until it was first removed.
+     *
+     * @return list<array{0: int, 1: int|null}> Start and end moments; a null end is still open.
+     */
+    public function marketWindows(Token $token): array
+    {
+        $events = $token->watchlistEvents()
+            ->whereIn('action', [WatchlistAction::Added, WatchlistAction::Removed])
+            ->orderBy('created_at')->orderBy('id')
+            ->get(['action', 'created_at']);
+
+        $windows = [];
+        $start = $token->source === 'seed' ? PHP_INT_MIN : null;
+
+        foreach ($events as $event) {
+            $moment = $event->created_at->getTimestamp();
+
+            if ($event->action === WatchlistAction::Added && $start === null) {
+                $start = $moment;
+            } elseif ($event->action === WatchlistAction::Removed && $start !== null) {
+                $windows[] = [$start, $moment];
+                $start = null;
+            }
+        }
+
+        if ($start !== null) {
+            $windows[] = [$start, null];
+        }
+
+        return $windows;
+    }
+
+    /**
+     * @param  list<array{0: int, 1: int|null}>  $windows
+     */
+    private static function inWindows(array $windows, int $moment): bool
+    {
+        foreach ($windows as [$start, $end]) {
+            if ($moment >= $start && ($end === null || $moment < $end)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

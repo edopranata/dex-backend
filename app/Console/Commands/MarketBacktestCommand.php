@@ -11,7 +11,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 
-#[Signature('market:backtest {--days=90 : Panjang periode} {--scenario=* : Nama skenario (default: semua)} {--token=* : Simbol token (default: semua)}')]
+#[Signature('market:backtest {--days=90 : Panjang periode} {--scenario=* : Nama skenario (default: semua)} {--token=* : Simbol token (default: semua)} {--semua-riwayat : Termasuk masa sebelum token masuk Market (hasilnya bias, hanya untuk perbandingan)}')]
 #[Description('Uji aturan sinyal pada candle historis; 2/3 periode awal untuk memilih aturan, 1/3 akhir untuk membuktikan')]
 class MarketBacktestCommand extends Command
 {
@@ -64,12 +64,13 @@ class MarketBacktestCommand extends Command
         $this->components->info(sprintf('%d token, %d hari. Pengembangan sampai %s, pengujian sesudahnya.', $tokens->count(), $days, date('Y-m-d', $split)));
 
         $prepared = [];
-        $this->withProgressBar($tokens, function (Token $token) use ($backtester, $since, &$prepared): void {
-            $prepared[] = $backtester->prepare($token, $since);
+        $allHistory = (bool) $this->option('semua-riwayat');
+        $this->withProgressBar($tokens, function (Token $token) use ($backtester, $since, $allHistory, &$prepared): void {
+            $prepared[] = $backtester->prepare($token, $since, $allHistory);
         });
         $this->newLine(2);
 
-        $report = ['generated_at' => now()->toIso8601String(), 'strategy_version' => StrategyVersion::current(), 'days' => $days, 'split_at' => $split, 'neutral_scores' => Backtester::NEUTRAL_SCORES, 'scenarios' => []];
+        $report = ['generated_at' => now()->toIso8601String(), 'strategy_version' => StrategyVersion::current(), 'all_history' => $allHistory, 'days' => $days, 'split_at' => $split, 'neutral_scores' => Backtester::NEUTRAL_SCORES, 'scenarios' => []];
         $rows = [];
 
         foreach ($names as $name) {

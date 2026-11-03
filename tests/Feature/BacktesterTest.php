@@ -15,7 +15,8 @@ const BACKTEST_START = 1_700_000_000 - (1_700_000_000 % 3600);
  */
 function backtestToken(array $after, float $liquidity = 10_000_000): Token
 {
-    $token = Token::factory()->create(['liquidity_usd' => $liquidity, 'symbol' => 'TST']);
+    // A seed token is in the Market for its whole history, so these tests see every candle.
+    $token = Token::factory()->create(['liquidity_usd' => $liquidity, 'symbol' => 'TST', 'source' => 'seed']);
     $time = BACKTEST_START;
 
     foreach ([...array_fill(0, 60, [1.0, 1.0, 1.0, 1.0]), ...$after] as [$open, $high, $low, $close]) {
@@ -43,6 +44,14 @@ function backtestBuyAtSignalCandle(?string $trend = 'bullish', float $rsi = 50.0
             'swing_high' => 1.1,
         ]);
     });
+}
+
+/**
+ * A Market event at a given moment; created_at is not mass assignable.
+ */
+function marketEvent(Token $token, string $action, int $moment): void
+{
+    $token->watchlistEvents()->make(['action' => $action, 'reason' => 'uji'])->forceFill(['created_at' => now()->setTimestamp($moment)])->save();
 }
 
 function backtestRun(Token $token, array $scenario = []): array
@@ -240,4 +249,49 @@ test('v4 scenarios skip buys that chase the day move', function () {
     $mockMove(5.0, 2.0);
     expect(backtestRun(backtestToken($after), ['min_below_high_24h_pct' => 5.0]))->toBe([])
         ->and(backtestRun(backtestToken($after), ['max_rise_24h_pct' => 15.0, 'min_below_high_24h_pct' => 1.0]))->toHaveCount(1);
+});
+
+test('a discovered token is only traded while it was in the Market', function () {
+    backtestBuyAtSignalCandle();
+    $after = [[1.0, 1.5, 0.99, 1.4]];
+    $signalClose = BACKTEST_START + 60 * 3600;
+    $token = backtestToken($after);
+    $token->update(['source' => 'discovery']);
+    $backtester = app(Backtester::class);
+    $run = fn (bool $all = false): array => $backtester->simulate($backtester->prepare($token->fresh(), BACKTEST_START, $all), []);
+
+    // Discovered an hour after the buy candle: the backtest may not take it, but an all-history run does.
+    marketEvent($token, 'added', $signalClose + 3600);
+
+    expect($run())->toBe([])->and($run(true))->toHaveCount(1);
+
+    // In the Market at the buy candle, then removed: taken.
+    $token->watchlistEvents()->delete();
+    marketEvent($token, 'added', $signalClose - 7200);
+    marketEvent($token, 'removed', $signalClose + 7200);
+
+    expect($run())->toHaveCount(1)
+        ->and($backtester->marketWindows($token))->toBe([[$signalClose - 7200, $signalClose + 7200]]);
+
+    // Removed before the buy candle and added back later: not taken.
+    $token->watchlistEvents()->delete();
+    marketEvent($token, 'added', $signalClose - 7200);
+    marketEvent($token, 'removed', $signalClose - 3600);
+    marketEvent($token, 'added', $signalClose + 3600);
+
+    expect($run())->toBe([]);
+});
+
+test('a seed token counts from the start of its history until it is first removed', function () {
+    backtestBuyAtSignalCandle();
+    $token = backtestToken([[1.0, 1.5, 0.99, 1.4]]);
+    $token->update(['source' => 'seed']);
+    $signalClose = BACKTEST_START + 60 * 3600;
+
+    expect(app(Backtester::class)->marketWindows($token))->toBe([[PHP_INT_MIN, null]])
+        ->and(backtestRun($token->fresh()))->toHaveCount(1);
+
+    marketEvent($token, 'removed', $signalClose - 3600);
+
+    expect(backtestRun($token->fresh()))->toBe([]);
 });
