@@ -35,7 +35,7 @@ Fase 1    ████████
 Fase 2    ██████████████████████████████████████  (pengumpulan data sinyal berjalan terus)
 Fase 3                      ████████████████
 Fase 4                                          ████████████████
-Go/No-Go                                                       ◆ 10 Des
+Go/No-Go                                                       ◆ paling cepat 10 Des
 Fase 5                                                          ████████████████
 Fase 6                                                                          → Jan 2027
 ```
@@ -46,10 +46,10 @@ Fase 6                                                                          
 | 1 | 30 Okt – 5 Nov | Stabil & terpantau | Tidak |
 | 2 | 30 Okt – 30 Nov | Validasi strategi (backtest + rekam jejak) | Tidak |
 | 3 | 13 – 26 Nov | Keamanan produksi | Tidak |
-| 4 | 27 Nov – 10 Des | Exchange **read-only** | Tidak (hanya membaca saldo) |
+| 4 | Setelah ada strategi kandidat | Eksekusi bayangan: biaya swap nyata tanpa transaksi | Tidak |
 | — | **10 Des** | **Go/No-Go** | Keputusan |
-| 5 | 11 – 24 Des | Live terbatas di CEX | **Ya, modal kecil** |
-| 6 | Jan 2027 → | Wallet Solana (Jupiter), otomasi penuh | Ya |
+| 5 | Paling cepat setelah Go/No-Go | Semi-otomatis lewat wallet Solana, tombol Beli di Telegram | **Ya, modal kecil** |
+| 6 | Setelah Fase 5 stabil | Otomatis penuh dengan circuit breaker, lalu EVM | Ya |
 
 Keputusan penting di tengah jalan: **perpanjang VPS sebelum 29 Nov 2026** (lihat Fase 3).
 
@@ -127,7 +127,7 @@ Jika belum terpenuhi pada 30 Nov: lanjutkan Fase 2 (perbaiki strategi), Fase 3 &
 
 ### Fase 3 — Keamanan produksi (13 – 26 Nov)
 
-Tujuan: server siap memegang API key exchange.
+Tujuan: server siap memegang private key wallet trading.
 
 - [ ] **Perpanjang VPS** (sebelum 29 Nov) — **dijadwalkan pemilik pada 25 Nov 2026**. Paket pendek saja, karena akan pindah VPS sebelum Fase 4/5
 - [ ] **IP dedicated** — IP NAT bersama melemahkan IP whitelist API exchange. **Diputuskan saat masuk Fase 4/5, bersama pindah VPS. 2 Nov 2026: tujuan pindah VPSMurah (bukan Biznet Gio), dengan IP dedicated opsional**
@@ -140,43 +140,45 @@ Tujuan: server siap memegang API key exchange.
 
 **Kriteria lolos:** semua item tercentang; akses hanya lewat HTTPS; restore backup berhasil diuji.
 
-### Fase 4 — Exchange read-only (27 Nov – 10 Des)
+### Fase 4 — Eksekusi bayangan (setelah ada strategi kandidat)
 
-Tujuan: aplikasi membaca akun exchange sungguhan **tanpa bisa bertransaksi**.
+Tujuan: mengukur biaya swap sungguhan **tanpa mengirim transaksi**. Diubah 3 Nov 2026 dari rencana exchange CEX, karena token yang dianalisis hampir semuanya hanya ada di DEX.
 
-- [ ] Integrasi **CCXT** (PHP) untuk Tokocrypto dan Indodax (exchange berizin OJK)
-- [ ] Simpan API key terenkripsi di Admin; **izin: baca saja**
-- [ ] Tampilkan saldo, posisi, dan riwayat trade asli; rekonsiliasi dengan simulator
-- [ ] Data pasar CEX (candle, orderbook) untuk koin yang terdaftar di exchange; pemetaan token DEX ↔ simbol CEX
-- [ ] Simulasi sinyal memakai harga & fee exchange asli (paper trading di orderbook nyata)
+- [ ] Setiap order paper meminta penawaran swap sungguhan dari agregator (Jupiter untuk Solana) tanpa mengirim transaksi, lalu menyimpan harga, price impact, biaya, dan rute
+- [ ] Uji jual kembali: penawaran swap balik untuk setiap posisi, supaya token pajak dan honeypot ketahuan sebelum ada uang sungguhan
+- [ ] Laporan selisih harga paper dengan harga swap nyata, per token dan per ukuran order
+- [ ] Hasil strategi dihitung ulang memakai biaya nyata
+- [ ] Pilih penyedia RPC Solana dan agregator, dan periksa dokumentasi terbarunya: order limit on-chain untuk TP, batas permintaan, dan biaya
 
-**Kriteria lolos:** saldo & riwayat di aplikasi cocok 100% dengan aplikasi exchange selama 7 hari.
+**Kriteria lolos:** selama 2 minggu, strategi tetap di atas kriteria Fase 2 setelah memakai biaya swap nyata, dan tidak ada token yang lolos analisis tetapi tidak bisa dijual.
 
-### Go/No-Go — 10 Desember 2026
+### Go/No-Go
 
-Lanjut ke Fase 5 **hanya jika** Fase 1–4 lolos. Catat keputusan dan alasannya di bagian 6.
+Lanjut ke Fase 5 **hanya jika** Fase 2, 3, dan 4 lolos, dan aplikasi sudah berjalan di VPS baru. Catat keputusan dan alasannya di bagian 6.
 
 **3 Nov 2026: Fase 5 ditunda.** v3 jauh dari kriteria Fase 2 (16 sinyal selesai, -0,46R, PF 0,44). Go/No-Go baru diadakan setelah satu versi strategi lolos kriteria Fase 2, jadi 10 Desember adalah tanggal paling cepat, bukan jadwal tetap.
 
-### Fase 5 — Live terbatas di CEX (11 – 24 Des)
+### Fase 5 — Semi-otomatis lewat wallet, Solana saja
 
-Tujuan: eksekusi sungguhan dengan modal kecil dan pengaman berlapis.
+Tujuan: eksekusi sungguhan dengan modal kecil, dan setiap pembelian disetujui pemilik.
 
-- [ ] Tombol **"Eksekusi sinyal"** dengan layar konfirmasi (bukan otomatis penuh)
-- [ ] Entry + **OCO TP/SL native di exchange** (tetap jalan walau server mati)
-- [ ] **Batas modal yang ditegakkan server** (lihat bagian 5), tidak bisa dilewati dari UI
-- [ ] **Kill switch**: batalkan semua order terbuka & matikan eksekusi dengan satu klik
-- [ ] API key: izin trade **tanpa withdraw**, IP whitelist ke IP dedicated
-- [ ] Rekonsiliasi harian order aplikasi vs exchange; notifikasi Telegram setiap eksekusi
+- [ ] **Alur Telegram:** sinyal masuk zona entry, pesan ke Telegram, pemilik menekan **Beli**, aplikasi swap lewat wallet, lalu memasang SL dan TP1-TP3. Setelah TP1, SL pindah ke harga entry, dan seterusnya, sama seperti paper trading
+- [ ] **Wallet khusus trading:** terpisah dari wallet utama, saldo kecil, dan aplikasi hanya boleh swap ke SOL atau USDC, tidak pernah transfer ke alamat lain
+- [ ] **Private key** terenkripsi di server, hanya dipakai oleh bagian yang menandatangani swap, dan tidak pernah tampil di log, panel, atau Telegram
+- [ ] **Batas modal yang ditegakkan server** (lihat bagian 5), tidak bisa dilewati dari UI atau Telegram
+- [ ] **Kill switch:** satu perintah Telegram atau tombol Admin menjual semua posisi dan mematikan eksekusi
+- [ ] **TP sebagai order on-chain** bila agregator menyediakannya, supaya tetap jalan walau server mati. SL tetap dijaga server
+- [ ] **Pengaman pemantau:** bila harga tidak terpantau beberapa menit, eksekusi berhenti sendiri dan pemilik mendapat peringatan
+- [ ] Batas slippage per swap, dan swap ditolak bila price impact melewati batas
+- [ ] Rekonsiliasi harian saldo wallet dengan catatan aplikasi; notifikasi Telegram untuk setiap swap
 
-**Kriteria lolos:** 2 minggu tanpa kesalahan operasional (order nyasar, SL tidak terpasang, selisih saldo).
+**Kriteria lolos:** 2-4 minggu tanpa kesalahan operasional (swap nyasar, SL tidak terpasang, selisih saldo), dan hasil nyata sejalan dengan hasil paper.
 
-### Fase 6 — Lanjutan (Januari 2027 →)
+### Fase 6 — Lanjutan
 
-- [ ] Wallet Solana khusus trading (terpisah dari wallet utama) + **Jupiter** Swap API & Trigger API (OTOCO, trailing stop)
-- [ ] Otomasi penuh opsional dengan *circuit breaker* (berhenti sendiri jika rugi harian/drawdown melewati batas)
-- [ ] Wallet EVM (Base/ETH/BSC) — paling akhir, karena stop loss bergantung pada server
-- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas — **31 Okt 2026: menu Wallet menampilkan alamat dari transaksi whale (tanpa skor atau label pemilik); skor baru dibuat jika data ini terbukti membantu**
+- [ ] **Otomatis penuh:** alur Fase 5 tanpa tombol Beli, dengan *circuit breaker* yang berhenti sendiri bila rugi harian atau drawdown melewati batas
+- [ ] Wallet EVM (Base/ETH/BSC) — paling akhir, karena gas, MEV, dan stop loss sepenuhnya bergantung pada server
+- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas — **31 Okt 2026: menu Wallet menampilkan alamat dari transaksi whale (tanpa skor atau label pemilik)**
 - [ ] **Token trending di X** lewat X Search xAI (±$40–60/bulan): hanya jika sentimen terbukti membantu di Fase 2
 
 ---
@@ -202,14 +204,15 @@ Besaran modal **ditentukan sendiri oleh pemilik**. Aplikasi wajib menegakkan bat
 
 | Batas | Nilai (diisi pemilik) | Saran awal |
 |---|---|---|
-| Total modal maksimum di exchange untuk aplikasi | ________ | Sejumlah yang siap hilang seluruhnya |
+| Total modal maksimum di wallet trading | ________ | Sejumlah yang siap hilang seluruhnya |
 | Maksimum per transaksi | ________ | 5–10% dari total modal aplikasi |
+| Slippage atau price impact maksimum per swap | ________ | 2–3% |
 | Risiko per transaksi (jarak ke SL × ukuran) | ________ | ≤ 1–2% dari total modal aplikasi |
 | Maksimum posisi terbuka | ________ | 3 |
 | Batas rugi harian (aplikasi berhenti otomatis) | ________ | 3–5% dari total modal aplikasi |
 | Pasangan yang diizinkan | ________ | Koin besar dengan likuiditas tinggi |
 
-Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak disimpan di akun yang terhubung ke aplikasi.
+Aturan tetap: wallet trading terpisah dari wallet utama, aplikasi hanya boleh swap dan tidak pernah transfer ke alamat lain, dan dana di luar batas di atas tidak disimpan di wallet itu.
 
 ---
 
@@ -237,6 +240,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 2 Nov 2026 | Token yang masih punya posisi, order tertunda, atau sinyal terbuka tidak bisa keluar dari Market lewat jalur apa pun; order dan sinyal baru ditolak untuk token di luar Market | Temuan produksi: `three`, `IDOL`, `worth`, `TRUE`, `AIN` keluar saat analisisnya masih di antrean, sehingga posisi, order, dan sinyalnya beku dan menahan slot auto-follow. Kelima token diputuskan terpisah |
 | 2 Nov 2026 | Lima token beku dibersihkan atas persetujuan pemilik: 9 order dibatalkan, sinyal 33, 34, 35, 39, 40 ditutup `expired` tanpa R, posisi `three` dan `IDOL` akun `all` dijual di harga terakhir (order 202 dan 203, rugi total $0,39). Simulasi tidak dimulai ulang | Semua sinyalnya v0 dan v2, jadi v3 tidak terkena. Backup sebelum perubahan: `dex-2026-11-02-220928`. Kedua order jual juga tercatat di bukti fill dengan `price_at` lama, jadi jangan dibaca sebagai eksekusi pasar normal |
 | 3 Nov 2026 | Review awal v3: syarat Buy dinaikkan dan diuji sebagai strategi `v4`; Strong Buy tidak diubah, sebagai pembanding; Fase 5 ditunda sampai ada versi yang lolos Fase 2 | 16 sinyal v3 selesai: -0,46R, PF 0,44, Buy -0,63R vs Strong Buy -0,19R. Sinyal setelah naik 15-40% dalam 24 jam 0 dari 4 menang, entry dalam 5% dari puncak 24 jam 1 dari 7. Dugaan kandidat terlalu lama dan masuk terlambat karena slot penuh tidak terbukti: rekomendasi beli datang dalam 1 jam, entry langsung, dan akun yang penuh melewati sinyal, bukan menunda. Filter baru wajib lolos backtest 90 hari dulu, karena filter ATR di atas EMA20, batas RSI, dan pullback sudah pernah ditolak |
+| 3 Nov 2026 | Fase 4-6 diubah dari exchange CEX ke swap lewat wallet: Fase 4 eksekusi bayangan tanpa transaksi, Fase 5 semi-otomatis di Solana dengan tombol Beli di Telegram, Fase 6 otomatis penuh lalu EVM | Token yang dianalisis hampir semuanya hanya ada di DEX. Pemilik sudah pernah memakai DEX dan memahami risikonya: stop loss bergantung pada server, private key di server, slippage, MEV, dan tidak ada perlindungan regulator |
 | | | |
 
 ---
@@ -247,7 +251,8 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 |---|---|---|
 | Strategi belum terbukti | Rugi saat live | Kriteria lolos Fase 2 & Go/No-Go |
 | Rate limit API gratis (IP NAT bersama) | Data candle/whale tertunda | Pantau 429, kurangi token, pertimbangkan IP dedicated |
-| VPS mati / jaringan putus | Sinyal & eksekusi berhenti | Auto-start, watchdog, SL/TP native di exchange |
-| Kebocoran API key | Dana di exchange | Enkripsi, tanpa izin withdraw, IP whitelist, 2FA, HTTPS |
-| Perubahan regulasi / exchange | Integrasi terputus | Pakai exchange berizin OJK, CCXT agar mudah berpindah |
+| VPS mati / jaringan putus | Sinyal & eksekusi berhenti, SL tidak dijaga | Auto-start, watchdog, TP sebagai order on-chain, eksekusi berhenti sendiri bila harga tidak terpantau, saldo wallet kecil |
+| Kebocoran private key wallet | Seluruh isi wallet trading | Wallet terpisah dan bersaldo kecil, key terenkripsi dan tidak pernah tampil, aplikasi hanya boleh swap, 2FA, HTTPS |
+| Slippage, MEV, token pajak atau honeypot | Harga eksekusi jauh lebih buruk, token tidak bisa dijual | Eksekusi bayangan di Fase 4, batas slippage per swap, uji jual kembali sebelum beli |
+| Agregator atau RPC berubah atau mati | Swap gagal | Adapter terpisah, peringatan bila swap gagal, kill switch |
 | Bug eksekusi order | Order salah | Konfirmasi manual, batas modal server-side, rekonsiliasi harian |
