@@ -46,6 +46,10 @@ class MarketBacktestCommand extends Command
         'stop+breakout+vol' => ['min_stop_pct' => 4.0, 'require_breakout' => true, 'min_volume_ratio' => 1.5],
         'stop+pullback0.25' => ['min_stop_pct' => 4.0, 'pullback_atr' => 0.25],
         'stop+pullback0.5' => ['min_stop_pct' => 4.0, 'pullback_atr' => 0.5],
+        // Strategy v4 (3 Nov 2026): do not chase a move. Live it applies to Buy only.
+        'stop+naik24<15' => ['min_stop_pct' => 4.0, 'max_rise_24h_pct' => 15.0],
+        'stop+5%-di-bawah-puncak' => ['min_stop_pct' => 4.0, 'min_below_high_24h_pct' => 5.0],
+        'stop+v4' => ['min_stop_pct' => 4.0, 'max_rise_24h_pct' => 15.0, 'min_below_high_24h_pct' => 5.0],
     ];
 
     public function handle(Backtester $backtester): int

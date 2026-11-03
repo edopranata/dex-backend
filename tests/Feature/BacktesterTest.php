@@ -216,3 +216,28 @@ test('entry setups: pullback waits for a lower entry, and extension and breakout
         ->and(backtestRun(backtestToken([[1.0, 1.5, 0.99, 1.4]]), ['max_extension_atr' => 2.0]))->toBe([])
         ->and(backtestRun(backtestToken([[1.0, 1.5, 0.99, 1.4]]), ['min_volume_ratio' => 1.5]))->toBe([]);
 });
+
+test('v4 scenarios skip buys that chase the day move', function () {
+    $mockMove = function (float $rise, float $belowHigh): void {
+        test()->mock(TechnicalAnalyzer::class, function (MockInterface $mock) use ($rise, $belowHigh): void {
+            $mock->shouldReceive('analyze')->andReturnUsing(fn ($candles): array => [
+                'score' => $candles->count() === 60 ? 95 : 10,
+                'available' => true,
+                'reasons' => [],
+                'indicators' => ['rsi' => 50.0, 'trend_higher_tf' => 'bullish', 'rise_24h_pct' => $rise, 'below_high_24h_pct' => $belowHigh],
+                'atr' => 0.05,
+                'swing_low' => 0.99,
+                'swing_high' => 1.1,
+            ]);
+        });
+    };
+    $after = [[1.0, 1.5, 0.99, 1.4]];
+
+    $mockMove(20.0, 10.0);
+    expect(backtestRun(backtestToken($after), ['max_rise_24h_pct' => 15.0]))->toBe([])
+        ->and(backtestRun(backtestToken($after), ['min_below_high_24h_pct' => 5.0]))->toHaveCount(1);
+
+    $mockMove(5.0, 2.0);
+    expect(backtestRun(backtestToken($after), ['min_below_high_24h_pct' => 5.0]))->toBe([])
+        ->and(backtestRun(backtestToken($after), ['max_rise_24h_pct' => 15.0, 'min_below_high_24h_pct' => 1.0]))->toHaveCount(1);
+});

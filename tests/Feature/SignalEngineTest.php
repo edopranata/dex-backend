@@ -90,7 +90,7 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v3-');
+    expect($version)->toStartWith('v4-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);
@@ -111,4 +111,96 @@ test('a buy with a stop too close becomes hold without a signal, and the rule is
         ->and($analysis->reasons[0])->toContain('jarak stop')
         ->and($token->signals()->count())->toBe(0)
         ->and(StrategyVersion::current())->not->toBe($version);
+});
+
+/**
+ * Technical analysis with a given day move, scoring high enough for a bullish recommendation.
+ */
+function fakeTechnicalMove(?float $rise, ?float $belowHigh): void
+{
+    test()->mock(TechnicalAnalyzer::class, fn ($mock) => $mock->shouldReceive('analyze')->andReturn([
+        'score' => 95,
+        'available' => true,
+        'reasons' => ['test'],
+        'indicators' => ['rsi' => 60.0, 'rise_24h_pct' => $rise, 'below_high_24h_pct' => $belowHigh],
+        'atr' => 0.02,
+        'swing_low' => 0.97,
+        'swing_high' => 1.1,
+    ]));
+}
+
+test('v4 holds a Buy that chases the move, with the reason, and opens no signal', function (?float $rise, ?float $belowHigh, string $reason) {
+    config(['market.analysis.thresholds.STRONG_BUY' => 101, 'market.analysis.buy_max_rise_24h_pct' => 15.0]);
+    fakeTechnicalMove($rise, $belowHigh);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+
+    expect($analysis->recommendation)->toBe(Recommendation::Hold)
+        ->and($analysis->reasons[0])->toContain($reason)
+        ->and($analysis->indicators['rise_24h_pct'])->toEqual($rise)
+        ->and($token->signals()->count())->toBe(0);
+})->with([
+    'risen 20% in a day' => [20.0, 12.0, 'naik 20.0% dalam 24 jam'],
+    'within 2% of the day high' => [8.0, 2.0, 'di bawah puncak 24 jam'],
+]);
+
+test('v4 keeps a Buy that waited for a pullback, and a Buy without a day of history', function (?float $rise, ?float $belowHigh) {
+    config(['market.analysis.thresholds.STRONG_BUY' => 101]);
+    fakeTechnicalMove($rise, $belowHigh);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+
+    expect($analysis->recommendation)->toBe(Recommendation::Buy)
+        ->and($token->signals()->count())->toBe(1);
+})->with([
+    'calm day, below the high' => [10.0, 8.0],
+    'exactly at the limits' => [15.0, 5.0],
+    'no history yet' => [null, null],
+]);
+
+test('v4 leaves a Strong Buy alone as the comparison', function () {
+    config(['market.analysis.thresholds.STRONG_BUY' => 1]);
+    fakeTechnicalMove(40.0, 0.5);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+
+    expect($analysis->recommendation)->toBe(Recommendation::StrongBuy)
+        ->and($token->signals()->count())->toBe(1);
+});
+
+test('v4 holds only Buys close to the day high by default, not a big rise alone', function () {
+    config(['market.analysis.thresholds.STRONG_BUY' => 101]);
+    fakeTechnicalMove(40.0, 12.0);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::Buy);
+});
+
+test('the v4 limits are part of the strategy version', function () {
+    $version = StrategyVersion::current();
+
+    expect($version)->toStartWith('v4-');
+
+    config(['market.analysis.buy_max_rise_24h_pct' => 20.0]);
+
+    expect(StrategyVersion::current())->not->toBe($version);
+});
+
+test('the day move compares the price with 24 candles ago and with their highest high', function () {
+    $closes = array_map(fn (int $i): float => 1.0 + $i * 0.01, range(0, 29));
+    $highs = array_map(fn (float $close): float => $close + 0.05, $closes);
+
+    $move = TechnicalAnalyzer::dayMove($closes, $highs, 1.29);
+
+    // 24 candles back is close #5 (1.05); the highest of the last 24 highs is 1.34.
+    expect(round($move['rise_24h_pct'], 2))->toBe(round((1.29 / 1.05 - 1) * 100, 2))
+        ->and(round($move['below_high_24h_pct'], 2))->toBe(round((1 - 1.29 / 1.34) * 100, 2))
+        ->and(TechnicalAnalyzer::dayMove(array_slice($closes, 0, 10), array_slice($highs, 0, 10), 1.0)['rise_24h_pct'])->toBeNull();
 });

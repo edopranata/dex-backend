@@ -80,6 +80,8 @@ class Backtester
                     'breakout' => $candle->close > max(array_map(fn (Candle $c): float => $c->high, array_slice($candles, max(0, $index - 24), min($index, 24))) ?: [INF]),
                     'atr' => $analysis['atr'],
                     'swing_low' => $analysis['swing_low'],
+                    'rise_24h_pct' => $analysis['indicators']['rise_24h_pct'] ?? null,
+                    'below_high_24h_pct' => $analysis['indicators']['below_high_24h_pct'] ?? null,
                 ];
             }
         }
@@ -262,6 +264,15 @@ class Backtester
         }
 
         if (isset($scenario['min_volume_ratio']) && ($analysis['volume_ratio'] ?? 0) < $scenario['min_volume_ratio']) {
+            return false;
+        }
+
+        // Strategy v4, applied to every buy here: history has no other scores to tell Buy from Strong Buy.
+        if (isset($scenario['max_rise_24h_pct']) && ($analysis['rise_24h_pct'] ?? null) !== null && $analysis['rise_24h_pct'] > $scenario['max_rise_24h_pct']) {
+            return false;
+        }
+
+        if (isset($scenario['min_below_high_24h_pct']) && ($analysis['below_high_24h_pct'] ?? null) !== null && $analysis['below_high_24h_pct'] < $scenario['min_below_high_24h_pct']) {
             return false;
         }
 

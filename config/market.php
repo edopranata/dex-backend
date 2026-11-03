@@ -326,7 +326,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v3',
+        'strategy_version' => 'v4',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [
@@ -355,6 +355,11 @@ return [
         'sl_atr_max' => 3.0,
         'signal_entry_expiry_hours' => 12,
         'signal_max_hours' => 72,
+        // v4: Buy (bukan Strong Buy) ditahan bila entry kurang dari sekian persen di bawah puncak 24 jam; di v3 sinyal
+        // seperti itu kebanyakan langsung kena stop. Backtest 30 hari (3 Nov): uji +0,24R PF 1,51 lawan +0,07R PF 1,13.
+        // Batas kenaikan 24 jam ikut diuji dan tidak membantu (uji +0,01R), jadi nonaktif. Null = nonaktif.
+        'buy_max_rise_24h_pct' => null,
+        'buy_min_below_high_24h_pct' => 5.0,
     ],
 
 ];

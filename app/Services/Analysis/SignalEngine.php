@@ -63,6 +63,10 @@ class SignalEngine
 
         [$recommendation, $overrideReason] = $this->recommend($finalScore, $technical, $onchain, $config);
 
+        if ($recommendation === Recommendation::Buy && ($chase = $this->chasesTheMove($technical['indicators'], $config)) !== null) {
+            [$recommendation, $overrideReason] = [Recommendation::Hold, $chase];
+        }
+
         $levels = $recommendation->isBullish() && $technical['atr']
             ? TradeLevels::calculate($price, $technical['atr'], $technical['swing_low'], $config['tp_r_multiples'], $config['sl_atr_min'], $config['sl_atr_max'])
             : [];
@@ -159,6 +163,31 @@ class SignalEngine
      * @param  array<string, mixed>  $config
      * @return array{0: Recommendation, 1: string|null}
      */
+    /**
+     * Strategy v4: a Buy (not a Strong Buy) right after a big rise, or close to the day's high, usually met
+     * its stop in v3. Null when the Buy may stand.
+     *
+     * @param  array<string, mixed>  $indicators
+     * @param  array<string, mixed>  $config
+     */
+    private function chasesTheMove(array $indicators, array $config): ?string
+    {
+        $rise = $indicators['rise_24h_pct'] ?? null;
+        $belowHigh = $indicators['below_high_24h_pct'] ?? null;
+        $maxRise = $config['buy_max_rise_24h_pct'] ?? null;
+        $minBelowHigh = $config['buy_min_below_high_24h_pct'] ?? null;
+
+        if ($maxRise !== null && $rise !== null && $rise > $maxRise) {
+            return sprintf('Skor cukup untuk Buy, tetapi harga sudah naik %.1f%% dalam 24 jam (batas %.0f%%): menunggu, tidak mengejar.', $rise, $maxRise);
+        }
+
+        if ($minBelowHigh !== null && $belowHigh !== null && $belowHigh < $minBelowHigh) {
+            return sprintf('Skor cukup untuk Buy, tetapi harga hanya %.1f%% di bawah puncak 24 jam (minimal %.0f%%): menunggu, tidak mengejar.', max(0, $belowHigh), $minBelowHigh);
+        }
+
+        return null;
+    }
+
     private function recommend(int $finalScore, array $technical, array $onchain, array $config): array
     {
         if ($onchain['is_honeypot']) {

@@ -140,10 +140,31 @@ class TechnicalAnalyzer
                 'atr_pct' => $atr !== null && $price > 0 ? $atr / $price * 100 : null,
                 'volume_ratio' => $volumeRatio,
                 'trend_higher_tf' => $trend,
+                ...self::dayMove($closes, $highs, $price),
             ],
             'atr' => $atr,
             'swing_low' => min(array_slice($lows, -24)),
             'swing_high' => max(array_slice($highs, -48)),
+        ];
+    }
+
+    /**
+     * How far the price rose over the last 24 candles, and how far it sits below their highest high.
+     * Both in percent; null without a day of history.
+     *
+     * @param  list<float>  $closes
+     * @param  list<float>  $highs
+     * @return array{rise_24h_pct: float|null, below_high_24h_pct: float|null}
+     */
+    public static function dayMove(array $closes, array $highs, float $price): array
+    {
+        $count = count($closes);
+        $dayAgo = $count > 24 ? (float) $closes[$count - 25] : 0.0;
+        $high = $highs === [] ? 0.0 : (float) max(array_slice($highs, -24));
+
+        return [
+            'rise_24h_pct' => $dayAgo > 0 ? ($price / $dayAgo - 1) * 100 : null,
+            'below_high_24h_pct' => $high > 0 ? (1 - $price / $high) * 100 : null,
         ];
     }
 
