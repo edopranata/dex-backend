@@ -130,7 +130,7 @@ Jika belum terpenuhi pada 30 Nov: lanjutkan Fase 2 (perbaiki strategi), Fase 3 &
 Tujuan: server siap memegang API key exchange.
 
 - [ ] **Perpanjang VPS** (sebelum 29 Nov) — **dijadwalkan pemilik pada 25 Nov 2026**. Paket pendek saja, karena akan pindah VPS sebelum Fase 4/5
-- [ ] **IP dedicated** — IP NAT bersama melemahkan IP whitelist API exchange. **Diputuskan saat masuk Fase 4/5, bersama pindah VPS ke Biznet Gio dengan downtime minimal**
+- [ ] **IP dedicated** — IP NAT bersama melemahkan IP whitelist API exchange. **Diputuskan saat masuk Fase 4/5, bersama pindah VPS. 2 Nov 2026: tujuan pindah VPSMurah (bukan Biznet Gio), dengan IP dedicated opsional**
 - [x] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`) — **29 Okt 2026: `https://dexsim.tune-in.trade`, port 8080 hanya localhost, firewall hanya SSH, cookie `secure`**
 - [x] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia — **31 Okt 2026: HTTP dialihkan 301 ke HTTPS; port 30040 dan 8080 tidak terjangkau dari luar**
 - [ ] **2FA (TOTP)** untuk login, wajib untuk admin — 2FA sudah tersedia sejak Fase 1, tinggal mewajibkannya untuk admin
@@ -155,6 +155,8 @@ Tujuan: aplikasi membaca akun exchange sungguhan **tanpa bisa bertransaksi**.
 ### Go/No-Go — 10 Desember 2026
 
 Lanjut ke Fase 5 **hanya jika** Fase 1–4 lolos. Catat keputusan dan alasannya di bagian 6.
+
+**3 Nov 2026: Fase 5 ditunda.** v3 jauh dari kriteria Fase 2 (16 sinyal selesai, -0,46R, PF 0,44). Go/No-Go baru diadakan setelah satu versi strategi lolos kriteria Fase 2, jadi 10 Desember adalah tanggal paling cepat, bukan jadwal tetap.
 
 ### Fase 5 — Live terbatas di CEX (11 – 24 Des)
 
@@ -234,6 +236,7 @@ Aturan tetap: API key **tanpa izin withdraw**; dana di luar batas di atas tidak 
 | 31 Okt 2026 | Groq ditambahkan sebagai pilihan provider AI (cadangan Gemini); xAI tetap tersedia | Akun xAI belum punya kredit, sehingga cadangan AI tidak berfungsi |
 | 2 Nov 2026 | Token yang masih punya posisi, order tertunda, atau sinyal terbuka tidak bisa keluar dari Market lewat jalur apa pun; order dan sinyal baru ditolak untuk token di luar Market | Temuan produksi: `three`, `IDOL`, `worth`, `TRUE`, `AIN` keluar saat analisisnya masih di antrean, sehingga posisi, order, dan sinyalnya beku dan menahan slot auto-follow. Kelima token diputuskan terpisah |
 | 2 Nov 2026 | Lima token beku dibersihkan atas persetujuan pemilik: 9 order dibatalkan, sinyal 33, 34, 35, 39, 40 ditutup `expired` tanpa R, posisi `three` dan `IDOL` akun `all` dijual di harga terakhir (order 202 dan 203, rugi total $0,39). Simulasi tidak dimulai ulang | Semua sinyalnya v0 dan v2, jadi v3 tidak terkena. Backup sebelum perubahan: `dex-2026-11-02-220928`. Kedua order jual juga tercatat di bukti fill dengan `price_at` lama, jadi jangan dibaca sebagai eksekusi pasar normal |
+| 3 Nov 2026 | Review awal v3: syarat Buy dinaikkan dan diuji sebagai strategi `v4`; Strong Buy tidak diubah, sebagai pembanding; Fase 5 ditunda sampai ada versi yang lolos Fase 2 | 16 sinyal v3 selesai: -0,46R, PF 0,44, Buy -0,63R vs Strong Buy -0,19R. Sinyal setelah naik 15-40% dalam 24 jam 0 dari 4 menang, entry dalam 5% dari puncak 24 jam 1 dari 7. Dugaan kandidat terlalu lama dan masuk terlambat karena slot penuh tidak terbukti: rekomendasi beli datang dalam 1 jam, entry langsung, dan akun yang penuh melewati sinyal, bukan menunda. Filter baru wajib lolos backtest 90 hari dulu, karena filter ATR di atas EMA20, batas RSI, dan pullback sudah pernah ditolak |
 | | | |
 
 ---
