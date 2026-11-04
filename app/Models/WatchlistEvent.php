@@ -7,9 +7,7 @@ use App\Observers\WatchlistEventObserver;
 use Database\Factories\WatchlistEventFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -17,16 +15,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[ObservedBy(WatchlistEventObserver::class)]
 class WatchlistEvent extends Model
 {
-    /** @use HasFactory<WatchlistEventFactory> */
-    use HasFactory, MassPrunable;
-
     /**
-     * @return Builder<static>
+     * Kept for good: when a token entered and left the Market is what a backtest without hindsight needs,
+     * and the table stays tiny.
+     *
+     * @use HasFactory<WatchlistEventFactory>
      */
-    public function prunable(): Builder
-    {
-        return static::query()->where('created_at', '<', now()->subDays(60));
-    }
+    use HasFactory;
 
     /**
      * @return array<string, string>
