@@ -174,13 +174,13 @@ test('v4 leaves a Strong Buy alone as the comparison', function () {
         ->and($token->signals()->count())->toBe(1);
 });
 
-test('v4 holds only Buys close to the day high by default, not a big rise alone', function () {
+test('v4 holds a Buy after a big rise by default, even well below the day high', function () {
     config(['market.analysis.thresholds.STRONG_BUY' => 101]);
     fakeTechnicalMove(40.0, 12.0);
     $token = Token::factory()->create(['price_usd' => 1.0]);
     TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
 
-    expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::Buy);
+    expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::Hold);
 });
 
 test('the v4 limits are part of the strategy version', function () {

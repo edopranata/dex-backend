@@ -355,10 +355,10 @@ return [
         'sl_atr_max' => 3.0,
         'signal_entry_expiry_hours' => 12,
         'signal_max_hours' => 72,
-        // v4: Buy (bukan Strong Buy) ditahan bila entry kurang dari sekian persen di bawah puncak 24 jam; di v3 sinyal
-        // seperti itu kebanyakan langsung kena stop. Backtest 30 hari (3 Nov): uji +0,24R PF 1,51 lawan +0,07R PF 1,13.
-        // Batas kenaikan 24 jam ikut diuji dan tidak membantu (uji +0,01R), jadi nonaktif. Null = nonaktif.
-        'buy_max_rise_24h_pct' => null,
+        // v4: Buy (bukan Strong Buy) ditahan bila harga sudah naik lebih dari ini dalam 24 jam, atau entry kurang dari
+        // sekian persen di bawah puncak 24 jam; di v3 sinyal seperti itu kebanyakan langsung kena stop. Backtest yang
+        // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.
+        'buy_max_rise_24h_pct' => 15.0,
         'buy_min_below_high_24h_pct' => 5.0,
     ],
 
