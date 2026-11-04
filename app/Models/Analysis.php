@@ -25,13 +25,14 @@ class Analysis extends Model
     use HasFactory, MassPrunable;
 
     /**
-     * Keep analyses that produced a signal so signal history stays intact.
+     * Keep analyses that produced a signal so signal history stays intact. The rest stay 90 days: they
+     * hold every score as it was at that hour, which a backtest of the full score needs (about 4 MB a day).
      *
      * @return Builder<static>
      */
     public function prunable(): Builder
     {
-        return static::query()->where('created_at', '<', now()->subDays(14))->whereDoesntHave('signals');
+        return static::query()->where('created_at', '<', now()->subDays(90))->whereDoesntHave('signals');
     }
 
     /**
