@@ -132,7 +132,7 @@ Jika belum terpenuhi pada 30 Nov: lanjutkan Fase 2 (perbaiki strategi), Fase 3 &
 
 Tujuan: server siap memegang private key wallet trading.
 
-- [ ] **Perpanjang VPS** (sebelum 29 Nov) — **dijadwalkan pemilik pada 25 Nov 2026**. Paket pendek saja, karena akan pindah VPS sebelum Fase 4/5
+- [ ] **Perpanjang VPS** (sebelum 29 Nov) — **dijadwalkan pemilik pada 25 Nov 2026**. Paket pendek saja, karena akan pindah VPS sebelum Fase 4/5. **5 Nov 2026: pindah ke VPSMurah dibatalkan; VPS ini diperpanjang 1 bulan untuk sementara** (lihat `docs/RENCANA_VPS_DAN_AKUN.md` di workspace)
 - [ ] **IP dedicated** — IP NAT bersama melemahkan IP whitelist API exchange. **Diputuskan saat masuk Fase 4/5, bersama pindah VPS. 2 Nov 2026: tujuan pindah VPSMurah (bukan Biznet Gio), dengan IP dedicated opsional**
 - [x] Domain + **Cloudflare Tunnel** (HTTPS), lalu tutup port 30040 (`WEB_BIND=127.0.0.1`) — **29 Okt 2026: `https://dexsim.tune-in.trade`, port 8080 hanya localhost, firewall hanya SSH, cookie `secure`**
 - [x] Cloudflare: aktifkan *Always Use HTTPS*; hapus port forwarding 30040 dan domain di panel proxy vpsindonesia — **31 Okt 2026: HTTP dialihkan 301 ke HTTPS; port 30040 dan 8080 tidak terjangkau dari luar**
