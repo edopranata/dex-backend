@@ -177,11 +177,12 @@ class SignalEngine
         $maxRise = $config['buy_max_rise_24h_pct'] ?? null;
         $minBelowHigh = $config['buy_min_below_high_24h_pct'] ?? null;
 
-        if ($maxRise !== null && $rise !== null && $rise > $maxRise) {
+        // Null or 0 switches a rule off, so the admin panel can turn either one off on its own.
+        if ($maxRise > 0 && $rise !== null && $rise > $maxRise) {
             return sprintf('Skor cukup untuk Buy, tetapi harga sudah naik %.1f%% dalam 24 jam (batas %.0f%%): menunggu, tidak mengejar.', $rise, $maxRise);
         }
 
-        if ($minBelowHigh !== null && $belowHigh !== null && $belowHigh < $minBelowHigh) {
+        if ($minBelowHigh > 0 && $belowHigh !== null && $belowHigh < $minBelowHigh) {
             return sprintf('Skor cukup untuk Buy, tetapi harga hanya %.1f%% di bawah puncak 24 jam (minimal %.0f%%): menunggu, tidak mengejar.', max(0, $belowHigh), $minBelowHigh);
         }
 

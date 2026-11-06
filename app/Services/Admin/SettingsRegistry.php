@@ -162,6 +162,8 @@ class SettingsRegistry
                     ['key' => 'market.analysis.thresholds.BUY', 'label' => 'Skor Buy ≥', 'type' => 'int', 'min' => 0, 'max' => 100],
                     ['key' => 'market.analysis.min_stop_pct', 'label' => 'Jarak stop minimum untuk sinyal (%)', 'type' => 'float', 'min' => 0, 'max' => 50, 'step' => 0.5, 'description' => 'Stop lebih sempit dari ini tidak menjadi sinyal, karena fee dan slippage memakan hasilnya. 0 = nonaktif.'],
                     ['key' => 'market.analysis.min_onchain_score', 'label' => 'Skor keamanan minimum untuk Buy', 'type' => 'int', 'min' => 0, 'max' => 100],
+                    ['key' => 'market.analysis.buy_max_rise_24h_pct', 'label' => 'Tahan Buy bila naik dalam 24 jam lebih dari (%)', 'type' => 'float', 'min' => 0, 'max' => 1000, 'step' => 1, 'description' => 'Aturan v4; Strong Buy tidak terpengaruh. 0 = nonaktif. Mengubahnya membuat versi strategi baru.'],
+                    ['key' => 'market.analysis.buy_min_below_high_24h_pct', 'label' => 'Tahan Buy bila entry kurang dari (%) di bawah puncak 24 jam', 'type' => 'float', 'min' => 0, 'max' => 100, 'step' => 0.5, 'description' => 'Aturan v4; Strong Buy tidak terpengaruh. 0 = nonaktif. Mengubahnya membuat versi strategi baru.'],
                 ],
             ],
         ];

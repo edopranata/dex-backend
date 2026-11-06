@@ -4,6 +4,7 @@ use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Token;
 use App\Models\TokenSecurityCheck;
+use App\Models\User;
 use App\Services\Analysis\MarketContext;
 use App\Services\Analysis\SignalEngine;
 use App\Services\Analysis\StrategyVersion;
@@ -181,6 +182,35 @@ test('v4 holds a Buy after a big rise by default, even well below the day high',
     TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
 
     expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::Hold);
+});
+
+test('a v4 rule set to 0 is off, so the other one can run alone', function () {
+    config(['market.analysis.thresholds.STRONG_BUY' => 101, 'market.analysis.buy_min_below_high_24h_pct' => 0.0]);
+    fakeTechnicalMove(8.0, 2.0);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::Buy);
+
+    config(['market.analysis.buy_max_rise_24h_pct' => 0.0]);
+    fakeTechnicalMove(40.0, 12.0);
+    $other = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($other)->create(['risk_score' => 100]);
+
+    expect(app(SignalEngine::class)->analyze($other)->recommendation)->toBe(Recommendation::Buy);
+});
+
+test('the v4 rules can be set from the admin panel, and turning one off makes a new strategy version', function () {
+    $admin = User::factory()->create(['is_admin' => true]);
+    $before = StrategyVersion::current();
+
+    $this->actingAs($admin)->putJson('/api/admin/settings', ['values' => ['market.analysis.buy_min_below_high_24h_pct' => 0]])->assertOk();
+
+    expect(config('market.analysis.buy_min_below_high_24h_pct'))->toEqual(0.0)
+        ->and(config('market.analysis.buy_max_rise_24h_pct'))->toEqual(15.0)
+        ->and(StrategyVersion::current())->toStartWith('v4-')->not->toBe($before);
+
+    $this->actingAs($admin)->putJson('/api/admin/settings', ['values' => ['market.analysis.buy_max_rise_24h_pct' => -1]])->assertUnprocessable();
 });
 
 test('the v4 limits are part of the strategy version', function () {
