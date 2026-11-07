@@ -85,3 +85,26 @@ test('tokens out of the Market get their 15m candles in turns, the oldest first'
         ->and($pushed($inMarket))->toBeFalse()
         ->and($pushed($candidate))->toBeFalse();
 });
+
+test('an admin can fetch 1,000 15m candles for a token whose data is older than the backfill reaches', function () {
+    Queue::fake();
+    $stale = everInMarketToken(leftDaysAgo: 12);
+    $fresh = everInMarketToken(leftDaysAgo: 1);
+    $candidate = Token::factory()->create(['is_active' => false]);
+    storeQuarterCandles($stale, 24 * 9);
+    storeQuarterCandles($fresh, 2);
+
+    $response = $this->actingAs($this->admin)->getJson('/api/admin/tokens')->assertOk();
+    $rows = collect($response->json('tokens'))->keyBy('id');
+
+    expect($rows[$stale->id]['gap'])->toBeTrue()
+        ->and($rows[$fresh->id]['gap'])->toBeFalse()
+        ->and($response->json('summary.gaps'))->toBe(1);
+
+    $this->postJson("/api/admin/tokens/{$stale->id}/candles")->assertStatus(202)->assertJsonPath('message', fn (string $m): bool => str_contains($m, '1.000'));
+
+    Queue::assertPushed(SyncTokenCandles::class, fn (SyncTokenCandles $job): bool => $job->token->is($stale) && $job->timeframes === [] && $job->quarters === 1000);
+
+    $this->postJson("/api/admin/tokens/{$candidate->id}/candles")->assertNotFound();
+    $this->actingAs(User::factory()->create())->postJson("/api/admin/tokens/{$stale->id}/candles")->assertForbidden();
+});

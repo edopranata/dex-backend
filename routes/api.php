@@ -142,6 +142,7 @@ Route::middleware(['auth:sanctum', 'password.changed', 'can:admin'])->prefix('ad
     Route::get('logs/{name}/download', [LogController::class, 'download'])->name('logs.download');
 
     Route::get('tokens', [AdminTokenController::class, 'index'])->name('tokens.index');
+    Route::post('tokens/{token}/candles', [AdminTokenController::class, 'fillCandles'])->middleware('throttle:20,1')->name('tokens.candles');
 
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
     Route::post('tasks/run', [TaskController::class, 'run'])->middleware('throttle:20,1')->name('tasks.run');

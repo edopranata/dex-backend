@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Enums\WatchlistAction;
 use App\Http\Controllers\Controller;
+use App\Jobs\SyncTokenCandles;
 use App\Models\Token;
 use App\Models\WatchlistEvent;
+use App\Services\MarketData\CandleSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -63,6 +65,8 @@ class TokenController extends Controller
                 'candles' => $stored->mapWithKeys(fn ($row): array => [$row->timeframe => (int) $row->total])->all(),
                 'candle_rows' => (int) $stored->sum('total'),
                 'latest_15m_at' => $latest === null ? null : date(DATE_ATOM, (int) $latest),
+                // Older than the backfill reaches: the next turn leaves a hole unless filled by hand.
+                'gap' => $latest === null || (int) $latest < now()->subDays((int) config('market.candles.backfill_days'))->getTimestamp(),
                 // In the Market every 15 minutes; out of it in turns (market:candles --out-of-market).
                 'fetch' => $token->is_active ? 'every_15m' : 'rotation',
                 'signals' => $token->signals_count,
@@ -72,6 +76,20 @@ class TokenController extends Controller
             ->values();
 
         return response()->json(['summary' => $this->summary($rows), 'tokens' => $rows]);
+    }
+
+    /**
+     * Fetch the most 15m candles GeckoTerminal gives in one request (±10 days) for one token and build its
+     * higher timeframes from them, through the same rate-limited queue. A gap longer than that also fetches
+     * 1h, 4h and 1d directly, like a token coming back to the Market.
+     */
+    public function fillCandles(Token $token): JsonResponse
+    {
+        abort_unless(Token::query()->everInMarket()->whereKey($token->id)->exists(), 404);
+
+        SyncTokenCandles::dispatch($token, [], CandleSyncService::MAX_CANDLES);
+
+        return response()->json(['message' => "{$token->symbol}: pengambilan 1.000 candle 15m masuk antrean."], 202);
     }
 
     /**
@@ -88,6 +106,7 @@ class TokenController extends Controller
             'tokens' => $rows->count(),
             'in_market' => $rows->where('in_market', true)->count(),
             'out_of_market' => $out->count(),
+            'gaps' => $rows->where('gap', true)->count(),
             'out_groups' => collect(self::OUT_GROUPS)->map(fn (array $range): int => $out->filter(fn (array $row): bool => $row['out_days'] !== null && $row['out_days'] >= $range[0] && $row['out_days'] < $range[1])->count())->all(),
             'rotation_per_hour' => $rotation,
             // How often each token out of the Market gets its turn; the data stays whole while under the backfill.

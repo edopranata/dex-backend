@@ -9,6 +9,9 @@ class CandleSyncService
 {
     private const QUARTER = 900;
 
+    /** The most candles GeckoTerminal returns in one request. */
+    public const MAX_CANDLES = 1000;
+
     public function __construct(private GeckoTerminalClient $geckoTerminal) {}
 
     /**
@@ -16,9 +19,11 @@ class CandleSyncService
      * 1h, 4h and 1d are built from it. A higher timeframe is fetched directly only when its last candle is
      * older than the 15m backfill can reach, as for a new token or one that was out of the Market for long.
      *
+     * @param  int|null  $quarters  Fetch this many 15m candles instead of what the gap needs, up to 1,000:
+     *                              an admin filling a long gap by hand.
      * @return array{requests: int, received: int, built: int}
      */
-    public function refresh(Token $token): array
+    public function refresh(Token $token, ?int $quarters = null): array
     {
         if ($this->network($token) === null) {
             return ['requests' => 0, 'received' => 0, 'built' => 0];
@@ -41,7 +46,9 @@ class CandleSyncService
 
         $latest = $this->latest($token, '15m');
         $behind = $latest === null ? PHP_INT_MAX : intdiv(max(0, $now - $latest), self::QUARTER) + 2;
-        $limit = min(intdiv($reach, self::QUARTER), max((int) $config['sync_limit'], $behind));
+        $limit = $quarters !== null
+            ? max(1, min(self::MAX_CANDLES, $quarters))
+            : min(intdiv($reach, self::QUARTER), max((int) $config['sync_limit'], $behind));
         $fetched = $this->sync($token, '15m', $limit);
         $requests++;
         $received += $fetched;

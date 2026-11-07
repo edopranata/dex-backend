@@ -168,3 +168,14 @@ test('one candle run every 15 minutes replaces the separate 1h, 4h and 1d runs, 
         'market:candles --out-of-market' => '20 * * * *',
     ]);
 });
+
+test('a fill by hand asks for the most candles one request gives, whatever the gap', function () {
+    storeCandles($this->token, '15m', quarters('2026-11-08 09:00', '2026-11-08 10:00'));
+    storeCandles($this->token, '1h', [at('2026-11-08 09:00')]);
+    storeCandles($this->token, '4h', [at('2026-11-08 08:00')]);
+    storeCandles($this->token, '1d', [at('2026-11-08 00:00')]);
+
+    app(CandleSyncService::class)->refresh($this->token, 5000);
+
+    expect(geckoRequests())->toBe([['period' => 'minute', 'limit' => 1000]]);
+});
