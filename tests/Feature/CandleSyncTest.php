@@ -158,10 +158,13 @@ test('15m candles are kept for 90 days, the rest for good', function () {
         ->and($this->token->candles()->where('timeframe', '1h')->count())->toBe(1);
 });
 
-test('one candle run every 15 minutes replaces the separate 1h, 4h and 1d runs', function () {
-    $commands = collect(app(Schedule::class)->events())->filter(fn ($event): bool => str_contains((string) $event->command, 'market:candles'));
+test('one candle run every 15 minutes replaces the separate 1h, 4h and 1d runs, and the rest take turns hourly', function () {
+    $commands = collect(app(Schedule::class)->events())
+        ->filter(fn ($event): bool => str_contains((string) $event->command, 'market:candles'))
+        ->mapWithKeys(fn ($event): array => [trim(substr((string) $event->command, strpos((string) $event->command, 'market:candles'))) => $event->expression]);
 
-    expect($commands)->toHaveCount(1)
-        ->and($commands->first()->expression)->toBe('0,15,30,45 * * * *')
-        ->and((string) $commands->first()->command)->not->toContain('--timeframe');
+    expect($commands->all())->toBe([
+        'market:candles' => '0,15,30,45 * * * *',
+        'market:candles --out-of-market' => '20 * * * *',
+    ]);
 });

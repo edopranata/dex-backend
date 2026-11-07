@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\WatchlistAction;
 use Database\Factories\TokenFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -97,6 +98,17 @@ class Token extends Model
     public function scopeActive(Builder $query): void
     {
         $query->where('is_active', true);
+    }
+
+    /**
+     * Tokens in the Market now or at some point before; candidates that never entered are left out.
+     *
+     * @param  Builder<Token>  $query
+     */
+    public function scopeEverInMarket(Builder $query): void
+    {
+        $query->where(fn (Builder $inner) => $inner->where('is_active', true)
+            ->orWhereHas('watchlistEvents', fn (Builder $events) => $events->where('action', WatchlistAction::Added)));
     }
 
     /**

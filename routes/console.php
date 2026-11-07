@@ -20,6 +20,8 @@ Schedule::command('market:snapshots')->hourly();
 // 1d are built from it (8 Nov), so a cycle is about 20 candle + 20 whale requests instead of 60, plus the
 // separate 4h and 1d runs that are no longer needed.
 Schedule::command('market:candles')->cron('0,15,30,45 * * * *')->withoutOverlapping();
+// Tokens that left the Market keep their 15m data, in turns at a minute the queue is usually empty.
+Schedule::command('market:candles --out-of-market')->hourlyAt(20)->withoutOverlapping();
 
 Schedule::command('market:whales')->cron('0,15,30,45 * * * *')->withoutOverlapping();
 

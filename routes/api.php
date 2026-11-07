@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Admin\SettingsController;
 use App\Http\Controllers\Api\Admin\SystemController;
 use App\Http\Controllers\Api\Admin\TaskController;
 use App\Http\Controllers\Api\Admin\TelegramController;
+use App\Http\Controllers\Api\Admin\TokenController as AdminTokenController;
 use App\Http\Controllers\Api\Admin\UserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ContainerMetricController;
@@ -139,6 +140,8 @@ Route::middleware(['auth:sanctum', 'password.changed', 'can:admin'])->prefix('ad
 
     Route::get('logs', [LogController::class, 'index'])->name('logs.index');
     Route::get('logs/{name}/download', [LogController::class, 'download'])->name('logs.download');
+
+    Route::get('tokens', [AdminTokenController::class, 'index'])->name('tokens.index');
 
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
     Route::post('tasks/run', [TaskController::class, 'run'])->middleware('throttle:20,1')->name('tasks.run');

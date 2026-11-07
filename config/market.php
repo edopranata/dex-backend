@@ -64,6 +64,10 @@ return [
         'built' => ['1h', '4h', '1d'],
         // 15m menjadi sumber, jadi disimpan lebih lama dari timeframe lain yang dulu diambil sendiri.
         'keep_15m_days' => 90,
+        // Token yang sudah keluar Market tetap diambil 15m-nya, bergiliran: sekian token per jam, yang candle-nya
+        // paling lama duluan. Tanpa batas jumlah token; data tetap utuh selama giliran tiap token di bawah
+        // backfill_days.
+        'out_of_market_per_hour' => (int) env('CANDLES_OUT_OF_MARKET_PER_HOUR', 10),
     ],
 
     // Jobs that call GeckoTerminal run on their own queue (worker "queue-market"), so analysis
