@@ -20,13 +20,13 @@ class PerformanceReport
 {
     private const MAX_CURVE_POINTS = 300;
 
-    private const MIN_SIGNALS = 30;
+    public const MIN_SIGNALS = 30;
 
-    private const MIN_AVG_R = 0.2;
+    public const MIN_AVG_R = 0.2;
 
-    private const MIN_PROFIT_FACTOR = 1.3;
+    public const MIN_PROFIT_FACTOR = 1.3;
 
-    private const MAX_DRAWDOWN_PCT = 15.0;
+    public const MAX_DRAWDOWN_PCT = 15.0;
 
     public function __construct(private PortfolioSummary $portfolio, private AutoFollowRisk $risk) {}
 
@@ -62,6 +62,51 @@ class PerformanceReport
                 ->sortByDesc('total_r')
                 ->values(),
             'accounts' => $accounts,
+            'shadow_exit' => $this->shadowExit($signals),
+        ];
+    }
+
+    /**
+     * What the closed signals would have given had each one been closed at the first analysis that was no
+     * longer bullish, with the targets reached before that kept. Costs are taken as the real ones. Only signals
+     * entered after the shadow started count, because a downgrade before then was not recorded.
+     *
+     * @param  Collection<int, Signal>  $signals
+     * @return array{since: string, signals: int, downgraded: int, actual_r: float, shadow_r: float}
+     */
+    private function shadowExit(Collection $signals): array
+    {
+        $since = Carbon::parse((string) config('market.analysis.shadow_exit_since'), 'UTC');
+        $observed = $signals->filter(fn (Signal $signal): bool => $signal->entered_at !== null && $signal->entered_at->gte($since));
+        $downgraded = 0;
+        $shadow = 0.0;
+
+        foreach ($observed as $signal) {
+            $risk = $signal->entry_price - $signal->stop_loss;
+
+            if ($signal->downgraded_at === null || $signal->downgraded_at->gt($signal->closed_at) || $risk <= 0) {
+                $shadow += (float) $signal->net_r;
+
+                continue;
+            }
+
+            $downgraded++;
+            $taken = (int) $signal->downgrade_tp_hit;
+            $gross = (1 - $taken / 3) * ($signal->downgrade_price - $signal->entry_price) / $risk;
+
+            foreach (array_slice($signal->takeProfits(), 0, $taken) as $target) {
+                $gross += ($target - $signal->entry_price) / $risk / 3;
+            }
+
+            $shadow += $gross - (float) $signal->cost_r;
+        }
+
+        return [
+            'since' => $since->toIso8601String(),
+            'signals' => $observed->count(),
+            'downgraded' => $downgraded,
+            'actual_r' => round((float) $observed->sum('net_r'), 2),
+            'shadow_r' => round($shadow, 2),
         ];
     }
 
@@ -137,15 +182,7 @@ class PerformanceReport
         $account = User::autoFollower($key);
         $summary = $this->portfolio->for($account);
         $snapshots = EquitySnapshot::query()->where('user_id', $account->id)->orderBy('sampled_at')->get(['equity_usd', 'sampled_at']);
-
-        // The account starts at its starting balance, so that is the first peak.
-        $peak = $summary['starting_balance'];
-        $drawdown = null;
-
-        foreach ($snapshots as $snapshot) {
-            $peak = max($peak, $snapshot->equity_usd);
-            $drawdown = max($drawdown ?? 0.0, ($peak - $snapshot->equity_usd) / $peak * 100);
-        }
+        $drawdown = self::maxDrawdownPct($snapshots, $summary['starting_balance']);
 
         $step = max(1, (int) ceil($snapshots->count() / self::MAX_CURVE_POINTS));
         $curve = $snapshots->filter(fn (EquitySnapshot $snapshot, int $index): bool => $index % $step === 0 || $index === $snapshots->count() - 1)
@@ -159,7 +196,7 @@ class PerformanceReport
             'started_at' => $account->created_at?->toIso8601String(),
             ...$summary,
             ...$this->closedSignals($account),
-            'max_drawdown_pct' => $drawdown === null ? null : round($drawdown, 2),
+            'max_drawdown_pct' => $drawdown,
             'curve_started_at' => $snapshots->first()?->sampled_at?->toIso8601String(),
             'curve' => $curve,
             'limits' => [
@@ -171,6 +208,25 @@ class PerformanceReport
             'daily_loss_reached' => $this->risk->dailyLossReached($account),
             'has_room' => $this->risk->hasRoom($account),
         ];
+    }
+
+    /**
+     * The deepest fall from a peak of the equity curve, in percent. The account starts at its starting
+     * balance, so that is the first peak. Null without any snapshot.
+     *
+     * @param  iterable<EquitySnapshot>  $snapshots  Oldest first.
+     */
+    public static function maxDrawdownPct(iterable $snapshots, float $startingBalance): ?float
+    {
+        $peak = $startingBalance;
+        $drawdown = null;
+
+        foreach ($snapshots as $snapshot) {
+            $peak = max($peak, $snapshot->equity_usd);
+            $drawdown = max($drawdown ?? 0.0, ($peak - $snapshot->equity_usd) / $peak * 100);
+        }
+
+        return $drawdown === null ? null : round($drawdown, 2);
     }
 
     /**

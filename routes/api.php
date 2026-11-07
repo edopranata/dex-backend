@@ -74,6 +74,8 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
 
     Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
     Route::get('reports/performance', [ReportController::class, 'performance'])->name('reports.performance');
+    Route::get('reports/accounts/{key}/report', [ReportController::class, 'accountReport'])->whereIn('key', array_keys(User::AUTO_FOLLOW_ACCOUNTS))->name('reports.account-report');
+    Route::get('reports/lots/{order}', [ReportController::class, 'lot'])->name('reports.lot');
     Route::get('reports/accounts/{key}/portfolio', [ReportController::class, 'accountPortfolio'])->whereIn('key', array_keys(User::AUTO_FOLLOW_ACCOUNTS))->name('reports.account-portfolio');
 
     Route::get('market/overview', [MarketController::class, 'overview'])->name('market.overview');

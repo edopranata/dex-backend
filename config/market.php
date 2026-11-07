@@ -355,6 +355,9 @@ return [
         'sl_atr_max' => 3.0,
         'signal_entry_expiry_hours' => 12,
         'signal_max_hours' => 72,
+        // Catatan bayangan calon aturan v5 (keluar saat rekomendasi tidak lagi Buy/Strong Buy), tanpa mengubah
+        // trading. Hanya sinyal yang entry setelah waktu ini (UTC) yang terpantau penuh sejak awal.
+        'shadow_exit_since' => env('SIGNAL_SHADOW_EXIT_SINCE', '2026-11-07 13:00:00'),
         // v4: Buy (bukan Strong Buy) ditahan bila harga sudah naik lebih dari ini dalam 24 jam, atau entry kurang dari
         // sekian persen di bawah puncak 24 jam; di v3 sinyal seperti itu kebanyakan langsung kena stop. Backtest yang
         // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.

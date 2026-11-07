@@ -126,6 +126,8 @@ class SignalEngine
             'summary_provider' => $summary['provider'],
         ]);
 
+        $this->noteDowngrade($token, $analysis);
+
         if ($onchain['rug_alert'] || $onchain['is_honeypot']) {
             $this->notifier->riskAlert($token, $onchain['reasons']);
         }
@@ -155,6 +157,28 @@ class SignalEngine
         }
 
         return $analysis;
+    }
+
+    /**
+     * Shadow measure for a possible v5 exit rule, without changing any trade: the first analysis after entry
+     * that is no longer bullish, with the price and the targets already reached at that moment.
+     */
+    private function noteDowngrade(Token $token, Analysis $analysis): void
+    {
+        if ($analysis->recommendation->isBullish()) {
+            return;
+        }
+
+        $token->signals()
+            ->where('status', SignalStatus::Active)
+            ->whereNull('downgraded_at')
+            ->get()
+            ->each(fn (Signal $signal) => $signal->update([
+                'downgraded_at' => $analysis->created_at,
+                'downgrade_price' => $analysis->price,
+                'downgrade_recommendation' => $analysis->recommendation->value,
+                'downgrade_tp_hit' => $signal->max_tp_hit,
+            ]));
     }
 
     /**

@@ -58,6 +58,9 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
+            // The app works in UTC. Without this a MySQL whose time zone is the machine's (a laptop in WIB)
+            // shifts every TIMESTAMP column by seven hours; production's container is UTC already.
+            'timezone' => env('DB_TIMEZONE', '+00:00'),
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
@@ -78,6 +81,9 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
+            // The app works in UTC. Without this a MySQL whose time zone is the machine's (a laptop in WIB)
+            // shifts every TIMESTAMP column by seven hours; production's container is UTC already.
+            'timezone' => env('DB_TIMEZONE', '+00:00'),
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),

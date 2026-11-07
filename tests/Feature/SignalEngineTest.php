@@ -2,6 +2,7 @@
 
 use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
+use App\Models\Signal;
 use App\Models\Token;
 use App\Models\TokenSecurityCheck;
 use App\Models\User;
@@ -233,4 +234,30 @@ test('the day move compares the price with 24 candles ago and with their highest
     expect(round($move['rise_24h_pct'], 2))->toBe(round((1.29 / 1.05 - 1) * 100, 2))
         ->and(round($move['below_high_24h_pct'], 2))->toBe(round((1 - 1.29 / 1.34) * 100, 2))
         ->and(TechnicalAnalyzer::dayMove(array_slice($closes, 0, 10), array_slice($highs, 0, 10), 1.0)['rise_24h_pct'])->toBeNull();
+});
+
+test('the first analysis that is no longer bullish is noted on an active signal, without closing it', function () {
+    fakeTechnical(10);
+    $token = Token::factory()->create(['price_usd' => 1.07]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+    $active = Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['status' => 'active', 'max_tp_hit' => 1, 'entry_price' => 1.0, 'entered_at' => now()->subHour()]));
+    $waiting = Signal::withoutEvents(fn () => Signal::factory()->for(Token::factory()->create())->create(['status' => 'pending']));
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+    $active->refresh();
+
+    expect($analysis->recommendation->isBullish())->toBeFalse()
+        ->and($active->status)->toBe(SignalStatus::Active)
+        ->and($active->downgraded_at->toDateTimeString())->toBe($analysis->created_at->toDateTimeString())
+        ->and($active->downgrade_price)->toEqual(1.07)
+        ->and($active->downgrade_recommendation)->toBe($analysis->recommendation->value)
+        ->and($active->downgrade_tp_hit)->toBe(1)
+        ->and($waiting->refresh()->downgraded_at)->toBeNull();
+
+    // Only the first one counts.
+    $this->travel(15)->minutes();
+    $token->update(['price_usd' => 0.9]);
+    app(SignalEngine::class)->analyze($token);
+
+    expect($active->refresh()->downgrade_price)->toEqual(1.07);
 });

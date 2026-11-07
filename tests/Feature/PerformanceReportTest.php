@@ -203,3 +203,23 @@ test('order history reads by the time it shows, not by when the order was placed
         ->assertJsonPath('orders.data.1.id', $cancelled->id)
         ->assertJsonPath('orders.data.2.id', $early->id);
 });
+
+test('the shadow exit counts signals entered since it started, closing each at its first downgrade', function () {
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00']);
+    $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'cost_r' => 0.1];
+    // Downgraded at 1.05 before any target: +0.5R gross, +0.4R after costs.
+    reportSignal($this->token, -1.1, '2026-11-08 05:00:00', [...$levels, 'entered_at' => '2026-11-07 14:00:00', 'downgraded_at' => '2026-11-07 20:00:00', 'downgrade_price' => 1.05, 'downgrade_tp_hit' => 0]);
+    // Downgraded at the entry after target 1: 1/3 of 1.5R = +0.5R gross, +0.4R after costs.
+    reportSignal($this->token, 0.4, '2026-11-08 06:00:00', [...$levels, 'entered_at' => '2026-11-07 15:00:00', 'downgraded_at' => '2026-11-07 21:00:00', 'downgrade_price' => 1.0, 'downgrade_tp_hit' => 1]);
+    // Never downgraded: its real result stands.
+    reportSignal($this->token, -1.0, '2026-11-08 07:00:00', [...$levels, 'entered_at' => '2026-11-07 16:00:00']);
+    // Entered before the shadow started: left out.
+    reportSignal($this->token, 2.0, '2026-11-08 08:00:00', [...$levels, 'entered_at' => '2026-11-07 10:00:00', 'downgraded_at' => '2026-11-07 11:00:00', 'downgrade_price' => 0.95, 'downgrade_tp_hit' => 0]);
+
+    $shadow = $this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit');
+
+    expect($shadow['signals'])->toBe(3)
+        ->and($shadow['downgraded'])->toBe(2)
+        ->and($shadow['actual_r'])->toEqual(-1.7)
+        ->and($shadow['shadow_r'])->toEqual(-0.2);
+});

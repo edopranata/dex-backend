@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'token_id', 'analysis_id', 'recommendation', 'status', 'entry_low', 'entry_high', 'stop_loss',
     'take_profit_1', 'take_profit_2', 'take_profit_3', 'entry_price', 'exit_price', 'max_tp_hit',
     'result_r', 'net_r', 'cost_r', 'strategy_version', 'entered_at', 'closed_at',
+    'downgraded_at', 'downgrade_price', 'downgrade_recommendation', 'downgrade_tp_hit',
 ])]
 #[ObservedBy(SignalObserver::class)]
 class Signal extends Model
@@ -54,6 +55,9 @@ class Signal extends Model
             'cost_r' => 'float',
             'entered_at' => 'datetime',
             'closed_at' => 'datetime',
+            'downgraded_at' => 'datetime',
+            'downgrade_price' => 'float',
+            'downgrade_tp_hit' => 'integer',
         ];
     }
 

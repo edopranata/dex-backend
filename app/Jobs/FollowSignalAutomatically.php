@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\OrderSide;
+use App\Models\AutoFollowDecision;
 use App\Models\Signal;
 use App\Models\User;
 use App\Services\Trading\AutoFollowRisk;
@@ -52,12 +53,14 @@ class FollowSignalAutomatically implements ShouldQueue
         Cache::lock("autofollow:{$key}", 30)->block(20, function () use ($risk, $account, $key, $signal, $trading): void {
             if ($risk->dailyLossReached($account)) {
                 Log::info("Auto-follow {$key} melewati sinyal #{$signal->id}: batas rugi harian tercapai.");
+                AutoFollowDecision::record($account, $key, $signal, AutoFollowDecision::SKIPPED, AutoFollowDecision::DAILY_LOSS);
 
                 return;
             }
 
             if (! $risk->hasRoom($account)) {
                 Log::info("Auto-follow {$key} melewati sinyal #{$signal->id}: batas posisi terbuka tercapai.");
+                AutoFollowDecision::record($account, $key, $signal, AutoFollowDecision::SKIPPED, AutoFollowDecision::POSITION_LIMIT);
 
                 return;
             }
@@ -66,14 +69,18 @@ class FollowSignalAutomatically implements ShouldQueue
 
             if ($amount === null) {
                 Log::info("Auto-follow {$key} melewati sinyal #{$signal->id}: ukuran order di bawah minimum.");
+                AutoFollowDecision::record($account, $key, $signal, AutoFollowDecision::SKIPPED, AutoFollowDecision::BELOW_MINIMUM);
 
                 return;
             }
 
             try {
                 $trading->followSignal($account, $signal, $amount, limit: true);
+                AutoFollowDecision::record($account, $key, $signal, AutoFollowDecision::BOUGHT);
             } catch (ValidationException $e) {
-                Log::info("Auto-follow {$key} melewati sinyal #{$signal->id}: ".collect($e->errors())->flatten()->first());
+                $message = (string) collect($e->errors())->flatten()->first();
+                Log::info("Auto-follow {$key} melewati sinyal #{$signal->id}: {$message}");
+                AutoFollowDecision::record($account, $key, $signal, AutoFollowDecision::SKIPPED, AutoFollowDecision::REJECTED, $message);
             }
         });
     }
