@@ -160,8 +160,9 @@ class SignalEngine
     }
 
     /**
-     * Shadow measure for a possible v5 exit rule, without changing any trade: the first analysis after entry
-     * that is no longer bullish, with the price and the targets already reached at that moment.
+     * Shadow measures for a possible v5 exit rule, without changing any trade: the first analysis after entry
+     * that is no longer bullish, and the second one in a row, each with the price and the targets already
+     * reached at that moment.
      */
     private function noteDowngrade(Token $token, Analysis $analysis): void
     {
@@ -169,16 +170,41 @@ class SignalEngine
             return;
         }
 
+        $previous = $token->analyses()->whereKeyNot($analysis->id)->where('id', '<', $analysis->id)->latest('id')->first(['id', 'recommendation', 'created_at']);
+
         $token->signals()
             ->where('status', SignalStatus::Active)
-            ->whereNull('downgraded_at')
+            ->where(fn ($query) => $query->whereNull('downgraded_at')->orWhereNull('second_downgraded_at'))
             ->get()
-            ->each(fn (Signal $signal) => $signal->update([
-                'downgraded_at' => $analysis->created_at,
-                'downgrade_price' => $analysis->price,
-                'downgrade_recommendation' => $analysis->recommendation->value,
-                'downgrade_tp_hit' => $signal->max_tp_hit,
-            ]));
+            ->each(function (Signal $signal) use ($analysis, $previous): void {
+                $changes = [];
+
+                if ($signal->downgraded_at === null) {
+                    $changes += [
+                        'downgraded_at' => $analysis->created_at,
+                        'downgrade_price' => $analysis->price,
+                        'downgrade_recommendation' => $analysis->recommendation->value,
+                        'downgrade_tp_hit' => $signal->max_tp_hit,
+                    ];
+                }
+
+                $twiceInARow = $previous !== null
+                    && ! $previous->recommendation->isBullish()
+                    && $signal->entered_at !== null
+                    && $previous->created_at->gte($signal->entered_at);
+
+                if ($signal->second_downgraded_at === null && $twiceInARow) {
+                    $changes += [
+                        'second_downgraded_at' => $analysis->created_at,
+                        'second_downgrade_price' => $analysis->price,
+                        'second_downgrade_tp_hit' => $signal->max_tp_hit,
+                    ];
+                }
+
+                if ($changes !== []) {
+                    $signal->update($changes);
+                }
+            });
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
+use App\Models\Analysis;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\TokenSecurityCheck;
@@ -254,10 +255,27 @@ test('the first analysis that is no longer bullish is noted on an active signal,
         ->and($active->downgrade_tp_hit)->toBe(1)
         ->and($waiting->refresh()->downgraded_at)->toBeNull();
 
-    // Only the first one counts.
+    // The first one stays; the second in a row is noted on its own.
     $this->travel(15)->minutes();
     $token->update(['price_usd' => 0.9]);
     app(SignalEngine::class)->analyze($token);
+    $active->refresh();
 
-    expect($active->refresh()->downgrade_price)->toEqual(1.07);
+    expect($active->downgrade_price)->toEqual(1.07)
+        ->and($active->second_downgrade_price)->toEqual(0.9)
+        ->and($active->second_downgrade_tp_hit)->toBe(1);
+});
+
+test('a lone Hold between Buys is not a second downgrade, and a Hold from before entry does not count', function () {
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+    // A Hold before the signal was entered.
+    Analysis::factory()->for($token)->create(['recommendation' => 'HOLD', 'created_at' => now()->subHours(2)]);
+    $active = Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['status' => 'active', 'entry_price' => 1.0, 'entered_at' => now()->subHour()]));
+
+    fakeTechnical(10);
+    app(SignalEngine::class)->analyze($token);
+
+    expect($active->refresh()->downgraded_at)->not->toBeNull()
+        ->and($active->second_downgraded_at)->toBeNull();
 });

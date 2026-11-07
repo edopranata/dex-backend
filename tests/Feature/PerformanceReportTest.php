@@ -2,6 +2,7 @@
 
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
+use App\Models\Analysis;
 use App\Models\EquitySnapshot;
 use App\Models\Order;
 use App\Models\Position;
@@ -204,22 +205,49 @@ test('order history reads by the time it shows, not by when the order was placed
         ->assertJsonPath('orders.data.2.id', $early->id);
 });
 
-test('the shadow exit counts signals entered since it started, closing each at its first downgrade', function () {
-    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00']);
+test('each shadow variant counts signals entered since it started, and only changes what its rule touches', function () {
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00']);
     $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'cost_r' => 0.1];
-    // Downgraded at 1.05 before any target: +0.5R gross, +0.4R after costs.
-    reportSignal($this->token, -1.1, '2026-11-08 05:00:00', [...$levels, 'entered_at' => '2026-11-07 14:00:00', 'downgraded_at' => '2026-11-07 20:00:00', 'downgrade_price' => 1.05, 'downgrade_tp_hit' => 0]);
-    // Downgraded at the entry after target 1: 1/3 of 1.5R = +0.5R gross, +0.4R after costs.
-    reportSignal($this->token, 0.4, '2026-11-08 06:00:00', [...$levels, 'entered_at' => '2026-11-07 15:00:00', 'downgraded_at' => '2026-11-07 21:00:00', 'downgrade_price' => 1.0, 'downgrade_tp_hit' => 1]);
-    // Never downgraded: its real result stands.
-    reportSignal($this->token, -1.0, '2026-11-08 07:00:00', [...$levels, 'entered_at' => '2026-11-07 16:00:00']);
+    $analysis = fn (Token $token, string $at, string $recommendation, float $price = 1.0) => Analysis::factory()->for($token)->create(['recommendation' => $recommendation, 'price' => $price, 'created_at' => $at]);
+
+    // Opened without a Buy before it; the first check after entry is a Hold at 1.05 (+0.4R), the second one in a
+    // row at 1.02 (+0.1R).
+    $one = Token::factory()->create();
+    $analysis($one, '2026-11-07 13:30:00', 'HOLD');
+    $created = $analysis($one, '2026-11-07 13:45:00', 'BUY');
+    $analysis($one, '2026-11-07 14:15:00', 'HOLD', 1.05);
+    $analysis($one, '2026-11-07 14:30:00', 'HOLD', 1.02);
+    reportSignal($one, -1.1, '2026-11-08 05:00:00', [...$levels, 'analysis_id' => $created->id, 'created_at' => '2026-11-07 13:45:00', 'entered_at' => '2026-11-07 14:00:00',
+        'downgraded_at' => '2026-11-07 14:15:00', 'downgrade_price' => 1.05, 'downgrade_tp_hit' => 0,
+        'second_downgraded_at' => '2026-11-07 14:30:00', 'second_downgrade_price' => 1.02, 'second_downgrade_tp_hit' => 0]);
+
+    // Confirmed entry that holds at first, then one Hold at the entry after target 1 (1/3 of 1.5R = +0.4R net).
+    $two = Token::factory()->create();
+    $analysis($two, '2026-11-07 14:30:00', 'BUY');
+    $created = $analysis($two, '2026-11-07 14:45:00', 'BUY');
+    $analysis($two, '2026-11-07 15:15:00', 'BUY');
+    $analysis($two, '2026-11-07 16:00:00', 'HOLD');
+    $analysis($two, '2026-11-07 16:15:00', 'BUY');
+    reportSignal($two, 0.4, '2026-11-08 06:00:00', [...$levels, 'analysis_id' => $created->id, 'created_at' => '2026-11-07 14:45:00', 'entered_at' => '2026-11-07 15:00:00',
+        'downgraded_at' => '2026-11-07 16:00:00', 'downgrade_price' => 1.0, 'downgrade_tp_hit' => 1]);
+
+    // Confirmed, never downgraded: its real result stands everywhere.
+    $three = Token::factory()->create();
+    $analysis($three, '2026-11-07 15:30:00', 'STRONG_BUY');
+    $created = $analysis($three, '2026-11-07 15:45:00', 'BUY');
+    $analysis($three, '2026-11-07 16:15:00', 'BUY');
+    reportSignal($three, -1.0, '2026-11-08 07:00:00', [...$levels, 'analysis_id' => $created->id, 'created_at' => '2026-11-07 15:45:00', 'entered_at' => '2026-11-07 16:00:00']);
+
     // Entered before the shadow started: left out.
     reportSignal($this->token, 2.0, '2026-11-08 08:00:00', [...$levels, 'entered_at' => '2026-11-07 10:00:00', 'downgraded_at' => '2026-11-07 11:00:00', 'downgrade_price' => 0.95, 'downgrade_tp_hit' => 0]);
 
-    $shadow = $this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit');
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($shadow['signals'])->toBe(3)
-        ->and($shadow['downgraded'])->toBe(2)
-        ->and($shadow['actual_r'])->toEqual(-1.7)
-        ->and($shadow['shadow_r'])->toEqual(-0.2);
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry'])
+        ->and($variants->pluck('signals')->unique()->all())->toBe([3])
+        ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
+        ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
+        ->and($variants['first_check'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.2])
+        ->and($variants['second_downgrade'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.5])
+        ->and($variants['confirmed_entry'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.6]);
 });

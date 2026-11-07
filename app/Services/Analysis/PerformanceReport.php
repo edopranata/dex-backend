@@ -9,6 +9,7 @@ use App\Models\Signal;
 use App\Models\User;
 use App\Services\Trading\AutoFollowRisk;
 use App\Services\Trading\PortfolioSummary;
+use Closure;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -67,47 +68,86 @@ class PerformanceReport
     }
 
     /**
-     * What the closed signals would have given had each one been closed at the first analysis that was no
-     * longer bullish, with the targets reached before that kept. Costs are taken as the real ones. Only signals
-     * entered after the shadow started count, because a downgrade before then was not recorded.
+     * Candidate v5 rules measured on the closed signals without changing a trade. Each variant only counts
+     * signals entered after its data started being recorded. An exit keeps the targets reached before it and
+     * takes the real costs; a signal a rule would not have opened counts as 0R.
      *
      * @param  Collection<int, Signal>  $signals
-     * @return array{since: string, signals: int, downgraded: int, actual_r: float, shadow_r: float}
+     * @return list<array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float}>
      */
     private function shadowExit(Collection $signals): array
     {
         $since = Carbon::parse((string) config('market.analysis.shadow_exit_since'), 'UTC');
-        $observed = $signals->filter(fn (Signal $signal): bool => $signal->entered_at !== null && $signal->entered_at->gte($since));
-        $downgraded = 0;
+        $secondSince = Carbon::parse((string) config('market.analysis.shadow_second_since'), 'UTC');
+        $entered = fn (Carbon $from): Collection => $signals->filter(fn (Signal $signal): bool => $signal->entered_at !== null && $signal->entered_at->gte($from));
+
+        return [
+            $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?float => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
+                ? $this->exitR($s, (float) $s->downgrade_price, (int) $s->downgrade_tp_hit)
+                : null),
+            $this->variant('first_check', 'Keluar bila analisa pertama setelah entry tidak lagi Buy', $since, $entered($since), function (Signal $s): ?float {
+                $first = $s->token->analyses()->where('created_at', '>', $s->entered_at)->where('created_at', '<=', $s->closed_at)->oldest()->first(['recommendation', 'price', 'created_at']);
+
+                if ($first === null || $first->recommendation->isBullish()) {
+                    return null;
+                }
+
+                $taken = $s->downgraded_at?->equalTo($first->created_at) ? (int) $s->downgrade_tp_hit : 0;
+
+                return $this->exitR($s, (float) $first->price, $taken);
+            }),
+            $this->variant('second_downgrade', 'Keluar setelah dua analisa berturut-turut tidak Buy', $secondSince, $entered($secondSince), fn (Signal $s): ?float => $s->second_downgraded_at !== null && $s->second_downgraded_at->lte($s->closed_at)
+                ? $this->exitR($s, (float) $s->second_downgrade_price, (int) $s->second_downgrade_tp_hit)
+                : null),
+            $this->variant('confirmed_entry', 'Hanya entry yang analisa sebelumnya juga Buy', $since, $entered($since), function (Signal $s): ?float {
+                $previous = $s->token->analyses()->where('id', '<', $s->analysis_id)->latest('id')->first(['recommendation', 'created_at']);
+                $confirmed = $previous !== null && $previous->recommendation->isBullish() && $previous->created_at->gte($s->created_at->copy()->subMinutes(20));
+
+                return $confirmed ? null : 0.0;
+            }),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Signal>  $observed
+     * @param  Closure(Signal): (float|null)  $rule  The R under the rule, or null where the rule changes nothing.
+     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float}
+     */
+    private function variant(string $key, string $label, Carbon $since, Collection $observed, Closure $rule): array
+    {
+        $affected = 0;
         $shadow = 0.0;
 
         foreach ($observed as $signal) {
-            $risk = $signal->entry_price - $signal->stop_loss;
-
-            if ($signal->downgraded_at === null || $signal->downgraded_at->gt($signal->closed_at) || $risk <= 0) {
-                $shadow += (float) $signal->net_r;
-
-                continue;
-            }
-
-            $downgraded++;
-            $taken = (int) $signal->downgrade_tp_hit;
-            $gross = (1 - $taken / 3) * ($signal->downgrade_price - $signal->entry_price) / $risk;
-
-            foreach (array_slice($signal->takeProfits(), 0, $taken) as $target) {
-                $gross += ($target - $signal->entry_price) / $risk / 3;
-            }
-
-            $shadow += $gross - (float) $signal->cost_r;
+            $r = $signal->entry_price > $signal->stop_loss ? $rule($signal) : null;
+            $affected += $r === null ? 0 : 1;
+            $shadow += $r ?? (float) $signal->net_r;
         }
 
         return [
+            'key' => $key,
+            'label' => $label,
             'since' => $since->toIso8601String(),
             'signals' => $observed->count(),
-            'downgraded' => $downgraded,
+            'affected' => $affected,
             'actual_r' => round((float) $observed->sum('net_r'), 2),
             'shadow_r' => round($shadow, 2),
         ];
+    }
+
+    /**
+     * Net R of a signal closed at a price, with the thirds already sold at the targets reached before it.
+     */
+    private function exitR(Signal $signal, float $price, int $taken): float
+    {
+        $risk = $signal->entry_price - $signal->stop_loss;
+        $gross = (1 - $taken / 3) * ($price - $signal->entry_price) / $risk;
+
+        foreach (array_slice($signal->takeProfits(), 0, $taken) as $target) {
+            $gross += ($target - $signal->entry_price) / $risk / 3;
+        }
+
+        return $gross - (float) $signal->cost_r;
     }
 
     /**
