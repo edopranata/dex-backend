@@ -16,11 +16,10 @@ Schedule::command('market:prices')->everyFifteenSeconds()->withoutOverlapping(1)
 
 Schedule::command('market:snapshots')->hourly();
 
-// GeckoTerminal allows ~5 requests/minute from this server: one 15-minute cycle (17 tokens x 2 candle
-// + 1 whale request) takes about 10 minutes, and analysis starts right after it with fresh candles.
-Schedule::command('market:candles --timeframe=15m --timeframe=1h')->cron('0,15,30,45 * * * *')->withoutOverlapping();
-Schedule::command('market:candles --timeframe=4h')->hourlyAt(8)->withoutOverlapping();
-Schedule::command('market:candles --timeframe=1d')->cron('10 */6 * * *')->withoutOverlapping();
+// GeckoTerminal allows ~5 requests/minute from this server. One request per token fetches 15m; 1h, 4h and
+// 1d are built from it (8 Nov), so a cycle is about 20 candle + 20 whale requests instead of 60, plus the
+// separate 4h and 1d runs that are no longer needed.
+Schedule::command('market:candles')->cron('0,15,30,45 * * * *')->withoutOverlapping();
 
 Schedule::command('market:whales')->cron('0,15,30,45 * * * *')->withoutOverlapping();
 

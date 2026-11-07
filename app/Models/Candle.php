@@ -19,13 +19,14 @@ class Candle extends Model
     public $timestamps = false;
 
     /**
-     * Drop 15m candles after 30 days; higher timeframes are kept for long-term indicators.
+     * Drop old 15m candles; higher timeframes are kept for long-term indicators. 15m is the source the others
+     * are built from, so it is kept for months rather than weeks.
      *
      * @return Builder<static>
      */
     public function prunable(): Builder
     {
-        return static::query()->where('timeframe', '15m')->where('open_time', '<', now()->subDays(30)->timestamp);
+        return static::query()->where('timeframe', '15m')->where('open_time', '<', now()->subDays((int) config('market.candles.keep_15m_days'))->timestamp);
     }
 
     /**

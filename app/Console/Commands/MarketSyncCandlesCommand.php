@@ -10,13 +10,13 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Throwable;
 
-#[Signature('market:candles {--timeframe=* : 15m, 1h, 4h, 1d (default: semua)} {--sync : Jalankan langsung tanpa queue}')]
+#[Signature('market:candles {--timeframe=* : Ambil langsung timeframe ini (15m, 1h, 4h, 1d). Tanpa opsi: ambil 15m dan rakit 1h, 4h, 1d} {--sync : Jalankan langsung tanpa queue}')]
 #[Description('Ambil candle OHLCV dari GeckoTerminal')]
 class MarketSyncCandlesCommand extends Command
 {
     public function handle(): int
     {
-        $timeframes = $this->option('timeframe') ?: array_keys(GeckoTerminalClient::TIMEFRAMES);
+        $timeframes = array_values(array_intersect($this->option('timeframe'), array_keys(GeckoTerminalClient::TIMEFRAMES)));
 
         foreach (Token::query()->active()->get() as $token) {
             if (! $this->option('sync')) {
@@ -32,7 +32,8 @@ class MarketSyncCandlesCommand extends Command
             }
         }
 
-        $this->components->info('Sinkronisasi candle ['.implode(', ', $timeframes).'] '.($this->option('sync') ? 'selesai.' : 'masuk antrean.'));
+        $what = $timeframes === [] ? '15m, lalu 1h/4h/1d dirakit' : implode(', ', $timeframes);
+        $this->components->info("Sinkronisasi candle [{$what}] ".($this->option('sync') ? 'selesai.' : 'masuk antrean.'));
 
         return self::SUCCESS;
     }

@@ -74,7 +74,8 @@ class TokenRegistry
     {
         Bus::chain([
             new CheckTokenSecurity($token),
-            new SyncTokenCandles($token, array_keys(GeckoTerminalClient::TIMEFRAMES)),
+            // Only what is missing: history for a new token, the gap for one that comes back.
+            new SyncTokenCandles($token),
             new SyncTokenWhaleTrades($token),
             new AnalyzeToken($token),
         ])->dispatch();

@@ -17,20 +17,27 @@ class SyncTokenCandles implements ShouldBeUnique, ShouldQueue
     public int $timeout = 300;
 
     /**
-     * @param  list<string>  $timeframes
+     * @param  list<string>  $timeframes  Fetched directly from GeckoTerminal; none keeps the token current the
+     *                                    usual way (15m fetched, higher timeframes built from it).
      */
-    public function __construct(public Token $token, public array $timeframes)
+    public function __construct(public Token $token, public array $timeframes = [])
     {
         $this->onQueue(config('market.market_data_queue'));
     }
 
     public function uniqueId(): string
     {
-        return $this->token->id.':'.implode(',', $this->timeframes);
+        return $this->token->id.':'.($this->timeframes === [] ? 'refresh' : implode(',', $this->timeframes));
     }
 
     public function handle(CandleSyncService $candles): void
     {
+        if ($this->timeframes === []) {
+            $candles->refresh($this->token);
+
+            return;
+        }
+
         foreach ($this->timeframes as $timeframe) {
             $candles->sync($this->token, $timeframe);
         }

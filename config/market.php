@@ -51,6 +51,21 @@ return [
     // API publik GeckoTerminal dibatasi per IP; naikkan jika memakai paket berbayar.
     'geckoterminal_requests_per_minute' => (int) env('GECKOTERMINAL_RPM', 10),
 
+    // Candle: hanya 15m yang diambil rutin; 1h, 4h, dan 1d dirakit dari 15m. Uji 7 Nov pada 5.164 analisa:
+    // skor teknikal sama persis dengan candle GeckoTerminal, jadi versi strategi tidak berubah.
+    'candles' => [
+        // Tiap siklus: 96 candle terakhir (24 jam), supaya koreksi data GeckoTerminal ikut terbawa. Jumlah
+        // candle tidak menambah permintaan; yang dihitung batas GeckoTerminal adalah permintaannya.
+        'sync_limit' => 96,
+        // Token baru atau kembali ke Market: 15m paling jauh 7 hari (672 candle, di bawah batas 1.000).
+        'backfill_days' => 7,
+        // Bila celah lebih panjang dari itu, 1h, 4h, dan 1d diambil langsung sekali.
+        'history_limit' => 300,
+        'built' => ['1h', '4h', '1d'],
+        // 15m menjadi sumber, jadi disimpan lebih lama dari timeframe lain yang dulu diambil sendiri.
+        'keep_15m_days' => 90,
+    ],
+
     // Jobs that call GeckoTerminal run on their own queue (worker "queue-market"), so analysis
     // and Telegram notifications on the default queue never wait behind the API rate limit.
     'market_data_queue' => 'market-data',
