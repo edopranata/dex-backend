@@ -193,3 +193,87 @@ test('a small but real sale does not close what is left of a big position', func
 
     expect((float) $position->refresh()->quantity)->toEqual(999.0);
 });
+
+/**
+ * A signal the auto-follow account bought straight away (price 2.0 sits in its entry zone).
+ */
+function boughtSignal(Token $token): array
+{
+    $signal = Signal::factory()->for($token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $buy = User::autoFollower()->orders()->where('signal_id', $signal->id)->where('side', 'buy')->sole();
+
+    return [$signal, $buy];
+}
+
+test('an auto-follow lot is sold at market once its signal closes, and its waiting exits are cancelled', function () {
+    [$signal, $buy] = boughtSignal($this->token);
+
+    expect($buy->status)->toBe(OrderStatus::Filled);
+
+    $signal->update(['status' => 'expired', 'closed_at' => now()]);
+    app(TradingService::class)->closeFinishedSignalLots();
+
+    $sell = Order::where('parent_id', $buy->id)->where('type', 'market')->sole();
+
+    expect($sell->status)->toBe(OrderStatus::Filled)
+        ->and((float) $sell->filled_quantity)->toEqualWithDelta((float) $buy->filled_quantity, 1e-9)
+        ->and($sell->signal_id)->toBe($signal->id)
+        ->and($sell->note)->toContain('kedaluwarsa')
+        ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(0)
+        ->and((float) Position::where('user_id', $buy->user_id)->where('token_id', $this->token->id)->value('quantity'))->toEqual(0.0);
+});
+
+test('after the first target only what the lot still holds is sold', function () {
+    [$signal, $buy] = boughtSignal($this->token);
+    $trading = app(TradingService::class);
+
+    $trading->execute(Order::where('parent_id', $buy->id)->where('type', 'take_profit')->orderBy('id')->first(), 2.3);
+    $signal->update(['status' => 'expired', 'closed_at' => now()]);
+    $trading->closeFinishedSignalLots();
+
+    $sell = Order::where('parent_id', $buy->id)->where('type', 'market')->sole();
+
+    expect((float) $sell->filled_quantity)->toEqualWithDelta((float) $buy->filled_quantity * 2 / 3, 1e-6)
+        ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(0);
+});
+
+test('a person following a signal keeps the position when the signal closes', function () {
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $person = User::factory()->create(['balance_usd' => 10_000]);
+    [$buy] = app(TradingService::class)->followSignal($person, $signal, 100);
+
+    $signal->update(['status' => 'expired', 'closed_at' => now()]);
+    app(TradingService::class)->closeFinishedSignalLots();
+
+    expect(Order::where('parent_id', $buy->id)->where('type', 'market')->exists())->toBeFalse()
+        ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(4);
+});
+
+test('only the closed signal lot is sold when the account holds the token from two signals', function () {
+    [$first, $firstBuy] = boughtSignal($this->token);
+    [, $secondBuy] = boughtSignal($this->token);
+
+    $first->update(['status' => 'expired', 'closed_at' => now()]);
+    app(TradingService::class)->closeFinishedSignalLots();
+
+    expect(Order::where('parent_id', $firstBuy->id)->where('type', 'market')->sole()->status)->toBe(OrderStatus::Filled)
+        ->and(Order::where('parent_id', $secondBuy->id)->where('status', 'pending')->count())->toBe(4)
+        ->and((float) Position::where('user_id', $secondBuy->user_id)->where('token_id', $this->token->id)->value('quantity'))
+        ->toEqualWithDelta((float) $secondBuy->filled_quantity, 1e-6);
+});
+
+test('a lot waits for a fresh price before it is sold', function () {
+    [$signal, $buy] = boughtSignal($this->token);
+    $this->token->update(['price_updated_at' => now()->subMinutes(5)]);
+
+    $signal->update(['status' => 'expired', 'closed_at' => now()]);
+
+    expect(app(TradingService::class)->closeFinishedSignalLots())->toBe(0)
+        ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(4);
+
+    $this->token->update(['price_updated_at' => now()]);
+
+    // Every auto-follow account that bought the signal gets its lot closed.
+    expect(app(TradingService::class)->closeFinishedSignalLots())->toBe(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())
+        ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(0);
+});

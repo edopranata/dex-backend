@@ -28,7 +28,10 @@ class MarketRefreshPricesCommand extends Command
             fn (Signal $signal) => $tracker->track($signal, (float) $confirmed[$signal->token_id]->price_usd, $confirmed[$signal->token_id]->confirmingPrice()),
         );
 
-        $this->components->info("{$tokens->count()} harga diperbarui, {$filled} order tereksekusi.");
+        // After tracking, so a signal that closed on this check frees its auto-follow lots straight away.
+        $lots = $trading->closeFinishedSignalLots();
+
+        $this->components->info("{$tokens->count()} harga diperbarui, {$filled} order tereksekusi, {$lots} lot auto-follow ditutup.");
 
         return self::SUCCESS;
     }

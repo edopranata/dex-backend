@@ -5,6 +5,7 @@ namespace App\Services\Trading;
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
+use App\Enums\SignalStatus;
 use App\Models\Order;
 use App\Models\OrderFillEvidence;
 use App\Models\Position;
@@ -226,6 +227,89 @@ class TradingService
             ->where('exit_plan', 'signal')
             ->where('status', OrderStatus::Pending)
             ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: sinyal #{$signal->id} sudah ditutup."]);
+    }
+
+    /**
+     * An auto-follow account mirrors its signals, so once a signal closes, whatever its lot still holds is
+     * sold at market and the lot's waiting exits are cancelled. Without this a lot outlives its signal, keeps
+     * one of the account's few position slots, and keeps its token in the Market. People decide for themselves.
+     * A lot whose token has no fresh price waits for the next run.
+     *
+     * @return int Lots closed.
+     */
+    public function closeFinishedSignalLots(): int
+    {
+        $parentIds = Order::query()
+            ->where('side', OrderSide::Sell)
+            ->where('status', OrderStatus::Pending)
+            ->whereNotNull('parent_id')
+            ->whereHas('user', fn ($query) => $query->where('is_system', true))
+            ->whereHas('signal', fn ($query) => $query->whereNotIn('status', [SignalStatus::Pending, SignalStatus::Active]))
+            ->distinct()
+            ->pluck('parent_id');
+
+        $closed = 0;
+
+        Order::query()
+            ->whereIn('id', $parentIds)
+            ->where('exit_plan', 'signal')
+            ->where('status', OrderStatus::Filled)
+            ->with(['token', 'signal'])
+            ->orderBy('id')
+            ->each(function (Order $buy) use (&$closed): void {
+                if ($this->closeLot($buy)) {
+                    $closed++;
+                }
+            });
+
+        return $closed;
+    }
+
+    private function closeLot(Order $buy): bool
+    {
+        $token = $buy->token;
+
+        if ($token->isPriceStale((int) config('market.simulator.max_price_age_seconds'))) {
+            return false;
+        }
+
+        $exits = fn () => Order::query()->where('parent_id', $buy->id)->where('status', OrderStatus::Pending);
+        $stop = $exits()->where('type', OrderType::StopLoss)->first();
+        // The stop covers everything the lot still holds; it is resized after each target.
+        $remaining = $stop !== null ? (float) $stop->quantity : (float) $exits()->where('type', OrderType::TakeProfit)->sum('quantity');
+        $signal = $buy->signal;
+        $reason = match ($signal->status) {
+            SignalStatus::Expired => 'kedaluwarsa',
+            SignalStatus::StopLoss => 'kena stop loss',
+            SignalStatus::TakeProfit => 'take profit',
+            SignalStatus::Invalidated => 'batal sebelum entry',
+            default => $signal->status->value,
+        };
+
+        if ($remaining <= self::DUST) {
+            $exits()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: sinyal #{$signal->id} sudah selesai."]);
+
+            return true;
+        }
+
+        $sell = Order::query()->create([
+            'user_id' => $buy->user_id,
+            'token_id' => $buy->token_id,
+            'signal_id' => $signal->id,
+            'parent_id' => $buy->id,
+            'side' => OrderSide::Sell,
+            'type' => OrderType::Market,
+            'status' => OrderStatus::Pending,
+            'quantity' => $remaining,
+            'note' => "Ditutup otomatis: sinyal #{$signal->id} sudah selesai ({$reason}).",
+        ]);
+
+        // Filling it cancels the lot's other exits, like any exit of a plan that ends the lot.
+        $this->execute($sell, (float) $token->price_usd);
+
+        $exits()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: sinyal #{$signal->id} sudah selesai."]);
+
+        return true;
     }
 
     /**
