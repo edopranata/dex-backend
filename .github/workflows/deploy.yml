@@ -3,6 +3,10 @@ name: Test & Deploy
 on:
   push:
     branches: [main]
+    # A documentation change alone must not restart production.
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   workflow_dispatch:
 
 concurrency:
