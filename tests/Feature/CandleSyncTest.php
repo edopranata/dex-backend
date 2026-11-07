@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\SyncTokenCandles;
 use App\Models\Candle;
 use App\Models\Token;
 use App\Services\MarketData\CandleSyncService;
@@ -178,4 +179,21 @@ test('a fill by hand asks for the most candles one request gives, whatever the g
     app(CandleSyncService::class)->refresh($this->token, 5000);
 
     expect(geckoRequests())->toBe([['period' => 'minute', 'limit' => 1000]]);
+});
+
+test('a candle job queued before the 15m fill size existed still runs', function () {
+    // What unserializing an older payload gives: the constructor never runs, so only declared defaults exist.
+    $job = (new ReflectionClass(SyncTokenCandles::class))->newInstanceWithoutConstructor();
+    $job->token = $this->token;
+    $job->timeframes = [];
+    storeCandles($this->token, '15m', quarters('2026-11-08 09:00', '2026-11-08 10:00'));
+    storeCandles($this->token, '1h', [at('2026-11-08 09:00')]);
+    storeCandles($this->token, '4h', [at('2026-11-08 08:00')]);
+    storeCandles($this->token, '1d', [at('2026-11-08 00:00')]);
+
+    expect($job->uniqueId())->toBe("{$this->token->id}:refresh");
+
+    $job->handle(app(CandleSyncService::class));
+
+    expect(geckoRequests())->toBe([['period' => 'minute', 'limit' => 96]]);
 });

@@ -17,12 +17,19 @@ class SyncTokenCandles implements ShouldBeUnique, ShouldQueue
     public int $timeout = 300;
 
     /**
+     * How many 15m candles to fetch instead of what the gap needs (admin button). A declared default rather than
+     * a promoted parameter: a job queued before this property existed is unserialized without calling the
+     * constructor, and must still run (8 Nov: seven queued jobs failed on it during a deploy).
+     */
+    public ?int $quarters = null;
+
+    /**
      * @param  list<string>  $timeframes  Fetched directly from GeckoTerminal; none keeps the token current the
      *                                    usual way (15m fetched, higher timeframes built from it).
-     * @param  int|null  $quarters  How many 15m candles to fetch instead of what the gap needs (admin button).
      */
-    public function __construct(public Token $token, public array $timeframes = [], public ?int $quarters = null)
+    public function __construct(public Token $token, public array $timeframes = [], ?int $quarters = null)
     {
+        $this->quarters = $quarters;
         $this->onQueue(config('market.market_data_queue'));
     }
 
