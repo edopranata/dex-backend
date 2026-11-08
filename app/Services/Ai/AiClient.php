@@ -13,8 +13,8 @@ use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 
 /**
- * Minimal JSON-mode client over a chain of LLM providers: the primary one first, then the fallback
- * (e.g. Gemini, then Groq) whenever the primary is paused or out of budget.
+ * Minimal JSON-mode client over a chain of LLM providers: the primary one first, then up to two fallbacks
+ * (e.g. Gemini, then Groq, then OpenRouter) whenever the ones before are paused or out of budget.
  *
  * Every provider has its own per-minute and per-day budget, and its own pause after errors (quota,
  * overload, unknown model, rejected key), so a limit on one never stops the other. Callers fall back
@@ -23,18 +23,19 @@ use Throwable;
 class AiClient
 {
     /** Providers this client can talk to; all but Gemini share the OpenAI chat-completions format. */
-    public const PROVIDERS = ['gemini' => 'Google Gemini', 'groq' => 'Groq', 'xai' => 'xAI Grok', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
+    public const PROVIDERS = ['gemini' => 'Google Gemini', 'groq' => 'Groq', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
 
     private ?string $lastProvider = null;
 
     /**
-     * Configured providers in the order they are tried (primary, then fallback); ones without a key are skipped.
+     * Configured providers in the order they are tried (primary, first fallback, second fallback); ones without
+     * a key are skipped.
      *
      * @return list<string>
      */
     public function providers(): array
     {
-        $chain = array_unique([config('market.ai.provider'), config('market.ai.fallback_provider')]);
+        $chain = array_unique([config('market.ai.provider'), config('market.ai.fallback_provider'), config('market.ai.fallback_provider_2')]);
 
         return array_values(array_filter(
             $chain,
@@ -159,7 +160,7 @@ class AiClient
     /**
      * Current state of every configured provider for the admin panel.
      *
-     * @return array{enabled: bool, providers: list<array{provider: string, label: string, role: string, model: string|null, paused_until: string|null, reason: string|null, requests_today: int, max_per_day: int, max_per_minute: int, last_success_at: string|null}>}
+     * @return array{enabled: bool, providers: list<array{provider: string, label: string, role: string, position: int, model: string|null, paused_until: string|null, reason: string|null, requests_today: int, max_per_day: int, max_per_minute: int, last_success_at: string|null}>}
      */
     public function status(): array
     {
@@ -174,6 +175,8 @@ class AiClient
                     'provider' => $provider,
                     'label' => self::PROVIDERS[$provider],
                     'role' => $index === 0 ? 'primary' : 'fallback',
+                    // 0 for the primary, then 1 and 2 for the fallbacks in the order they are tried.
+                    'position' => $index,
                     'model' => config("market.ai.{$provider}.model"),
                     'paused_until' => $pause['until'] ?? null,
                     'reason' => $pause['reason'] ?? null,
@@ -228,7 +231,8 @@ class AiClient
 
         [$until, $reason] = match (true) {
             $status === 429 && $this->isDailyQuota($response) => [
-                now('America/Los_Angeles')->addDay()->startOfDay(),
+                // Google resets its quota at midnight Pacific time; others say where theirs resets.
+                now((string) config("market.ai.{$provider}.daily_reset_timezone", 'America/Los_Angeles'))->addDay()->startOfDay(),
                 'Kuota harian habis',
             ],
             $status === 429 => [now()->addSeconds(max(60, $this->retryDelaySeconds($response) + 5)), 'Batas request per menit tercapai'],
@@ -275,7 +279,7 @@ class AiClient
     {
         $body = $response->body();
 
-        return str_contains($body, 'PerDay') || str_contains($body, 'insufficient_quota') || preg_match('/per day|\b(TPD|RPD)\b/i', $body) === 1;
+        return str_contains($body, 'PerDay') || str_contains($body, 'insufficient_quota') || preg_match('/per[ -]day|\b(TPD|RPD)\b/i', $body) === 1;
     }
 
     private function isOutOfCredits(Response $response): bool
@@ -343,11 +347,12 @@ class AiClient
     }
 
     /**
-     * OpenAI-style chat completions in JSON mode (OpenAI, Groq, xAI and local Ollama).
+     * OpenAI-style chat completions in JSON mode (OpenAI, Groq, OpenRouter, xAI and local Ollama).
      */
     private function chatCompletions(string $provider, string $system, string $prompt): ?string
     {
         return Http::withToken(config("market.ai.{$provider}.key"))
+            ->withHeaders(config("market.ai.{$provider}.headers", []))
             ->timeout((int) config("market.ai.{$provider}.timeout", 60))
             ->post(rtrim((string) config("market.ai.{$provider}.base_url"), '/').'/chat/completions', [
                 ...config("market.ai.{$provider}.request", []),

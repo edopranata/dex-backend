@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Http;
 const GEMINI_URL = 'generativelanguage.googleapis.com/*';
 const XAI_URL = 'api.x.ai/*';
 const GROQ_URL = 'api.groq.com/*';
+const OPENROUTER_URL = 'openrouter.ai/*';
 
 beforeEach(function () {
     config([
@@ -323,4 +324,58 @@ test('ollama is a keyless local provider sent without thinking, and is ignored o
     expect($client->isEnabled())->toBeFalse()
         ->and($client->json('system', 'prompt'))->toBeNull();
     Http::assertSentCount(1);
+});
+
+test('openrouter is the second fallback, asked only when gemini and groq both cannot answer', function () {
+    config([
+        'market.ai.fallback_provider' => 'groq',
+        'market.ai.groq.key' => 'groq-test-key',
+        'market.ai.fallback_provider_2' => 'openrouter',
+        'market.ai.openrouter.key' => 'or-test-key',
+    ]);
+    Http::fake([
+        GEMINI_URL => Http::response(gemini429('GenerateRequestsPerDayPerProjectPerModel-FreeTier'), 429),
+        GROQ_URL => Http::response(['error' => ['message' => 'Rate limit reached on tokens per day (TPD)']], 429),
+        OPENROUTER_URL => Http::response(xaiOk('{"summary": "naik"}')),
+    ]);
+    $ai = app(AiClient::class);
+
+    expect($ai->providers())->toBe(['gemini', 'groq', 'openrouter'])
+        ->and($ai->json('s', 'p'))->toBe(['summary' => 'naik'])
+        ->and($ai->lastProvider())->toBe('openrouter')
+        ->and(aiStatusOf('openrouter')['position'])->toBe(2)
+        ->and(aiStatusOf('groq')['position'])->toBe(1);
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
+        && $request->hasHeader('Authorization', 'Bearer or-test-key')
+        && $request->hasHeader('X-Title', 'DEX Simulator')
+        && $request['model'] === 'google/gemma-4-31b-it:free'
+        && $request['response_format'] === ['type' => 'json_object']
+        && $request['provider'] === ['require_parameters' => true]);
+});
+
+test('openrouter is not asked while an earlier provider answers', function () {
+    config(['market.ai.fallback_provider' => 'groq', 'market.ai.groq.key' => 'groq-test-key', 'market.ai.fallback_provider_2' => 'openrouter', 'market.ai.openrouter.key' => 'or-test-key']);
+    Http::fake([GEMINI_URL => Http::response(geminiOk()), OPENROUTER_URL => Http::response(xaiOk())]);
+
+    app(AiClient::class)->json('s', 'p');
+
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'openrouter.ai'));
+});
+
+test('the openrouter free daily limit pauses until midnight utc', function () {
+    config(['market.ai.provider' => 'openrouter', 'market.ai.openrouter.key' => 'or-test-key']);
+    $this->travelTo(Carbon::parse('2026-11-08 10:00', 'UTC'));
+    Http::fake([OPENROUTER_URL => Http::response(['error' => ['message' => 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'code' => 429]], 429)]);
+
+    app(AiClient::class)->json('s', 'p');
+
+    expect(Carbon::parse(aiStatusOf('openrouter')['paused_until'])->utc()->toDateTimeString())->toBe('2026-11-09 00:00:00')
+        ->and(aiStatusOf('openrouter')['reason'])->toContain('Kuota harian');
+});
+
+test('openrouter without a key is left out of the chain', function () {
+    config(['market.ai.fallback_provider_2' => 'openrouter', 'market.ai.openrouter.key' => null]);
+
+    expect(app(AiClient::class)->providers())->toBe(['gemini']);
 });

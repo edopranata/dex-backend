@@ -211,6 +211,8 @@ return [
         // Provider utama dipakai dulu; cadangan dipakai saat utama dijeda (limit, kuota, error) atau anggarannya habis.
         'provider' => env('AI_PROVIDER', 'none'),
         'fallback_provider' => env('AI_FALLBACK_PROVIDER', 'none'),
+        // Cadangan kedua: dipakai bila utama dan cadangan pertama sama-sama dijeda atau anggarannya habis.
+        'fallback_provider_2' => env('AI_FALLBACK_PROVIDER_2', 'none'),
         'gemini' => [
             'key' => env('GEMINI_API_KEY'),
             // Alias "latest" mengikuti versi terbaru, jadi tidak pensiun seperti model bernomor.
@@ -231,6 +233,22 @@ return [
             'request_by_model' => [
                 'openai/gpt-oss' => ['reasoning_effort' => 'low', 'include_reasoning' => false],
             ],
+        ],
+        'openrouter' => [
+            'key' => env('OPENROUTER_API_KEY'),
+            'base_url' => 'https://openrouter.ai/api/v1',
+            // Model gratis (akhiran :free) yang menerima jawaban JSON. Model gratis bisa ditarik OpenRouter
+            // sewaktu-waktu; "openrouter/free" memilih model gratis yang tersedia secara otomatis.
+            'model' => env('OPENROUTER_MODEL', 'google/gemma-4-31b-it:free'),
+            // Akun tanpa pembelian kredit: 20 request/menit dan 50/hari untuk semua model gratis.
+            'max_per_minute' => (int) env('OPENROUTER_MAX_PER_MINUTE', 10),
+            'max_per_day' => (int) env('OPENROUTER_MAX_PER_DAY', 45),
+            // Batas harian model gratis dihitung ulang pukul 00.00 UTC.
+            'daily_reset_timezone' => 'UTC',
+            // Hanya diarahkan ke penyedia yang benar-benar mendukung mode JSON.
+            'request' => ['provider' => ['require_parameters' => true]],
+            // Identitas aplikasi yang disarankan OpenRouter; tanpa data pribadi.
+            'headers' => ['HTTP-Referer' => 'https://dexsim.tune-in.trade', 'X-Title' => 'DEX Simulator'],
         ],
         'xai' => [
             'key' => env('XAI_API_KEY'),
