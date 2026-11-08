@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Enums\OrderSide;
+use App\Enums\SignalStatus;
 use App\Models\AutoFollowDecision;
 use App\Models\Signal;
 use App\Models\User;
@@ -15,8 +16,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 /**
- * The auto-follow paper accounts buy new signals the way a user would from Telegram, within their risk
- * rules, so their results show how the signals perform as a portfolio with fees and slippage.
+ * The auto-follow paper accounts buy each signal once it enters its zone, within their risk rules, so their
+ * results show how the signals perform as a portfolio with fees and slippage.
  */
 class FollowSignalAutomatically implements ShouldQueue
 {
@@ -28,7 +29,8 @@ class FollowSignalAutomatically implements ShouldQueue
 
     public function handle(TradingService $trading): void
     {
-        if (! config('market.autofollow.enabled') || ! $this->signal->refresh()->status->isOpen()) {
+        // Only an entered signal is bought: a job queued for a waiting signal by older code waits for the entry.
+        if (! config('market.autofollow.enabled') || $this->signal->refresh()->status !== SignalStatus::Active) {
             return;
         }
 

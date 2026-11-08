@@ -134,7 +134,7 @@ test('the tracker reports entry, a target and the stop at breakeven as separate 
     expect($texts)->toHaveCount(4)
         ->and($texts[1])->toContain('masuk zona entry di $0.99')
         ->and($texts[2])->toContain('TP1 tercapai ($1.06)')->toContain('breakeven')
-        ->and($texts[3])->toContain('ditutup di breakeven setelah TP1')->toContain('(setelah biaya)');
+        ->and($texts[3])->toContain('kena stop di harga entry setelah TP1')->toContain('(setelah biaya)');
 });
 
 test('a stop loss rings during the user quiet hours while other updates stay silent', function () {

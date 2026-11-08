@@ -315,7 +315,7 @@ class TelegramNotifier
         return match ($signal->status) {
             SignalStatus::TakeProfit => $signal->max_tp_hit === 3
                 ? "✅ {$symbol} semua target tercapai di ".self::price($signal->exit_price).". {$result}"
-                : "✅ {$symbol} ditutup di breakeven setelah TP{$signal->max_tp_hit}. {$result}",
+                : ((float) $signal->net_r > 0 ? '✅' : '➖')." {$symbol} kena stop di harga entry setelah TP{$signal->max_tp_hit}, keluar di ".self::price($signal->exit_price).". {$result}",
             SignalStatus::StopLoss => "🛑 {$symbol} kena stop loss di ".self::price($signal->exit_price).". {$result}",
             SignalStatus::Expired => $previousStatus === SignalStatus::Active
                 ? "⏱ {$symbol} ditutup karena melewati ".config('market.analysis.signal_max_hours').' jam, di '.self::price($signal->exit_price).". {$result}"

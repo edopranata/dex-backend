@@ -5,6 +5,7 @@ namespace App\Services\Analysis;
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
 use App\Enums\OrderType;
+use App\Enums\SignalStatus;
 use App\Models\AutoFollowDecision;
 use App\Models\EquitySnapshot;
 use App\Models\Order;
@@ -213,13 +214,15 @@ class AccountReport
             ->whereIn('recommendation', $recommendations)
             ->where('created_at', '>=', $account->created_at)
             ->when($version !== null, fn ($query) => $query->where('strategy_version', $version))
-            ->get(['id', 'status', 'net_r']);
+            ->get(['id', 'status', 'net_r', 'entered_at']);
         $ids = $signals->pluck('id');
         $buys = Order::query()->where('user_id', $account->id)->where('side', OrderSide::Buy)->whereIn('signal_id', $ids)->get(['signal_id', 'status'])->keyBy('signal_id');
         $decisions = AutoFollowDecision::query()->where('user_id', $account->id)->whereIn('signal_id', $ids)->get()->keyBy('signal_id');
 
         $skipped = $signals->filter(fn (Signal $s): bool => ! $buys->has($s->id) && $decisions->get($s->id)?->decision === AutoFollowDecision::SKIPPED);
         $missed = $skipped->filter(fn (Signal $s): bool => $s->net_r !== null);
+        // The accounts buy on entry, so a signal that has not entered (yet) has no decision.
+        $notEntered = $signals->filter(fn (Signal $s): bool => $s->entered_at === null && ! $buys->has($s->id) && ! $decisions->has($s->id));
         $closed = $lots->where('status', 'closed');
 
         return [
@@ -230,7 +233,9 @@ class AccountReport
             'cancelled' => $buys->whereIn('status', [OrderStatus::Cancelled, OrderStatus::Rejected])->count(),
             'skipped' => $skipped->count(),
             'skipped_by_reason' => $skipped->countBy(fn (Signal $s): string => (string) $decisions[$s->id]->reason)->all(),
-            'unknown' => $signals->count() - $buys->count() - $skipped->count(),
+            'awaiting_entry' => $notEntered->filter(fn (Signal $s): bool => $s->status === SignalStatus::Pending)->count(),
+            'never_entered' => $notEntered->reject(fn (Signal $s): bool => $s->status === SignalStatus::Pending)->count(),
+            'unknown' => $signals->count() - $buys->count() - $skipped->count() - $notEntered->count(),
             'open_lots' => $lots->where('status', 'open')->count(),
             'closed_lots' => $closed->count(),
             'winning_lots' => $closed->filter(fn (array $lot): bool => $lot['pnl_usd'] > 0)->count(),

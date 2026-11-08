@@ -1,13 +1,16 @@
 <?php
 
 use App\Enums\OrderStatus;
+use App\Enums\SignalStatus;
 use App\Jobs\FollowSignalAutomatically;
+use App\Models\AutoFollowDecision;
 use App\Models\Order;
 use App\Models\Position;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
 use App\Services\Admin\SettingsStore;
+use App\Services\Analysis\SignalTracker;
 use App\Services\Trading\AutoFollowRisk;
 use App\Services\Trading\TradingService;
 
@@ -16,8 +19,8 @@ beforeEach(function () {
     $this->token = Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]);
 });
 
-test('every new signal is bought by the auto-follow account with the signal exits', function () {
-    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+test('every signal is bought by the auto-follow account with the signal exits once it enters', function () {
+    $signal = Signal::factory()->for($this->token)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
 
     $bot = User::firstWhere('email', 'auto-follow@system.invalid');
     $buy = Order::where('user_id', $bot->id)->where('side', 'buy')->sole();
@@ -32,7 +35,7 @@ test('every new signal is bought by the auto-follow account with the signal exit
 test('nothing is bought when auto-follow is switched off', function () {
     app(SettingsStore::class)->set(['market.autofollow.enabled' => false]);
 
-    Signal::factory()->for($this->token)->create();
+    Signal::factory()->for($this->token)->active(2.0)->create(['entry_high' => 2.05, 'stop_loss' => 1.8]);
 
     expect(Order::count())->toBe(0);
 });
@@ -45,8 +48,9 @@ test('the auto-follow account cannot log in', function () {
         ->assertJsonValidationErrors('email');
 });
 
-test('waiting signal buys are cancelled when the signal closes before entry', function () {
-    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7, 'take_profit_1' => 2.1, 'take_profit_2' => 2.3, 'take_profit_3' => 2.6]);
+test('a limit buy still waiting is cancelled when its signal closes', function () {
+    // The signal entered at 1.9, but the price was back above the zone when the account bought.
+    $signal = Signal::factory()->for($this->token)->active(1.9)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7, 'take_profit_1' => 2.1, 'take_profit_2' => 2.3, 'take_profit_3' => 2.6]);
     $buy = User::autoFollower()->orders()->where('signal_id', $signal->id)->where('side', 'buy')->sole();
 
     expect($buy->status)->toBe(OrderStatus::Pending);
@@ -58,7 +62,7 @@ test('waiting signal buys are cancelled when the signal closes before entry', fu
 });
 
 test('a retried auto-follow job does not buy the same signal twice', function () {
-    $signal = Signal::factory()->for($this->token)->create();
+    $signal = Signal::factory()->for($this->token)->active(2.0)->create(['entry_high' => 2.05, 'stop_loss' => 1.8]);
 
     (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
 
@@ -69,13 +73,13 @@ test('the position limit stops new buys, counting limit buys still waiting', fun
     app(SettingsStore::class)->set(['market.autofollow.max_open_positions' => 2]);
 
     // Fills right away.
-    Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    Signal::factory()->for($this->token)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
     // Waits for a lower entry.
     $other = Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]);
-    Signal::factory()->for($other)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7]);
+    Signal::factory()->for($other)->active(1.9)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7]);
     // No room left.
     $third = Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]);
-    $skipped = Signal::factory()->for($third)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    $skipped = Signal::factory()->for($third)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
 
     $bot = User::autoFollower();
 
@@ -113,7 +117,7 @@ test('the daily loss limit stops new buys until the next local day, and only rea
     expect($risk->realizedToday($bot))->toEqual(-350.0)
         ->and($risk->dailyLossReached($bot))->toBeTrue();
 
-    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    $signal = Signal::factory()->for($this->token)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
     expect($bot->orders()->where('signal_id', $signal->id)->exists())->toBeFalse();
 
     $this->travelTo(now('Asia/Jakarta')->addDay()->setTime(0, 5));
@@ -123,7 +127,7 @@ test('the daily loss limit stops new buys until the next local day, and only rea
 test('each account only buys the recommendations it follows, within its own limits', function () {
     app(SettingsStore::class)->set(['market.autofollow.max_open_positions' => 1]);
     $make = fn (string $recommendation) => Signal::factory()->for(Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]))
-        ->create(['recommendation' => $recommendation, 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+        ->active(2.0)->create(['recommendation' => $recommendation, 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
     $bought = fn (string $key) => User::autoFollower($key)->orders()->where('side', 'buy')->pluck('signal_id')->all();
 
     $buy = $make('BUY');
@@ -156,11 +160,52 @@ test('every auto-follow account is a system account that cannot log in', functio
 });
 
 test('a retried job does not buy twice in any account', function () {
-    $signal = Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    $signal = Signal::factory()->for($this->token)->active(2.0)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
 
     (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
 
     expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(2);
+});
+
+test('the accounts wait for the signal to enter its zone, and buy at the moment it does', function () {
+    $signal = Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $tracker = app(SignalTracker::class);
+
+    // In the zone, but a single price does not enter the signal yet: nothing is bought.
+    $tracker->track($signal, 2.0, 2.2);
+
+    expect($signal->refresh()->status)->toBe(SignalStatus::Pending)
+        ->and(Order::count())->toBe(0)
+        ->and(AutoFollowDecision::count())->toBe(0);
+
+    $tracker->track($signal, 2.0, 2.0);
+    $buys = Order::where('signal_id', $signal->id)->where('side', 'buy')->get();
+
+    expect($signal->refresh()->status)->toBe(SignalStatus::Active)
+        ->and($buys)->toHaveCount(2)
+        ->and($buys->every(fn (Order $buy): bool => $buy->status === OrderStatus::Filled && $buy->filled_at->equalTo($signal->entered_at)))->toBeTrue()
+        ->and(AutoFollowDecision::where('decision', AutoFollowDecision::BOUGHT)->count())->toBe(2);
+});
+
+test('a signal that never enters its zone is never bought', function () {
+    $signal = Signal::factory()->for($this->token)->create(['entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7]);
+
+    $signal->update(['status' => 'expired', 'closed_at' => now()]);
+
+    expect(Order::count())->toBe(0)
+        ->and(AutoFollowDecision::count())->toBe(0);
+});
+
+test('a job queued for a waiting signal before an update buys nothing until the signal enters', function () {
+    $signal = Signal::withoutEvents(fn () => Signal::factory()->for($this->token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]));
+
+    (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
+
+    expect(Order::count())->toBe(0);
+
+    $signal->update(['status' => 'active', 'entry_price' => 2.0, 'entered_at' => now()]);
+
+    expect(User::autoFollower()->orders()->where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(1);
 });
 
 test('rounding left over from selling in thirds closes the position and frees its slot', function () {
@@ -195,11 +240,11 @@ test('a small but real sale does not close what is left of a big position', func
 });
 
 /**
- * A signal the auto-follow account bought straight away (price 2.0 sits in its entry zone).
+ * A signal the auto-follow account bought straight away (it entered at 2.0, inside its zone).
  */
 function boughtSignal(Token $token): array
 {
-    $signal = Signal::factory()->for($token)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $signal = Signal::factory()->for($token)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
     $buy = User::autoFollower()->orders()->where('signal_id', $signal->id)->where('side', 'buy')->sole();
 
     return [$signal, $buy];

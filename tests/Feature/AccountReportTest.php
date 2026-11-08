@@ -27,7 +27,7 @@ beforeEach(function () {
 function followedBuy(): array
 {
     $token = Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now(), 'liquidity_usd' => 10_000_000]);
-    $signal = Signal::factory()->for($token)->create(['recommendation' => 'BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $signal = Signal::factory()->for($token)->active(2.0)->create(['recommendation' => 'BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
 
     return [$signal, User::autoFollower('buy')->orders()->where('signal_id', $signal->id)->where('side', 'buy')->sole()];
 }
@@ -123,13 +123,25 @@ test('each decision of an auto-follow account is recorded, with the reason for a
 
     [$first] = followedBuy();
     $second = Signal::factory()->for(Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]))
-        ->create(['recommendation' => 'BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+        ->active(2.0)->create(['recommendation' => 'BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
     $account = User::autoFollower('buy');
 
     expect(AutoFollowDecision::where('user_id', $account->id)->where('signal_id', $first->id)->sole()->decision)->toBe('bought')
         ->and(AutoFollowDecision::where('user_id', $account->id)->where('signal_id', $second->id)->sole())
         ->decision->toBe('skipped')
         ->reason->toBe('position_limit');
+});
+
+test('signals that have not entered their zone are counted apart, not as missing a decision', function () {
+    $make = fn () => Signal::factory()->for(Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]))
+        ->create(['recommendation' => 'BUY', 'entry_low' => 1.85, 'entry_high' => 1.9, 'stop_loss' => 1.7]);
+    followedBuy();
+    $make();
+    $make()->update(['status' => 'expired', 'closed_at' => now()]);
+
+    $funnel = $this->actingAs($this->person)->getJson('/api/reports/accounts/buy/report?version=all')->assertOk()->json('funnel');
+
+    expect($funnel)->toMatchArray(['signals' => 3, 'bought' => 1, 'awaiting_entry' => 1, 'never_entered' => 1, 'unknown' => 0]);
 });
 
 test('the decision history is filled from buy orders and from the log, once', function () {
