@@ -174,3 +174,15 @@ test('the decision history is filled from buy orders and from the log, once', fu
 
     File::deleteDirectory($dir);
 });
+
+test('a chain account report only counts signals on its own chain', function () {
+    followedBuy();
+    $bsc = Token::factory()->create(['chain_id' => 'bsc', 'price_usd' => 2.0, 'price_updated_at' => now()]);
+    Signal::factory()->for($bsc)->active(2.0)->create(['recommendation' => 'BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+
+    $report = $this->actingAs($this->person)->getJson('/api/reports/accounts/solana/report?version=all')->assertOk()->json();
+
+    expect($report['chains'])->toBe(['solana'])
+        ->and($report['funnel'])->toMatchArray(['signals' => 1, 'bought' => 1, 'unknown' => 0])
+        ->and($this->getJson('/api/reports/accounts/bsc/report?version=all')->json('funnel.signals'))->toBe(1);
+});

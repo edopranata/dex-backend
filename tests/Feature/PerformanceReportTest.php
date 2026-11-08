@@ -145,7 +145,9 @@ test('the accounts are compared by what they bought and earned on finished signa
 
     $accounts = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('accounts'))->keyBy('key');
 
-    expect($accounts->keys()->all())->toBe(['all', 'strong_buy', 'buy'])
+    expect($accounts->keys()->all())->toBe(['all', 'strong_buy', 'buy', 'solana', 'bsc', 'ethereum'])
+        ->and($accounts['solana']['chains'])->toBe(['solana'])
+        ->and($accounts['all']['chains'])->toBeNull()
         ->and($accounts['strong_buy']['closed_signals'])->toBe(1)
         ->and($accounts['strong_buy']['win_rate'])->toEqual(100)
         ->and($accounts['strong_buy']['total_r'])->toEqual(1.5)
@@ -250,4 +252,19 @@ test('each shadow variant counts signals entered since it started, and only chan
         ->and($variants['first_check'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.2])
         ->and($variants['second_downgrade'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.5])
         ->and($variants['confirmed_entry'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.6]);
+});
+
+test('results are also grouped per network, split by recommendation', function () {
+    $bsc = Token::factory()->create(['chain_id' => 'bsc']);
+    reportSignal($this->token, 1.5, '2026-11-03 10:00:00', ['recommendation' => 'STRONG_BUY']);
+    reportSignal($this->token, -1.0, '2026-11-03 11:00:00');
+    reportSignal($bsc, -1.0, '2026-11-03 12:00:00');
+
+    $chains = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('chains'))->keyBy('chain');
+
+    expect($chains->keys()->all())->toBe(['solana', 'bsc'])
+        ->and($chains['solana'])->label->toBe('Solana')->trades->toBe(2)->total_r->toEqual(0.5)
+        ->and($chains['solana']['by_recommendation']['STRONG_BUY']['total_r'])->toEqual(1.5)
+        ->and($chains['solana']['by_recommendation']['BUY']['total_r'])->toEqual(-1.0)
+        ->and($chains['bsc'])->label->toBe('BNB Chain')->trades->toBe(1);
 });

@@ -34,7 +34,13 @@ class FollowSignalAutomatically implements ShouldQueue
             return;
         }
 
+        $chain = $this->signal->token->chain_id;
+
         foreach (User::AUTO_FOLLOW_ACCOUNTS as $key => $definition) {
+            if (isset($definition['chains']) && ! in_array($chain, $definition['chains'], true)) {
+                continue;
+            }
+
             if (in_array($this->signal->recommendation->value, $definition['recommendations'], true)) {
                 $this->follow(User::autoFollower($key), $key, $trading);
             }

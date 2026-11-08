@@ -164,7 +164,8 @@ test('a retried job does not buy twice in any account', function () {
 
     (new FollowSignalAutomatically($signal))->handle(app(TradingService::class));
 
-    expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(2);
+    // Gabungan, Strong Buy, and Solana (the token's chain).
+    expect(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())->toBe(3);
 });
 
 test('the accounts wait for the signal to enter its zone, and buy at the moment it does', function () {
@@ -182,9 +183,9 @@ test('the accounts wait for the signal to enter its zone, and buy at the moment 
     $buys = Order::where('signal_id', $signal->id)->where('side', 'buy')->get();
 
     expect($signal->refresh()->status)->toBe(SignalStatus::Active)
-        ->and($buys)->toHaveCount(2)
+        ->and($buys)->toHaveCount(3)
         ->and($buys->every(fn (Order $buy): bool => $buy->status === OrderStatus::Filled && $buy->filled_at->equalTo($signal->entered_at)))->toBeTrue()
-        ->and(AutoFollowDecision::where('decision', AutoFollowDecision::BOUGHT)->count())->toBe(2);
+        ->and(AutoFollowDecision::where('decision', AutoFollowDecision::BOUGHT)->count())->toBe(3);
 });
 
 test('a signal that never enters its zone is never bought', function () {
@@ -321,4 +322,33 @@ test('a lot waits for a fresh price before it is sold', function () {
     // Every auto-follow account that bought the signal gets its lot closed.
     expect(app(TradingService::class)->closeFinishedSignalLots())->toBe(Order::where('signal_id', $signal->id)->where('side', 'buy')->count())
         ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(0);
+});
+
+test('a chain account only buys signals on its own chain', function () {
+    $bsc = Token::factory()->create(['chain_id' => 'bsc', 'price_usd' => 2.0, 'price_updated_at' => now()]);
+    $signal = Signal::factory()->for($bsc)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8]);
+    $bought = fn (string $key) => User::autoFollower($key)->orders()->where('signal_id', $signal->id)->where('side', 'buy')->exists();
+
+    expect($bought('bsc'))->toBeTrue()
+        ->and($bought('all'))->toBeTrue()
+        ->and($bought('solana'))->toBeFalse()
+        ->and($bought('ethereum'))->toBeFalse()
+        ->and(AutoFollowDecision::where('user_id', User::autoFollower('solana')->id)->exists())->toBeFalse();
+});
+
+test('a chain account pays its network gas on every swap, the other accounts do not', function () {
+    app(SettingsStore::class)->set(['market.autofollow.gas_usd.ethereum' => 0.5]);
+    $eth = Token::factory()->create(['chain_id' => 'ethereum', 'price_usd' => 2.0, 'price_updated_at' => now(), 'liquidity_usd' => 0]);
+    $signal = Signal::factory()->for($eth)->active(2.0)->create(['entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $buyOf = fn (string $key) => User::autoFollower($key)->orders()->where('signal_id', $signal->id)->where('side', 'buy')->sole();
+    $chainBuy = $buyOf('ethereum');
+
+    // $100 at 0.3% is $0.30, plus $0.50 gas.
+    expect((float) $chainBuy->fee_usd)->toEqualWithDelta(0.8, 1e-9)
+        ->and((float) $buyOf('all')->fee_usd)->toEqualWithDelta(0.3, 1e-9);
+
+    $sell = Order::where('parent_id', $chainBuy->id)->where('type', 'take_profit')->orderBy('id')->first();
+    app(TradingService::class)->execute($sell, 2.3);
+
+    expect((float) $sell->refresh()->fee_usd)->toEqualWithDelta((float) $sell->filled_quantity * 2.3 * 0.003 + 0.5, 1e-6);
 });

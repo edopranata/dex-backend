@@ -58,6 +58,18 @@ class PerformanceReport
             'recommendations' => $signals->groupBy(fn (Signal $signal): string => $signal->recommendation->value)
                 ->map(fn (Collection $group, string $recommendation): array => ['recommendation' => $recommendation, ...$this->summarize($group)])
                 ->values(),
+            // Per network, to help choose which chain's wallet to use with real money.
+            'chains' => $signals->groupBy(fn (Signal $signal): string => $signal->token->chain_id)
+                ->map(fn (Collection $group, string $chain): array => [
+                    'chain' => $chain,
+                    'label' => config("market.chains.{$chain}.label", $chain),
+                    ...$this->summarize($group),
+                    'by_recommendation' => $group->groupBy(fn (Signal $signal): string => $signal->recommendation->value)
+                        ->map(fn (Collection $part): array => $this->summarize($part))
+                        ->all(),
+                ])
+                ->sortByDesc('trades')
+                ->values(),
             'tokens' => $signals->groupBy('token_id')
                 ->map(fn (Collection $group): array => ['symbol' => $group->first()->token->symbol, 'slug' => $group->first()->token->slug, ...$this->summarize($group)])
                 ->sortByDesc('total_r')
@@ -214,7 +226,7 @@ class PerformanceReport
     }
 
     /**
-     * @param  array{label: string, recommendations: list<string>}  $definition
+     * @param  array{label: string, recommendations: list<string>, chains?: list<string>}  $definition
      * @return array<string, mixed>
      */
     private function autoFollow(string $key, array $definition): array
@@ -233,6 +245,7 @@ class PerformanceReport
             'key' => $key,
             'label' => $definition['label'],
             'recommendations' => $definition['recommendations'],
+            'chains' => $definition['chains'] ?? null,
             'started_at' => $account->created_at?->toIso8601String(),
             ...$summary,
             ...$this->closedSignals($account),

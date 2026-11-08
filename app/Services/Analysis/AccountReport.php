@@ -51,7 +51,8 @@ class AccountReport
             'version' => $version,
             'summary' => $summary,
             'criteria' => $this->criteria($summary, $drawdown),
-            'funnel' => $this->funnel($account, $definition['recommendations'], $version, $lots),
+            'chains' => $definition['chains'] ?? null,
+            'funnel' => $this->funnel($account, $definition['recommendations'], $definition['chains'] ?? null, $version, $lots),
             'exits' => $this->exits($closed),
             'weeks' => $this->weeks($closed),
             'lots' => $lots->sortByDesc('bought_at')->values()->all(),
@@ -205,13 +206,15 @@ class AccountReport
      * From every signal the account follows to the lots it closed with a profit.
      *
      * @param  list<string>  $recommendations
+     * @param  list<string>|null  $chains  Only signals on these chains; null for every chain.
      * @param  Collection<int, array<string, mixed>>  $lots
      * @return array<string, mixed>
      */
-    private function funnel(User $account, array $recommendations, ?string $version, Collection $lots): array
+    private function funnel(User $account, array $recommendations, ?array $chains, ?string $version, Collection $lots): array
     {
         $signals = Signal::query()
             ->whereIn('recommendation', $recommendations)
+            ->when($chains !== null, fn ($query) => $query->whereHas('token', fn ($token) => $token->whereIn('chain_id', $chains)))
             ->where('created_at', '>=', $account->created_at)
             ->when($version !== null, fn ($query) => $query->where('strategy_version', $version))
             ->get(['id', 'status', 'net_r', 'entered_at']);

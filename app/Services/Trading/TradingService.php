@@ -350,7 +350,7 @@ class TradingService
             return;
         }
 
-        $fee = $amount * config('market.simulator.fee_rate');
+        $fee = $amount * config('market.simulator.fee_rate') + $user->gasPerSwapUsd($token);
         $impact = self::priceImpact($amount - $fee, $token->liquidity_usd);
         $fillPrice = $marketPrice / (1 - $impact);
         $quantity = ($amount - $fee) / $fillPrice;
@@ -388,7 +388,7 @@ class TradingService
         $impact = self::priceImpact($gross, $token->liquidity_usd);
         $fillPrice = $marketPrice * (1 - $impact);
         $proceeds = $quantity * $fillPrice;
-        $fee = $proceeds * config('market.simulator.fee_rate');
+        $fee = $proceeds * config('market.simulator.fee_rate') + $user->gasPerSwapUsd($token);
         $net = $proceeds - $fee;
         $pnl = $net - $quantity * $position->avg_price;
 

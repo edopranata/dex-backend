@@ -19,14 +19,18 @@ class User extends Authenticatable
 {
     /**
      * Paper accounts that buy signals automatically, one per way of choosing them, so their results
-     * can be compared. They cannot log in.
+     * can be compared. They cannot log in. An account with chains only follows tokens on those chains and
+     * pays the network's gas on every swap, to help choose which chain's wallet to use with real money.
      *
-     * @var array<string, array{email: string, name: string, label: string, recommendations: list<string>}>
+     * @var array<string, array{email: string, name: string, label: string, recommendations: list<string>, chains?: list<string>}>
      */
     public const AUTO_FOLLOW_ACCOUNTS = [
         'all' => ['email' => 'auto-follow@system.invalid', 'name' => 'Auto-follow (sistem)', 'label' => 'Gabungan', 'recommendations' => ['BUY', 'STRONG_BUY']],
         'strong_buy' => ['email' => 'auto-follow-strong-buy@system.invalid', 'name' => 'Auto-follow Strong Buy (sistem)', 'label' => 'Hanya Strong Buy', 'recommendations' => ['STRONG_BUY']],
         'buy' => ['email' => 'auto-follow-buy@system.invalid', 'name' => 'Auto-follow Buy (sistem)', 'label' => 'Hanya Buy', 'recommendations' => ['BUY']],
+        'solana' => ['email' => 'auto-follow-solana@system.invalid', 'name' => 'Auto-follow Solana (sistem)', 'label' => 'Solana', 'recommendations' => ['BUY', 'STRONG_BUY'], 'chains' => ['solana']],
+        'bsc' => ['email' => 'auto-follow-bsc@system.invalid', 'name' => 'Auto-follow BNB Chain (sistem)', 'label' => 'BNB Chain', 'recommendations' => ['BUY', 'STRONG_BUY'], 'chains' => ['bsc']],
+        'ethereum' => ['email' => 'auto-follow-ethereum@system.invalid', 'name' => 'Auto-follow Ethereum (sistem)', 'label' => 'Ethereum', 'recommendations' => ['BUY', 'STRONG_BUY'], 'chains' => ['ethereum']],
     ];
 
     /** @use HasFactory<UserFactory> */
@@ -70,6 +74,21 @@ class User extends Authenticatable
                 'balance_usd' => config('market.simulator.starting_balance'),
                 'is_system' => true,
             ])->save());
+    }
+
+    /**
+     * Gas this account pays per swap on the token's chain: only the per-chain auto-follow accounts, so the
+     * other accounts stay comparable with their history.
+     */
+    public function gasPerSwapUsd(Token $token): float
+    {
+        if (! $this->is_system) {
+            return 0.0;
+        }
+
+        $definition = collect(self::AUTO_FOLLOW_ACCOUNTS)->firstWhere('email', $this->email);
+
+        return isset($definition['chains']) ? (float) config("market.autofollow.gas_usd.{$token->chain_id}", 0) : 0.0;
     }
 
     /**

@@ -307,6 +307,15 @@ return [
         'max_position_pct' => 25.0,
         // Order dibatasi % likuiditas pool supaya slippage tetap kecil.
         'max_liquidity_pct' => 0.25,
+        // Gas per swap (USD) yang dibayar akun auto-follow per jaringan, di atas fee 0,3%. Pada 8 Nov 2026 swap
+        // di Ethereum sekitar $0,04 (Etherscan, 0,054 gwei) dan di BNB Chain $0,007 (BscScan); Solana di bawah
+        // 1 sen. Ethereum dibuat lebih tinggi karena gas-nya bisa melonjak berkali lipat saat ramai.
+        'gas_usd' => [
+            'solana' => (float) env('AUTO_FOLLOW_GAS_SOLANA', 0.01),
+            'bsc' => (float) env('AUTO_FOLLOW_GAS_BSC', 0.01),
+            'ethereum' => (float) env('AUTO_FOLLOW_GAS_ETHEREUM', 0.25),
+            'base' => (float) env('AUTO_FOLLOW_GAS_BASE', 0.01),
+        ],
     ],
 
     /*
