@@ -115,13 +115,13 @@ class SettingsRegistry
             [
                 'key' => 'autofollow',
                 'label' => 'Auto-follow (pengukur kinerja)',
-                'description' => 'Akun sistem "Auto-follow" membeli sinyal baru sesuai batas posisi dan risiko di bawah, memakai aturan sinyal (limit di zona entry, SL, TP1–TP3). Hasilnya mengukur win rate aplikasi tanpa pilih-pilih.',
+                'description' => 'Akun sistem "Auto-follow" membeli setiap sinyal saat harganya masuk zona entry, sesuai batas posisi dan risiko di bawah, lalu memasang SL dan TP1–TP3 sinyal. Hasilnya mengukur kinerja sinyal sebagai portofolio, lengkap dengan biaya, tanpa pilih-pilih.',
                 'fields' => [
                     ['key' => 'market.autofollow.enabled', 'label' => 'Ikuti semua sinyal otomatis', 'type' => 'bool'],
-                    ['key' => 'market.autofollow.max_open_positions', 'label' => 'Maksimal posisi terbuka', 'type' => 'int', 'min' => 0, 'max' => 100, 'description' => 'Termasuk order beli yang menunggu entry. 0 = tanpa batas. Sinyal tetap dicatat walau tidak dibeli.'],
+                    ['key' => 'market.autofollow.max_open_positions', 'label' => 'Maksimal posisi terbuka', 'type' => 'int', 'min' => 0, 'max' => 100, 'description' => 'Termasuk order beli yang belum terisi. 0 = tanpa batas. Sinyal tetap dicatat walau tidak dibeli.'],
                     ['key' => 'market.autofollow.max_daily_loss_pct', 'label' => 'Batas rugi harian (% ekuitas)', 'type' => 'float', 'min' => 0, 'max' => 50, 'step' => 0.5, 'description' => 'Rugi terealisasi per hari WIB. Setelah tercapai, tidak ada pembelian baru sampai besok; posisi terbuka tetap berjalan dengan TP/SL-nya. 0 = tanpa batas.'],
                     ['key' => 'market.autofollow.risk_pct', 'label' => 'Risiko per sinyal (% ekuitas)', 'type' => 'float', 'min' => 0, 'max' => 10, 'step' => 0.25, 'description' => 'Ukuran posisi dihitung supaya rugi sebesar ini saat kena stop. Dibatasi 25% ekuitas dan 0,25% likuiditas pool. 0 = pakai nominal tetap.'],
-                    ['key' => 'market.autofollow.amount_usd', 'label' => 'Nominal tetap (USD), saat risiko 0', 'type' => 'float', 'min' => 1, 'max' => 100000, 'description' => 'Saldo awal akun mengikuti "Saldo awal" simulator.'],
+                    ['key' => 'market.autofollow.amount_usd', 'label' => 'Nominal tetap (USD), saat risiko 0', 'type' => 'float', 'min' => 1, 'max' => 100000, 'description' => 'Besar tiap pembelian dalam dolar, sama untuk setiap sinyal, dipakai hanya bila risiko per sinyal 0. Juga ukuran acuan biaya (fee dan price impact) pada R bersih sinyal, jadi mengubahnya menggeser R sinyal berikutnya. Saldo awal akun mengikuti "Saldo awal" simulator.'],
                 ],
             ],
             [
