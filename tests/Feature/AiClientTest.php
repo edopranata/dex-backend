@@ -349,7 +349,7 @@ test('openrouter is the second fallback, asked only when gemini and groq both ca
     Http::assertSent(fn ($request) => $request->url() === 'https://openrouter.ai/api/v1/chat/completions'
         && $request->hasHeader('Authorization', 'Bearer or-test-key')
         && $request->hasHeader('X-Title', 'DEX Simulator')
-        && $request['model'] === 'google/gemma-4-31b-it:free'
+        && $request['model'] === 'openrouter/free'
         && $request['response_format'] === ['type' => 'json_object']
         && $request['provider'] === ['require_parameters' => true]);
 });

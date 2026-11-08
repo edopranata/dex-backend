@@ -237,9 +237,9 @@ return [
         'openrouter' => [
             'key' => env('OPENROUTER_API_KEY'),
             'base_url' => 'https://openrouter.ai/api/v1',
-            // Model gratis (akhiran :free) yang menerima jawaban JSON. Model gratis bisa ditarik OpenRouter
-            // sewaktu-waktu; "openrouter/free" memilih model gratis yang tersedia secara otomatis.
-            'model' => env('OPENROUTER_MODEL', 'google/gemma-4-31b-it:free'),
+            // "openrouter/free" memilih model gratis yang sedang tersedia dan mendukung JSON. Gemma gratis dilayani
+            // Google AI Studio, yang ikut sibuk saat Gemini sibuk (HTTP 429 pada uji 8 Nov), jadi tidak dipakai.
+            'model' => env('OPENROUTER_MODEL', 'openrouter/free'),
             // Akun tanpa pembelian kredit: 20 request/menit dan 50/hari untuk semua model gratis.
             'max_per_minute' => (int) env('OPENROUTER_MAX_PER_MINUTE', 10),
             'max_per_day' => (int) env('OPENROUTER_MAX_PER_DAY', 45),
