@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
-    'token_id', 'provider', 'holder_count', 'top10_percent', 'lp_locked_percent', 'is_honeypot',
+    'token_id', 'provider', 'holder_count', 'top10_percent', 'top_holders', 'top1_percent', 'creator_percent', 'owner_percent', 'lp_locked_percent', 'is_honeypot',
     'buy_tax', 'sell_tax', 'liquidity_usd', 'risk_score', 'flags', 'checked_at',
 ])]
 class TokenSecurityCheck extends Model
@@ -35,6 +35,10 @@ class TokenSecurityCheck extends Model
         return [
             'holder_count' => 'integer',
             'top10_percent' => 'float',
+            'top_holders' => 'array',
+            'top1_percent' => 'float',
+            'creator_percent' => 'float',
+            'owner_percent' => 'float',
             'lp_locked_percent' => 'float',
             'is_honeypot' => 'boolean',
             'buy_tax' => 'float',

@@ -27,6 +27,11 @@ class OnchainAnalyzer
             foreach (array_slice(array_filter($latest->flags, fn (array $flag): bool => $flag['level'] === 'danger'), 0, 3) as $flag) {
                 $reasons[] = $flag['message'];
             }
+
+            // Recorded and explained, not scored yet: whether a dominant holder predicts losses is measured first.
+            if ($latest->top1_percent !== null && $latest->top1_percent >= 30) {
+                $reasons[] = sprintf('Satu holder memegang %.1f%% supply dan bisa menjual kapan saja%s.', $latest->top1_percent, $latest->top1_percent >= 60 ? ' (dominan)' : '');
+            }
         }
 
         $holderGrowth = $this->holderGrowthPercent($token, $latest?->holder_count);
@@ -69,6 +74,9 @@ class OnchainAnalyzer
                 'holder_growth_pct' => $holderGrowth,
                 'liquidity_change_24h_pct' => $liquidityChange,
                 'top10_percent' => $latest?->top10_percent,
+                'top1_percent' => $latest?->top1_percent,
+                'creator_percent' => $latest?->creator_percent,
+                'owner_percent' => $latest?->owner_percent,
             ],
         ];
     }

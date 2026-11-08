@@ -53,6 +53,11 @@ return [
 
     // Candle: hanya 15m yang diambil rutin; 1h, 4h, dan 1d dirakit dari 15m. Uji 7 Nov pada 5.164 analisa:
     // skor teknikal sama persis dengan candle GeckoTerminal, jadi versi strategi tidak berubah.
+    // Cek keamanan dan holder lewat GoPlus. Jeda antar-token supaya tidak ditolak (20 sekaligus: 3 terakhir ditolak).
+    'security' => [
+        'spacing_seconds' => (int) env('SECURITY_SPACING_SECONDS', 10),
+    ],
+
     'candles' => [
         // Tiap siklus: 96 candle terakhir (24 jam), supaya koreksi data GeckoTerminal ikut terbawa. Jumlah
         // candle tidak menambah permintaan; yang dihitung batas GeckoTerminal adalah permintaannya.

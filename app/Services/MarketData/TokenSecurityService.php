@@ -24,7 +24,7 @@ class TokenSecurityService
 
     public function check(Token $token): ?TokenSecurityCheck
     {
-        $assessment = $this->assess($token->chain_id, $token->token_address);
+        $assessment = $this->assess($token->chain_id, $token->token_address, $token->pair_address);
 
         if ($assessment === null) {
             return null;
@@ -42,9 +42,10 @@ class TokenSecurityService
     /**
      * Fetch and score a token without storing anything (used for discovery candidates).
      *
-     * @return array{score: int, is_honeypot: bool|null, flags: list<array{level: string, message: string}>, holder_count: int|null, top10_percent: float|null, lp_locked_percent: float|null, buy_tax: float|null, sell_tax: float|null}|null
+     * @param  string|null  $pairAddress  The token's own pool, so its share is not read as a holder that can sell.
+     * @return array{score: int, is_honeypot: bool|null, flags: list<array{level: string, message: string}>, holder_count: int|null, top10_percent: float|null, top_holders: list<array<string, mixed>>, top1_percent: float|null, creator_percent: float|null, owner_percent: float|null, lp_locked_percent: float|null, buy_tax: float|null, sell_tax: float|null}|null
      */
-    public function assess(string $chainId, string $tokenAddress): ?array
+    public function assess(string $chainId, string $tokenAddress, ?string $pairAddress = null): ?array
     {
         $chain = config("market.chains.{$chainId}.goplus");
 
@@ -59,11 +60,16 @@ class TokenSecurityService
         }
 
         $result = $chain === 'solana' ? $this->scoreSolana($data) : $this->scoreEvm($data);
+        $topHolders = $this->topHolders($data, $pairAddress);
 
         return [
             ...$result,
             'holder_count' => isset($data['holder_count']) ? (int) $data['holder_count'] : null,
             'top10_percent' => $this->top10Percent($data['holders'] ?? []),
+            'top_holders' => $topHolders,
+            'top1_percent' => $this->largestFreeHolderPercent($topHolders),
+            'creator_percent' => $this->percentField($data, 'creator_percent'),
+            'owner_percent' => $this->percentField($data, 'owner_percent'),
             'lp_locked_percent' => $this->lockedLiquidityPercent($data['lp_holders'] ?? []),
             'buy_tax' => isset($data['buy_tax']) && $data['buy_tax'] !== '' ? (float) $data['buy_tax'] * 100 : null,
             'sell_tax' => isset($data['sell_tax']) && $data['sell_tax'] !== '' ? (float) $data['sell_tax'] * 100 : null,
@@ -241,6 +247,69 @@ class TokenSecurityService
             ->sum(fn (array $holder): float => (float) ($holder['percent'] ?? 0));
 
         return round($percent * 100, 2);
+    }
+
+    /**
+     * The ten largest holders as GoPlus lists them, with what each address is. GoPlus marks locked holders on
+     * every chain, contracts only on EVM chains; the pool is known from GoPlus's pair list and the token's
+     * own pair. On Solana an exchange or a pool vault still shows as an ordinary holder.
+     *
+     * @param  array<string, mixed>  $data
+     * @return list<array{address: string, percent: float, is_locked: bool, is_contract: bool|null, is_pool: bool, is_burn: bool, tag: string|null}>
+     */
+    private function topHolders(array $data, ?string $pairAddress): array
+    {
+        $pools = collect($data['dex'] ?? [])
+            ->flatMap(fn ($pool): array => is_array($pool) ? [$pool['pair'] ?? null, $pool['id'] ?? null] : [])
+            ->push($pairAddress)
+            ->filter()
+            ->map(fn ($address): string => strtolower((string) $address))
+            ->all();
+
+        return collect($data['holders'] ?? [])
+            ->take(10)
+            ->map(function (array $holder) use ($pools): array {
+                $address = (string) ($holder['address'] ?? $holder['account'] ?? '');
+
+                return [
+                    'address' => $address,
+                    'percent' => round((float) ($holder['percent'] ?? 0) * 100, 4),
+                    'is_locked' => ($holder['is_locked'] ?? 0) == 1,
+                    'is_contract' => array_key_exists('is_contract', $holder) ? $holder['is_contract'] == 1 : null,
+                    'is_pool' => in_array(strtolower($address), $pools, true),
+                    'is_burn' => $this->isBurnAddress($address),
+                    'tag' => filled($holder['tag'] ?? null) ? (string) $holder['tag'] : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * The share of the largest holder that could sell at any moment: not locked, a contract, a burn address or
+     * a pool. Above 60% one wallet can take most of the liquidity out.
+     *
+     * @param  list<array<string, mixed>>  $holders
+     */
+    private function largestFreeHolderPercent(array $holders): ?float
+    {
+        if ($holders === []) {
+            return null;
+        }
+
+        $free = collect($holders)->first(fn (array $holder): bool => ! $holder['is_locked'] && $holder['is_contract'] !== true && ! $holder['is_pool'] && ! $holder['is_burn']);
+
+        return $free === null ? 0.0 : round($free['percent'], 2);
+    }
+
+    /**
+     * A GoPlus share (0-1) as a percentage, or null when GoPlus does not give it (Solana).
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function percentField(array $data, string $key): ?float
+    {
+        return isset($data[$key]) && $data[$key] !== '' ? round((float) $data[$key] * 100, 2) : null;
     }
 
     /**

@@ -28,6 +28,8 @@ Schedule::command('market:whales')->cron('0,15,30,45 * * * *')->withoutOverlappi
 Schedule::command('market:news')->hourlyAt(10)->withoutOverlapping();
 
 Schedule::command('market:security')->everySixHours(15)->withoutOverlapping();
+// Holder data of tokens that left the Market, once a day away from the Market run and discovery (:25, :55).
+Schedule::command('market:security --out-of-market')->dailyAt('03:35')->withoutOverlapping();
 
 Schedule::command('market:discover')->cron('25,55 * * * *')->withoutOverlapping();
 

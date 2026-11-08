@@ -18,13 +18,21 @@ class GoPlusClient
             ? '/solana/token_security'
             : "/token_security/{$goPlusChain}";
 
-        $result = Http::baseUrl('https://api.gopluslabs.io/api/v1')
+        $response = Http::baseUrl('https://api.gopluslabs.io/api/v1')
             ->acceptJson()
             ->timeout(15)
             ->retry(2, 1000, throw: false)
             ->get($path, ['contract_addresses' => $tokenAddress])
-            ->throw()
-            ->json('result') ?? [];
+            ->throw();
+
+        // Codes 1-3 carry data (complete or partial); four-digit codes are errors such as the request limit.
+        $code = (int) $response->json('code', 1);
+
+        if ($code >= 1000) {
+            throw new GoPlusRefusedException("GoPlus menolak permintaan (kode {$code}): ".mb_substr((string) $response->json('message'), 0, 150));
+        }
+
+        $result = $response->json('result') ?? [];
 
         foreach ($result as $address => $data) {
             if (strcasecmp((string) $address, $tokenAddress) === 0) {
