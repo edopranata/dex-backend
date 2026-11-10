@@ -298,8 +298,10 @@ return [
             'max_per_minute' => (int) env('OPENAI_MAX_PER_MINUTE', 30),
             'max_per_day' => (int) env('OPENAI_MAX_PER_DAY', 250),
         ],
-        // Ringkasan AI dibuat ulang jika rekomendasi berubah atau ringkasan lebih tua dari ini.
+        // Ringkasan AI dibuat ulang jika rekomendasi berubah, ringkasan lebih tua dari ini (dihitung sejak ditulis),
+        // atau skor akhir bergeser sebanyak ini atau lebih sejak ringkasan ditulis.
         'summary_ttl_minutes' => 180,
+        'summary_refresh_score_change' => 5,
     ],
 
     /*

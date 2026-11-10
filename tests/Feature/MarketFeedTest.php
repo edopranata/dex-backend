@@ -84,6 +84,16 @@ test('signals are announced when created, entered and closed, but not when they 
         ->and(collect($this->actingAs($this->user)->getJson('/api/feed?since='.$this->since)->json('events'))->pluck('id'))->not->toContain("signal:{$expired->id}:closed");
 });
 
+test('a new signal notice shows the whole entry zone, not only its top, like GANG on 10 Nov', function () {
+    $this->travel(1)->seconds();
+    feedSignal($this->token, ['recommendation' => 'STRONG_BUY', 'entry_low' => 0.00507, 'entry_high' => 0.005275]);
+    $this->travel(1)->seconds();
+
+    $event = collect($this->actingAs($this->user)->getJson('/api/feed?since='.$this->since)->json('events'))->firstWhere('title', 'Sinyal Strong Buy: PEPE');
+
+    expect($event['body'])->toStartWith('Zona entry $0.00507 – $0.005275');
+});
+
 test('each notice carries the moment it happened, not when it was shown', function () {
     $entered = now()->subSeconds(30)->startOfSecond();
     feedSignal($this->token, ['entry_price' => 2, 'entered_at' => $entered, 'created_at' => now()->subHour()]);

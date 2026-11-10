@@ -125,7 +125,7 @@ class MarketFeed
                 'signal',
                 'up',
                 "Sinyal {$signal->recommendation->label()}: {$signal->token->symbol}",
-                'Entry di '.TelegramNotifier::price((float) $signal->entry_high).($signal->analysis ? " · skor {$signal->analysis->final_score}" : ''),
+                'Zona entry '.TelegramNotifier::price((float) $signal->entry_low).' – '.TelegramNotifier::price((float) $signal->entry_high).($signal->analysis ? " · skor {$signal->analysis->final_score}" : ''),
                 $signal->token,
                 $signal->created_at,
             ));
