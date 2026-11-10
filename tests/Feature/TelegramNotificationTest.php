@@ -137,6 +137,17 @@ test('the tracker reports entry, a target and the stop at breakeven as separate 
         ->and($texts[3])->toContain('kena stop di harga entry setelah TP1')->toContain('(setelah biaya)');
 });
 
+test('each signal update says when the price check saw it, in WIB', function () {
+    $this->travelTo(Carbon::parse('2026-11-10 07:32:15', 'UTC'));
+    fakeTelegram();
+    linkedUser();
+    $signal = Signal::factory()->create();
+
+    app(SignalTracker::class)->track($signal, 0.99);
+
+    expect(telegramMessages()[1]['text'])->toContain('masuk zona entry')->toContain('🕒 10 Nov 14.32 WIB');
+});
+
 test('a stop loss rings during the user quiet hours while other updates stay silent', function () {
     fakeTelegram();
     linkedUser('42', ['quiet_start_hour' => 0, 'quiet_end_hour' => 23]);

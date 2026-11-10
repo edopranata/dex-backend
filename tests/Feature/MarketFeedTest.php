@@ -84,6 +84,16 @@ test('signals are announced when created, entered and closed, but not when they 
         ->and(collect($this->actingAs($this->user)->getJson('/api/feed?since='.$this->since)->json('events'))->pluck('id'))->not->toContain("signal:{$expired->id}:closed");
 });
 
+test('each notice carries the moment it happened, not when it was shown', function () {
+    $entered = now()->subSeconds(30)->startOfSecond();
+    feedSignal($this->token, ['entry_price' => 2, 'entered_at' => $entered, 'created_at' => now()->subHour()]);
+    $this->travel(1)->seconds();
+
+    $event = collect($this->actingAs($this->user)->getJson('/api/feed?since='.$this->since)->json('events'))->firstWhere('title', 'Entry tercapai: PEPE');
+
+    expect(Carbon\Carbon::parse($event['at'])->equalTo($entered))->toBeTrue();
+});
+
 test('tokens entering and leaving the market are announced, pins are not', function () {
     foreach ([WatchlistAction::Added, WatchlistAction::Removed, WatchlistAction::Pinned] as $action) {
         WatchlistEvent::withoutEvents(fn () => $this->token->watchlistEvents()->create(['action' => $action, 'reason' => 'Skor tinggi.']));

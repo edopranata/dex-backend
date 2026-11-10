@@ -3,22 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Resources\PositionResource;
 use App\Services\Trading\PortfolioSummary;
+use App\Services\Trading\PositionCards;
 use App\Services\Trading\TradingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class PortfolioController extends Controller
 {
-    public function show(Request $request, PortfolioSummary $summary): JsonResponse
+    public function show(Request $request, PortfolioSummary $summary, PositionCards $cards): JsonResponse
     {
         $user = $request->user()->refresh();
         $positions = $user->positions()->with('token')->where('quantity', '>', 0)->get();
 
         return response()->json([
             ...$summary->for($user, $positions),
-            'positions' => PositionResource::collection($positions),
+            'positions' => $cards->present($user, $positions, $request),
         ]);
     }
 

@@ -7,12 +7,12 @@ use App\Enums\OrderStatus;
 use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
-use App\Http\Resources\PositionResource;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Analysis\AccountReport;
 use App\Services\Analysis\PerformanceReport;
 use App\Services\Analysis\StrategyVersion;
+use App\Services\Trading\PositionCards;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -90,12 +90,12 @@ class ReportController extends Controller
      * What one auto-follow account holds and has done. Read-only: these accounts are the test itself, so
      * nothing here can cancel an order or reset a balance.
      */
-    public function accountPortfolio(string $key): JsonResponse
+    public function accountPortfolio(Request $request, string $key, PositionCards $cards): JsonResponse
     {
         $account = User::autoFollower($key);
 
         return response()->json([
-            'positions' => PositionResource::collection($account->positions()->with('token')->where('quantity', '>', 0)->get()),
+            'positions' => $cards->present($account, $account->positions()->with('token')->where('quantity', '>', 0)->get(), $request),
             'pending' => OrderResource::collection($account->orders()->with('token')->where('status', OrderStatus::Pending)->latest()->latest('id')->get()),
             'orders' => OrderResource::collection($account->orders()->with('token')->where('status', '!=', OrderStatus::Pending)->orderByRaw('COALESCE(filled_at, created_at) DESC')->latest('id')->paginate(self::ORDERS_PER_PAGE))->response()->getData(true),
         ]);

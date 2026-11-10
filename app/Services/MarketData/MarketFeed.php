@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\WatchlistEvent;
 use App\Models\WhaleTrade;
 use App\Services\Notifications\TelegramNotifier;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
@@ -111,6 +112,7 @@ class MarketFeed
                 },
                 TelegramNotifier::usd((float) $order->total_usd).' di harga '.TelegramNotifier::price((float) $order->filled_price),
                 $order->token,
+                $order->filled_at,
             ));
     }
 
@@ -125,6 +127,7 @@ class MarketFeed
                 "Sinyal {$signal->recommendation->label()}: {$signal->token->symbol}",
                 'Entry di '.TelegramNotifier::price((float) $signal->entry_high).($signal->analysis ? " · skor {$signal->analysis->final_score}" : ''),
                 $signal->token,
+                $signal->created_at,
             ));
 
         $entered = Signal::query()->with('token')
@@ -136,6 +139,7 @@ class MarketFeed
                 "Entry tercapai: {$signal->token->symbol}",
                 "Sinyal {$signal->recommendation->label()} di ".TelegramNotifier::price((float) $signal->entry_price),
                 $signal->token,
+                $signal->entered_at,
             ));
 
         // Expired and invalidated signals never held a position, so they are not news.
@@ -149,6 +153,7 @@ class MarketFeed
                 ($signal->status === SignalStatus::TakeProfit ? 'Sinyal kena take profit: ' : 'Sinyal kena stop loss: ').$signal->token->symbol,
                 'Hasil bersih '.TelegramNotifier::r((float) $signal->net_r),
                 $signal->token,
+                $signal->closed_at,
             ));
 
         // An empty result stays an Eloquent collection, whose merge only takes models, so start from a plain one.
@@ -205,7 +210,7 @@ class MarketFeed
     /**
      * @return array<string, mixed>
      */
-    private function event(string $id, string $category, string $tone, string $title, string $body, Token $token): array
+    private function event(string $id, string $category, string $tone, string $title, string $body, Token $token, ?CarbonInterface $at = null): array
     {
         return [
             'id' => $id,
@@ -213,6 +218,8 @@ class MarketFeed
             'tone' => $tone,
             'title' => $title,
             'body' => $body,
+            // When it happened, so a notice that arrives late is not read as happening now.
+            'at' => $at?->toIso8601String(),
             'token' => ['slug' => $token->slug, 'symbol' => $token->symbol, 'image_url' => $token->image_url],
         ];
     }

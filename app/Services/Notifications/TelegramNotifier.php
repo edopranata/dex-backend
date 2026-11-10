@@ -76,10 +76,13 @@ class TelegramNotifier
             // Entering the zone is the moment to buy, so that message carries the buy buttons.
             $entered = $signal->status === SignalStatus::Active && $previousStatus === SignalStatus::Pending;
 
+            // The moment the price check saw it, so a message that arrives late is not read as happening now.
+            $at = '🕒 '.now('Asia/Jakarta')->locale('id')->translatedFormat('d M H.i').' WIB';
+
             $this->sendTo(
                 $recipients,
                 $signal->status === SignalStatus::StopLoss ? 'stop_loss' : 'signal_updates',
-                $message."\n".$this->link($signal->token),
+                $message."\n".$at."\n".$this->link($signal->token),
                 replyMarkup: $entered ? TelegramBuyFlow::keyboard($signal) : null,
             );
         }
