@@ -4,6 +4,7 @@ namespace App\Services\Analysis;
 
 use App\Enums\SignalStatus;
 use App\Models\Signal;
+use Closure;
 
 /**
  * Follows each signal like a disciplined trader would: enter in the zone, take 1/3 at each
@@ -16,10 +17,25 @@ class SignalTracker
     /**
      * @param  float|null  $confirming  The check before this one. A level only counts once both reached it, so
      *                                  a single stray price cannot settle a signal.
+     * @param  (Closure(): ?float)|null  $verify  Asked only when a level is reached: the price to act on
+     *                                            instead (from a second source), or null to wait.
      */
-    public function track(Signal $signal, float $price, ?float $confirming = null): void
+    public function track(Signal $signal, float $price, ?float $confirming = null, ?Closure $verify = null): void
     {
         $confirming ??= $price;
+
+        if ($verify !== null && $this->reachesLevel($signal, $price, $confirming)) {
+            $checked = $verify();
+
+            if ($checked === null) {
+                return;
+            }
+
+            if ($checked !== $price) {
+                $price = $checked;
+                $confirming = $checked;
+            }
+        }
         $fallen = max($price, $confirming);
         $risen = min($price, $confirming);
 
@@ -28,6 +44,30 @@ class SignalTracker
             SignalStatus::Active => $this->trackActive($signal, $price, $fallen, $risen),
             default => null,
         };
+    }
+
+    /**
+     * Whether these prices would enter, settle, or move the signal (expiry while still waiting needs no price).
+     */
+    private function reachesLevel(Signal $signal, float $price, float $confirming): bool
+    {
+        $fallen = max($price, $confirming);
+        $risen = min($price, $confirming);
+
+        if ($signal->status === SignalStatus::Pending) {
+            return $fallen <= $signal->entry_high;
+        }
+
+        if ($signal->status !== SignalStatus::Active) {
+            return false;
+        }
+
+        $maxTpHit = (int) $signal->max_tp_hit;
+        $stop = $maxTpHit > 0 ? $signal->entry_price : $signal->stop_loss;
+
+        return $fallen <= $stop
+            || ($maxTpHit < 3 && $risen >= $signal->takeProfits()[$maxTpHit])
+            || $signal->entered_at->lt(now()->subHours(config('market.analysis.signal_max_hours')));
     }
 
     private function trackPending(Signal $signal, float $price, float $fallen): void

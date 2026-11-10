@@ -8,9 +8,11 @@ use App\Models\TokenCandidate;
 use App\Models\User;
 use App\Services\Analysis\TokenDiscoveryService;
 use App\Services\Analysis\WatchlistManager;
+use App\Services\MarketData\TokenRegistry;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\ValidationException;
 
 /**
  * @return array<string, mixed>
@@ -336,4 +338,51 @@ test('a pool with broken numbers is skipped without stopping the discovery round
 
     expect(TokenCandidate::query()->where('symbol', 'SOPH')->exists())->toBeFalse()
         ->and(TokenCandidate::query()->where('symbol', 'GOOD')->exists())->toBeTrue();
+});
+
+test('a trending pair quoted in another token is swapped for the same token\'s SOL pair', function () {
+    $safe = ['mintable' => ['status' => '0'], 'freezable' => ['status' => '0'], 'holder_count' => '25000'];
+    $trades = [['side' => 'buy', 'usd' => 20_000, 'wallet' => 'w1'], ['side' => 'buy', 'usd' => 15_000, 'wallet' => 'w2'], ['side' => 'buy', 'usd' => 12_000, 'wallet' => 'w3']];
+    fakeDiscoveryApis([
+        'ODD' => ['pair' => dexPair('PairStonk111111111111111111111111111111111', 'TokenStank11111111111111111111111111111111', 'STANK', ['quoteToken' => ['address' => 'StonkMint', 'symbol' => 'STONK'], 'liquidity' => ['usd' => 100_000]]), 'trades' => $trades, 'security' => $safe],
+        'SOL' => ['pair' => dexPair('PairStankSol1111111111111111111111111111111', 'TokenStank11111111111111111111111111111111', 'STANK'), 'trades' => $trades, 'security' => $safe, 'trending' => false],
+    ]);
+
+    app(TokenDiscoveryService::class)->run();
+
+    expect(TokenCandidate::query()->where('symbol', 'STANK')->pluck('pair_address')->all())->toBe(['PairStankSol1111111111111111111111111111111'])
+        ->and(TokenCandidate::firstWhere('symbol', 'STANK')->quote_symbol)->toBe('SOL');
+});
+
+test('a token already in the Market keeps the pair it is tracked on', function () {
+    Token::factory()->create(['symbol' => 'STANK', 'chain_id' => 'solana', 'pair_address' => 'PairStonk111111111111111111111111111111111', 'token_address' => 'TokenStank11111111111111111111111111111111', 'quote_symbol' => 'STONK']);
+    $safe = ['mintable' => ['status' => '0'], 'freezable' => ['status' => '0'], 'holder_count' => '25000'];
+    fakeDiscoveryApis([
+        'ODD' => ['pair' => dexPair('PairStonk111111111111111111111111111111111', 'TokenStank11111111111111111111111111111111', 'STANK', ['quoteToken' => ['address' => 'StonkMint', 'symbol' => 'STONK']]), 'trades' => [], 'security' => $safe],
+        'SOL' => ['pair' => dexPair('PairStankSol1111111111111111111111111111111', 'TokenStank11111111111111111111111111111111', 'STANK'), 'trades' => [], 'security' => $safe, 'trending' => false],
+    ]);
+
+    app(TokenDiscoveryService::class)->run();
+
+    expect(TokenCandidate::query()->where('symbol', 'STANK')->pluck('pair_address')->all())->toBe(['PairStonk111111111111111111111111111111111'])
+        ->and(Token::query()->where('symbol', 'STANK')->count())->toBe(1);
+});
+
+test('a second pool of a token already in the Market is not tracked, like VVV twice on 10 Nov', function () {
+    Token::factory()->create(['symbol' => 'VVV', 'chain_id' => 'solana', 'pair_address' => 'PairVvvFirst11111111111111111111111111111111', 'token_address' => 'TokenVvv1111111111111111111111111111111111']);
+    fakeDiscoveryApis([
+        'VVV' => [
+            'pair' => dexPair('PairVvvSecond1111111111111111111111111111111', 'TokenVvv1111111111111111111111111111111111', 'VVV'),
+            'trades' => [['side' => 'buy', 'usd' => 20_000, 'wallet' => 'w1'], ['side' => 'buy', 'usd' => 15_000, 'wallet' => 'w2'], ['side' => 'buy', 'usd' => 12_000, 'wallet' => 'w3']],
+            'security' => ['mintable' => ['status' => '0'], 'freezable' => ['status' => '0'], 'holder_count' => '25000'],
+        ],
+    ]);
+
+    $result = app(TokenDiscoveryService::class)->run();
+
+    expect($result['added'])->toBe([])
+        ->and(Token::query()->where('symbol', 'VVV')->count())->toBe(1);
+
+    expect(fn () => app(TokenRegistry::class)->add('solana', 'PairVvvSecond1111111111111111111111111111111'))
+        ->toThrow(ValidationException::class, 'VVV sudah ada di Market lewat pair lain.');
 });

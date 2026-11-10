@@ -55,6 +55,17 @@ class TokenRegistry
             throw ValidationException::withMessages(['address' => 'Pair atau token tidak ditemukan di DEX Screener.']);
         }
 
+        // One token in two pools would be analyzed, signalled and bought twice.
+        $sameToken = Token::query()->active()
+            ->where('chain_id', $pair['chainId'])
+            ->where('token_address', $pair['baseToken']['address'])
+            ->where('pair_address', '!=', $pair['pairAddress'])
+            ->first();
+
+        if ($sameToken !== null) {
+            throw ValidationException::withMessages(['address' => "{$sameToken->symbol} sudah ada di Market lewat pair lain."]);
+        }
+
         return Token::updateOrCreate(
             ['chain_id' => $pair['chainId'], 'pair_address' => $pair['pairAddress']],
             [

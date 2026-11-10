@@ -12,6 +12,8 @@ use App\Models\Position;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
+use App\Services\MarketData\CheckedPrice;
+use App\Services\MarketData\PriceCrossCheck;
 use App\Services\MarketData\PriceService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +31,7 @@ class TradingService
 
     private const DUST_OF_SALE = 1e-9;
 
-    public function __construct(private PriceService $prices) {}
+    public function __construct(private PriceService $prices, private PriceCrossCheck $crossCheck) {}
 
     /**
      * Place an order. Market orders fill immediately; the rest wait for their trigger price.
@@ -83,16 +85,21 @@ class TradingService
 
         // A limit buy at or above the current price is marketable: fill it now, like an exchange would.
         if ($type === OrderType::Limit && $token->price_usd !== null && $type->isTriggered($side, (float) $order->trigger_price, $token->price_usd)) {
-            $this->execute($order, $token->price_usd);
+            $check = $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
+
+            if ($check !== null && $type->isTriggered($side, (float) $order->trigger_price, $check->price)) {
+                $this->execute($order, $check->price, $check);
+            }
         }
 
         if ($type === OrderType::Market) {
             $this->prices->ensureFresh($token);
+            $check = $token->price_usd === null ? null : $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
 
-            if ($token->price_usd === null) {
+            if ($check === null) {
                 $this->reject($order, 'Harga tidak tersedia.');
             } else {
-                $this->execute($order, $token->price_usd);
+                $this->execute($order, $check->price, $check);
             }
         }
 
@@ -101,10 +108,12 @@ class TradingService
 
     /**
      * Fill an order at the given market price inside a transaction with row locks.
+     *
+     * @param  CheckedPrice|null  $check  What the price was checked against, kept in the fill evidence.
      */
-    public function execute(Order $order, float $marketPrice): Order
+    public function execute(Order $order, float $marketPrice, ?CheckedPrice $check = null): Order
     {
-        return DB::transaction(function () use ($order, $marketPrice): Order {
+        return DB::transaction(function () use ($order, $marketPrice, $check): Order {
             $order = Order::query()->lockForUpdate()->findOrFail($order->id);
 
             if ($order->status !== OrderStatus::Pending) {
@@ -126,7 +135,7 @@ class TradingService
                 $this->afterExitFill($order);
             }
 
-            $this->recordEvidence($order, $token, $marketPrice);
+            $this->recordEvidence($order, $token, $marketPrice, $check);
 
             return $order;
         });
@@ -150,22 +159,31 @@ class TradingService
     {
         $filled = 0;
         $pricedTokens = $tokens->filter(fn (Token $token): bool => $token->price_usd !== null)->keyBy('id');
+        /** @var array<int, CheckedPrice|false> $checks One cross-check per token per run; false means wait. */
+        $checks = [];
 
         Order::query()
             ->where('status', OrderStatus::Pending)
             ->whereIn('token_id', $pricedTokens->keys())
             ->with('token')
             ->orderBy('id')
-            ->each(function (Order $order) use ($pricedTokens, &$filled): void {
+            ->each(function (Order $order) use ($pricedTokens, &$filled, &$checks): void {
                 $token = $pricedTokens[$order->token_id];
                 $price = $token->price_usd;
                 $confirming = $token->confirmingPrice();
 
                 // Both checks in a row have to agree, so a single stray price cannot fill an order.
-                if ($confirming !== null
-                    && $order->type->isTriggered($order->side, (float) $order->trigger_price, $confirming)
-                    && $order->type->isTriggered($order->side, (float) $order->trigger_price, $price)) {
-                    $this->execute($order, $price);
+                if ($confirming === null
+                    || ! $order->type->isTriggered($order->side, (float) $order->trigger_price, $confirming)
+                    || ! $order->type->isTriggered($order->side, (float) $order->trigger_price, $price)) {
+                    return;
+                }
+
+                // The feed can repeat one stray price, so the level is checked against GeckoTerminal too.
+                $check = $checks[$token->id] ??= $this->crossCheck->priceToActOn($token) ?? false;
+
+                if ($check !== false && $order->type->isTriggered($order->side, (float) $order->trigger_price, $check->price)) {
+                    $this->execute($order, $check->price, $check);
                     $filled++;
                 }
             });
@@ -305,7 +323,8 @@ class TradingService
         ]);
 
         // Filling it cancels the lot's other exits, like any exit of a plan that ends the lot.
-        $this->execute($sell, (float) $token->price_usd);
+        $check = $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
+        $this->execute($sell, $check?->price ?? (float) $token->price_usd, $check);
 
         $exits()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: sinyal #{$signal->id} sudah selesai."]);
 
@@ -553,7 +572,7 @@ class TradingService
         $pending()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis (OCO): pasangannya #{$order->id} sudah terisi."]);
     }
 
-    private function recordEvidence(Order $order, Token $token, float $marketPrice): void
+    private function recordEvidence(Order $order, Token $token, float $marketPrice, ?CheckedPrice $check): void
     {
         if ($order->status !== OrderStatus::Filled) {
             return;
@@ -565,10 +584,11 @@ class TradingService
             'token_id' => $token->id,
             'side' => $order->side->value,
             'type' => $order->type->value,
-            'source' => 'dexscreener',
+            'source' => $check?->source ?? CheckedPrice::FEED,
             'pair_address' => $token->pair_address,
             'trigger_price' => $order->trigger_price,
             'market_price' => $marketPrice,
+            'checked_price' => $check?->reference,
             'filled_price' => $order->filled_price,
             'price_at' => $token->price_updated_at,
             'previous_price' => $token->previous_price_usd,

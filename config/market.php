@@ -24,6 +24,18 @@ return [
         'max_price_age_seconds' => 30,
         // Dua pengecekan harga berurutan harus setuju sebelum order terisi; jeda lebih lama berarti menunggu lagi.
         'confirmation_max_gap_seconds' => 120,
+        // Saat harga DEX Screener membuat order atau sinyal terisi, harganya dicek ke pool yang sama di
+        // GeckoTerminal (sumber grafik). Beda lebih dari tolerance_pct: yang dipakai harga GeckoTerminal.
+        // Audit 10 Nov 2026: 4 dari 149 isi jauh di luar candle (STANK -12%, FLOAT +8-10%); feed hanya 4
+        // digit sehingga 139 isi wajar juga memakai harga yang sama dua kali, jadi itu tidak bisa dipakai.
+        'cross_check' => [
+            'enabled' => (bool) env('PRICE_CROSS_CHECK', true),
+            'tolerance_pct' => 5.0,
+            // Harga pembanding dipakai ulang selama ini, supaya satu token tidak menghabiskan jatah GeckoTerminal.
+            'cache_seconds' => 45,
+            // Paling lama menunggu giliran request; lewat dari ini order ditahan sampai pengecekan berikutnya.
+            'max_wait_seconds' => 8,
+        ],
     ],
 
     /*
@@ -135,6 +147,9 @@ return [
         'auto_track_min_score' => 65,
         // Token baru maksimal per putaran discovery, supaya Market tidak berganti terlalu cepat.
         'max_new_per_run' => 3,
+        // Pair yang dihargai dalam token lain (STANK/STONK, Dacity/TTWO) membawa gerak token itu ke harga USD.
+        // Bila token yang sama punya pair dengan quote ini dan likuiditas cukup, pair itu yang dipakai.
+        'standard_quotes' => ['SOL', 'WSOL', 'WETH', 'ETH', 'WBNB', 'BNB', 'USDC', 'USDT', 'USD1', 'DAI', 'USDBC'],
         'excluded_symbols' => [
             'USDC', 'USDT', 'DAI', 'USDE', 'FDUSD', 'PYUSD', 'USD1', 'USDS', 'TUSD', 'USDG', 'EURC',
             'WETH', 'ETH', 'WBTC', 'CBBTC', 'BTC', 'SOL', 'WSOL', 'WBNB', 'BNB', 'STETH', 'WSTETH', 'JITOSOL', 'MSOL',

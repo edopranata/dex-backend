@@ -238,6 +238,67 @@ class TokenDiscoveryService
             }
         }
 
+        return $this->preferStandardQuotes($found, $config);
+    }
+
+    /**
+     * Swap a pair quoted in another token (STANK/STONK, Dacity/TTWO) for the same token's most liquid pair
+     * quoted in SOL, a wrapped native coin or a stablecoin, when it has one with enough liquidity. A token
+     * already in the Market keeps its pair, so it is not tracked twice.
+     *
+     * @param  Collection<string, array{pair: array<string, mixed>, sources: list<string>, buyers: int|null, sellers: int|null}>  $found
+     * @param  array<string, mixed>  $config
+     * @return Collection<string, array{pair: array<string, mixed>, sources: list<string>, buyers: int|null, sellers: int|null}>
+     */
+    private function preferStandardQuotes(Collection $found, array $config): Collection
+    {
+        $quotes = array_map('strtoupper', $config['standard_quotes'] ?? []);
+        $isStandard = fn (array $pair): bool => in_array(strtoupper($pair['quoteToken']['symbol'] ?? ''), $quotes, true);
+        $odd = $found->reject(fn (array $item): bool => $isStandard($item['pair']));
+
+        foreach ($odd->groupBy(fn (array $item): string => $item['pair']['chainId'], preserveKeys: true) as $chainId => $items) {
+            $tracked = Token::query()->active()->where('chain_id', $chainId)
+                ->whereIn('token_address', $items->pluck('pair.baseToken.address')->all())
+                ->pluck('token_address')->map(fn (string $address): string => strtolower($address))->all();
+            $items = $items->reject(fn (array $item): bool => in_array(strtolower($item['pair']['baseToken']['address']), $tracked, true));
+
+            if ($items->isEmpty()) {
+                continue;
+            }
+
+            try {
+                $pairs = collect($this->dexScreener->pairsForTokens($chainId, $items->pluck('pair.baseToken.address')->unique()->values()->all()));
+            } catch (Throwable $e) {
+                Log::warning("Discovery: standard-quote pairs [{$chainId}] failed: {$e->getMessage()}");
+
+                continue;
+            }
+
+            foreach ($items as $key => $item) {
+                $better = $pairs
+                    ->filter(fn (array $pair): bool => strcasecmp($pair['baseToken']['address'], $item['pair']['baseToken']['address']) === 0
+                        && $isStandard($pair)
+                        && ($pair['liquidity']['usd'] ?? 0) >= $config['min_liquidity_usd'])
+                    ->sortByDesc(fn (array $pair): float => $pair['liquidity']['usd'] ?? 0)
+                    ->first();
+
+                if ($better === null) {
+                    continue;
+                }
+
+                $betterKey = $better['chainId'].':'.strtolower($better['pairAddress']);
+                $existing = $found->get($betterKey);
+                $found->forget($key);
+                // Buyer and seller counts belonged to the other pool, so they are not carried over.
+                $found->put($betterKey, [
+                    'pair' => $better,
+                    'sources' => array_values(array_unique([...($existing['sources'] ?? []), ...$item['sources']])),
+                    'buyers' => $existing['buyers'] ?? null,
+                    'sellers' => $existing['sellers'] ?? null,
+                ]);
+            }
+        }
+
         return $found;
     }
 
@@ -562,7 +623,9 @@ class TokenDiscoveryService
             ->orderByDesc('discovery_score')
             ->get()
             ->filter(fn (TokenCandidate $c): bool => array_intersect($c->sources, self::ORGANIC_SOURCES) !== []
-                && ($c->token_id === null || ! $this->watchlist->recentlyRemoved($c->token_id)));
+                && ($c->token_id === null || ! $this->watchlist->recentlyRemoved($c->token_id))
+                // VVV was in the Market twice on 10 Nov 2026, through two pools, each with its own signal.
+                && ! Token::query()->active()->where('chain_id', $c->chain_id)->where('token_address', $c->token_address)->where('pair_address', '!=', $c->pair_address)->exists());
 
         foreach ($eligible as $candidate) {
             if (count($added) >= $config['max_new_per_run']) {

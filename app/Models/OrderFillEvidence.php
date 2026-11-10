@@ -10,7 +10,7 @@ use LogicException;
  * What a fill was based on, for every account including the system ones. Only ever added to: being able
  * to trust it later is the whole point, so a change or a delete is refused.
  */
-#[Fillable(['order_id', 'user_id', 'token_id', 'side', 'type', 'source', 'pair_address', 'trigger_price', 'market_price', 'filled_price', 'price_at', 'previous_price', 'previous_price_at', 'liquidity_usd', 'created_at'])]
+#[Fillable(['order_id', 'user_id', 'token_id', 'side', 'type', 'source', 'pair_address', 'trigger_price', 'market_price', 'checked_price', 'filled_price', 'price_at', 'previous_price', 'previous_price_at', 'liquidity_usd', 'created_at'])]
 class OrderFillEvidence extends Model
 {
     public $timestamps = false;
@@ -25,6 +25,7 @@ class OrderFillEvidence extends Model
         return [
             'trigger_price' => 'float',
             'market_price' => 'float',
+            'checked_price' => 'float',
             'filled_price' => 'float',
             'previous_price' => 'float',
             'liquidity_usd' => 'float',
