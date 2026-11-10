@@ -147,7 +147,7 @@ Tujuan: server siap memegang private key wallet trading.
 
 Tujuan: mengukur biaya swap sungguhan **tanpa mengirim transaksi**. Diubah 3 Nov 2026 dari rencana exchange CEX, karena token yang dianalisis hampir semuanya hanya ada di DEX.
 
-- [ ] Setiap order paper meminta penawaran swap sungguhan dari agregator (Jupiter untuk Solana) tanpa mengirim transaksi, lalu menyimpan harga, price impact, biaya, dan rute
+- [ ] Setiap order paper meminta penawaran swap sungguhan dari agregator (Jupiter untuk Solana) tanpa mengirim transaksi, lalu menyimpan harga, price impact, biaya, dan rute. **10 Nov 2026:** API quote Jupiter butuh key gratis dari portal.jup.ag (1 permintaan per detik; tanpa key 0,5 per detik; `lite-api` sedang dihentikan). Pemilik yang mendaftar. BSC, Base, dan Ethereum butuh agregator lain. Masih ide, direview lebih dalam sebelum dibangun
 - [ ] Uji jual kembali: penawaran swap balik untuk setiap posisi, supaya token pajak dan honeypot ketahuan sebelum ada uang sungguhan
 - [ ] Laporan selisih harga paper dengan harga swap nyata, per token dan per ukuran order
 - [ ] Hasil strategi dihitung ulang memakai biaya nyata
@@ -181,7 +181,7 @@ Tujuan: eksekusi sungguhan dengan modal kecil, dan setiap pembelian disetujui pe
 
 - [ ] **Otomatis penuh:** alur Fase 5 tanpa tombol Beli, dengan *circuit breaker* yang berhenti sendiri bila rugi harian atau drawdown melewati batas
 - [ ] Wallet EVM (Base/ETH/BSC) — paling akhir, karena gas, MEV, dan stop loss sepenuhnya bergantung pada server
-- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas — **31 Okt 2026: menu Wallet menampilkan alamat dari transaksi whale (tanpa skor atau label pemilik)**
+- [ ] Skor smart money & pengelompokan wallet (Helius gratis untuk Solana), entry 5 menit untuk kandidat teratas — **31 Okt 2026: menu Wallet menampilkan alamat dari transaksi whale (tanpa skor atau label pemilik)**. **10 Nov 2026, ide (dari artikel X tentang smart wallet GMGN):** nilai riwayat tiap wallet dari data whale 60 hari, misalnya seberapa sering ia membeli sebelum harga naik, lalu tampilkan dan uji "jumlah smart wallet yang sedang membeli" sebagai ganti total volume whale. Bisa menjawab temuan audit 9 Nov bahwa skor whale hampir tidak bergerak. Wajib lolos backtest; direview lebih dalam setelah review v5, bukan dibangun sekarang
 - [ ] **Token trending di X** lewat X Search xAI (±$40–60/bulan): hanya jika sentimen terbukti membantu di Fase 2
 
 ---
@@ -278,4 +278,5 @@ Aturan tetap: wallet trading terpisah dari wallet utama, aplikasi hanya boleh sw
 | Kebocoran private key wallet | Seluruh isi wallet trading | Wallet terpisah dan bersaldo kecil, key terenkripsi dan tidak pernah tampil, aplikasi hanya boleh swap, 2FA, HTTPS |
 | Slippage, MEV, token pajak atau honeypot | Harga eksekusi jauh lebih buruk, token tidak bisa dijual | Eksekusi bayangan di Fase 4, batas slippage per swap, uji jual kembali sebelum beli |
 | Agregator atau RPC berubah atau mati | Swap gagal | Adapter terpisah, peringatan bila swap gagal, kill switch |
+| Format respons penyedia data berubah (DEX Screener, GeckoTerminal) | Harga atau candle salah tanpa error | Cek silang harga (live 10 Nov). Ide 10 Nov, belum dibangun: peringatan bila respons kehilangan field yang dipakai atau angkanya tidak masuk akal |
 | Bug eksekusi order | Order salah | Konfirmasi manual, batas modal server-side, rekonsiliasi harian |
