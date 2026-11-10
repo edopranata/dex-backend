@@ -5,6 +5,7 @@ use App\Models\Order;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
+use App\Models\WhaleTrade;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -41,6 +42,21 @@ test('token list and detail include the latest analysis', function () {
     $this->actingAs($user)->getJson('/api/tokens')->assertOk()->assertJsonCount(1, 'data');
     $this->actingAs($user)->getJson("/api/tokens/{$token->id}")->assertOk()->assertJsonPath('data.symbol', $token->symbol);
     $this->actingAs($user)->getJson('/api/market/overview')->assertOk()->assertJsonPath('fear_greed.value', 50);
+});
+
+test('the token list counts each token whale trades and whale buying over the last 24 hours', function () {
+    $user = User::factory()->create();
+    $token = Token::factory()->create(['liquidity_usd' => 300_000]);
+    $quiet = Token::factory()->create();
+    WhaleTrade::factory()->for($token)->create(['side' => 'buy', 'amount_usd' => 12_000, 'traded_at' => now()->subHours(2)]);
+    WhaleTrade::factory()->for($token)->create(['side' => 'buy', 'amount_usd' => 8_000, 'traded_at' => now()->subHours(20)]);
+    WhaleTrade::factory()->for($token)->create(['side' => 'sell', 'amount_usd' => 7_000, 'traded_at' => now()->subHours(5)]);
+    WhaleTrade::factory()->for($token)->create(['side' => 'buy', 'amount_usd' => 50_000, 'traded_at' => now()->subHours(30)]);
+
+    $tokens = collect($this->actingAs($user)->getJson('/api/tokens')->assertOk()->json('data'))->keyBy('id');
+
+    expect($tokens[$token->id]['whales_24h'])->toEqual(['trades' => 3, 'buys' => 2, 'sells' => 1, 'buy_usd' => 20_000, 'sell_usd' => 7_000, 'threshold_usd' => 6_000])
+        ->and($tokens[$quiet->id]['whales_24h']['trades'])->toBe(0);
 });
 
 test('search hides illiquid and unsupported pairs', function () {

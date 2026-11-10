@@ -13,6 +13,7 @@ use App\Http\Resources\WatchlistEventResource;
 use App\Http\Resources\WhaleTradeResource;
 use App\Models\Token;
 use App\Models\WatchlistEvent;
+use App\Models\WhaleTrade;
 use App\Services\Analysis\WatchlistManager;
 use App\Services\MarketData\DexScreenerClient;
 use App\Services\MarketData\GeckoTerminalClient;
@@ -36,15 +37,43 @@ class TokenController extends Controller
             ->get();
 
         $histories = $watchlist->dailyScoresFor($tokens->modelKeys());
+        $whales = $this->whalesLastDay();
 
         foreach ($tokens as $token) {
             $token->score_history = $histories->get($token->id, []);
             $token->score_trend = WatchlistManager::trend($token->score_history);
+            $token->whales_24h = [
+                ...($whales[$token->id] ?? ['trades' => 0, 'buys' => 0, 'sells' => 0, 'buy_usd' => 0.0, 'sell_usd' => 0.0]),
+                'threshold_usd' => WhaleSyncService::threshold($token),
+            ];
         }
 
         return TokenResource::collection($tokens)->additional([
             'capacity' => ['used' => $tokens->count(), 'max' => config('market.simulator.max_tokens')],
         ]);
+    }
+
+    /**
+     * Whale trades of the last 24 hours per token. Whales sync every 15 minutes while the list polls every
+     * few seconds, so the sums are cached for a minute.
+     *
+     * @return array<int, array{trades: int, buys: int, sells: int, buy_usd: float, sell_usd: float}>
+     */
+    private function whalesLastDay(): array
+    {
+        return Cache::remember('market:whales-24h', 60, fn (): array => WhaleTrade::query()->toBase()
+            ->where('traded_at', '>=', now()->subDay())
+            ->selectRaw("token_id, count(*) as trades, sum(case when side = 'buy' then 1 else 0 end) as buys, sum(case when side = 'buy' then amount_usd else 0 end) as buy_usd, sum(case when side = 'sell' then amount_usd else 0 end) as sell_usd")
+            ->groupBy('token_id')
+            ->get()
+            ->mapWithKeys(fn (object $row): array => [(int) $row->token_id => [
+                'trades' => (int) $row->trades,
+                'buys' => (int) $row->buys,
+                'sells' => (int) $row->trades - (int) $row->buys,
+                'buy_usd' => (float) $row->buy_usd,
+                'sell_usd' => (float) $row->sell_usd,
+            ]])
+            ->all());
     }
 
     /**

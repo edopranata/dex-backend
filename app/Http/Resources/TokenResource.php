@@ -50,6 +50,7 @@ class TokenResource extends JsonResource
             'is_new' => $this->isNew(),
             'score_history' => $this->when($this->resource->offsetExists('score_history'), fn () => $this->resource->score_history),
             'score_trend' => $this->when($this->resource->offsetExists('score_trend'), fn () => $this->resource->score_trend),
+            'whales_24h' => $this->when($this->resource->offsetExists('whales_24h'), fn () => $this->resource->whales_24h),
             'discovered_at' => $this->discovered_at,
             'latest_analysis' => new AnalysisResource($this->whenLoaded('latestAnalysis')),
             'latest_security' => new TokenSecurityCheckResource($this->whenLoaded('latestSecurityCheck')),
