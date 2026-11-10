@@ -169,7 +169,9 @@ test('a retried job does not buy twice in any account', function () {
 });
 
 test('the accounts wait for the signal to enter its zone, and buy at the moment it does', function () {
-    $signal = Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    // Entry and fills are compared to the second; a slow run must not cross one in between (CI, 10 Nov).
+    $this->freezeSecond();
+    $signal =Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
     $tracker = app(SignalTracker::class);
 
     // In the zone, but a single price does not enter the signal yet: nothing is bought.
