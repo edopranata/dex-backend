@@ -13,8 +13,11 @@ use Illuminate\Support\Facades\RateLimiter;
 use Throwable;
 
 /**
- * Minimal JSON-mode client over a chain of LLM providers: the primary one first, then up to two fallbacks
- * (e.g. Gemini, then Groq, then OpenRouter) whenever the ones before are paused or out of budget.
+ * Minimal JSON-mode client over a chain of LLM providers: the primary one first, then up to three fallbacks
+ * (e.g. Gemini, then Groq, then OpenRouter, then Mistral) whenever the ones before are paused or out of budget.
+ *
+ * Optional requests (analysis summaries) leave the last `sentiment_reserve_percent` of every provider's daily
+ * budget to the rest (news sentiment), since only the latter feeds the score.
  *
  * Every provider has its own per-minute and per-day budget, and its own pause after errors (quota,
  * overload, unknown model, rejected key), so a limit on one never stops the other. Callers fall back
@@ -23,19 +26,19 @@ use Throwable;
 class AiClient
 {
     /** Providers this client can talk to; all but Gemini share the OpenAI chat-completions format. */
-    public const PROVIDERS = ['gemini' => 'Google Gemini', 'groq' => 'Groq', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
+    public const PROVIDERS = ['gemini' => 'Google Gemini', 'groq' => 'Groq', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'mistral' => 'Mistral', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
 
     private ?string $lastProvider = null;
 
     /**
-     * Configured providers in the order they are tried (primary, first fallback, second fallback); ones without
-     * a key are skipped.
+     * Configured providers in the order they are tried (primary, then the fallbacks); ones without a key are
+     * skipped.
      *
      * @return list<string>
      */
     public function providers(): array
     {
-        $chain = array_unique([config('market.ai.provider'), config('market.ai.fallback_provider'), config('market.ai.fallback_provider_2')]);
+        $chain = array_unique([config('market.ai.provider'), config('market.ai.fallback_provider'), config('market.ai.fallback_provider_2'), config('market.ai.fallback_provider_3')]);
 
         return array_values(array_filter(
             $chain,
@@ -117,14 +120,16 @@ class AiClient
      * Send a prompt and decode the JSON object the model returns, trying the fallback provider when the
      * primary is paused, over budget or fails. Null when no provider could answer.
      *
+     * @param  bool  $optional  True for requests that may give way (summaries): they leave each provider's
+     *                          reserved share of the day to the others.
      * @return array<string, mixed>|null
      */
-    public function json(string $system, string $prompt): ?array
+    public function json(string $system, string $prompt, bool $optional = false): ?array
     {
         $this->lastProvider = null;
 
         foreach ($this->providers() as $provider) {
-            if (! $this->acquireBudget($provider)) {
+            if (! $this->acquireBudget($provider, $optional)) {
                 continue;
             }
 
@@ -175,7 +180,7 @@ class AiClient
                     'provider' => $provider,
                     'label' => self::PROVIDERS[$provider],
                     'role' => $index === 0 ? 'primary' : 'fallback',
-                    // 0 for the primary, then 1 and 2 for the fallbacks in the order they are tried.
+                    // 0 for the primary, then 1, 2 and 3 for the fallbacks in the order they are tried.
                     'position' => $index,
                     'model' => config("market.ai.{$provider}.model"),
                     'paused_until' => $pause['until'] ?? null,
@@ -199,9 +204,13 @@ class AiClient
         }
     }
 
-    private function acquireBudget(string $provider): bool
+    private function acquireBudget(string $provider, bool $optional = false): bool
     {
         if ($this->activePause($provider) !== null) {
+            return false;
+        }
+
+        if ($optional && (int) Cache::get($this->dayKey($provider), 0) >= $this->optionalDailyBudget($provider)) {
             return false;
         }
 
@@ -218,6 +227,16 @@ class AiClient
         }
 
         return true;
+    }
+
+    /**
+     * Requests per day an optional request may still use: the daily budget minus the reserved share.
+     */
+    private function optionalDailyBudget(string $provider): int
+    {
+        $reserve = max(0, min(100, (int) config('market.ai.sentiment_reserve_percent')));
+
+        return (int) floor((int) config("market.ai.{$provider}.max_per_day") * (100 - $reserve) / 100);
     }
 
     /**
@@ -347,7 +366,7 @@ class AiClient
     }
 
     /**
-     * OpenAI-style chat completions in JSON mode (OpenAI, Groq, OpenRouter, xAI and local Ollama).
+     * OpenAI-style chat completions in JSON mode (OpenAI, Groq, OpenRouter, xAI, Mistral and local Ollama).
      */
     private function chatCompletions(string $provider, string $system, string $prompt): ?string
     {

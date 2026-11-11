@@ -8,7 +8,8 @@ use App\Models\Token;
 use App\Services\Ai\AiClient;
 
 /**
- * Writes the human-readable conclusion for an analysis, using the LLM when configured.
+ * Writes the human-readable conclusion for an analysis, using the LLM when configured. By default only Buy and
+ * Strong Buy get an AI summary, and it gives way to news sentiment when the day's AI budget runs low.
  */
 class AnalysisSummarizer
 {
@@ -24,7 +25,7 @@ class AnalysisSummarizer
             return ['summary' => $previous->summary, 'provider' => $previous->summary_provider];
         }
 
-        if ($this->ai->isEnabled()) {
+        if ($this->ai->isEnabled() && ($recommendation->isBullish() || ! config('market.ai.summary_ai_bullish_only'))) {
             $result = $this->ai->json(
                 'Kamu analis kripto yang berhati-hati. Tulis ringkasan analisis dalam Bahasa Indonesia, maksimal 4 kalimat, '
                 .'berdasarkan data JSON. Sebutkan faktor terkuat, risiko utama, dan alasan rekomendasi. Jangan mengarang data '
@@ -35,6 +36,7 @@ class AnalysisSummarizer
                     'recommendation' => $recommendation->value,
                     ...$context,
                 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PARTIAL_OUTPUT_ON_ERROR),
+                optional: true,
             );
 
             if (is_string($result['summary'] ?? null) && $result['summary'] !== '') {

@@ -379,3 +379,62 @@ test('openrouter without a key is left out of the chain', function () {
 
     expect(app(AiClient::class)->providers())->toBe(['gemini']);
 });
+
+test('optional requests leave the reserved share of the day to the others, without pausing the provider', function () {
+    config(['market.ai.gemini.max_per_day' => 10, 'market.ai.gemini.max_per_minute' => 100, 'market.ai.sentiment_reserve_percent' => 20]);
+    Http::fake([GEMINI_URL => Http::response(geminiOk())]);
+    $ai = app(AiClient::class);
+
+    foreach (range(1, 8) as $request) {
+        expect($ai->json('s', 'p', optional: true))->toBe(['ok' => true]);
+    }
+
+    // The ninth optional request would eat into the two reserved for sentiment.
+    expect($ai->json('s', 'p', optional: true))->toBeNull()
+        ->and(aiStatusOf('gemini')['paused_until'])->toBeNull()
+        ->and($ai->json('s', 'p'))->toBe(['ok' => true])
+        ->and($ai->json('s', 'p'))->toBe(['ok' => true]);
+
+    Http::assertSentCount(10);
+});
+
+test('an optional request moves on to the next provider once the primary only has its reserve left', function () {
+    config(['market.ai.fallback_provider' => 'xai', 'market.ai.gemini.max_per_day' => 5, 'market.ai.sentiment_reserve_percent' => 20]);
+    Http::fake([GEMINI_URL => Http::response(geminiOk()), XAI_URL => Http::response(xaiOk())]);
+    $ai = app(AiClient::class);
+
+    foreach (range(1, 4) as $request) {
+        $ai->json('s', 'p', optional: true);
+    }
+    $ai->json('s', 'p', optional: true);
+    expect($ai->lastProvider())->toBe('xai');
+
+    $ai->json('s', 'p');
+    expect($ai->lastProvider())->toBe('gemini');
+});
+
+test('mistral is the third fallback, called through its openai-compatible endpoint in json mode', function () {
+    config([
+        'market.ai.fallback_provider' => 'xai',
+        'market.ai.fallback_provider_2' => 'none',
+        'market.ai.fallback_provider_3' => 'mistral',
+        'market.ai.mistral.key' => 'mistral-test-key',
+        'market.ai.mistral.model' => 'mistral-small-latest',
+    ]);
+    Http::fake([
+        GEMINI_URL => Http::response(['error' => ['code' => 503, 'message' => 'busy']], 503),
+        XAI_URL => Http::response(['error' => 'Your team has run out of credits.'], 403),
+        'api.mistral.ai/*' => Http::response(xaiOk('{"summary": "naik"}')),
+    ]);
+    $ai = app(AiClient::class);
+
+    expect($ai->providers())->toBe(['gemini', 'xai', 'mistral'])
+        ->and($ai->json('system', 'prompt'))->toBe(['summary' => 'naik'])
+        ->and($ai->lastProvider())->toBe('mistral')
+        ->and(aiStatusOf('mistral')['position'])->toBe(2);
+
+    Http::assertSent(fn ($request) => $request->url() === 'https://api.mistral.ai/v1/chat/completions'
+        && $request->hasHeader('Authorization', 'Bearer mistral-test-key')
+        && $request['model'] === 'mistral-small-latest'
+        && $request['response_format'] === ['type' => 'json_object']);
+});

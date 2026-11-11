@@ -68,3 +68,35 @@ test('a changed recommendation always gets a new summary', function () {
 
     expect($result['summary'])->toBe('baru');
 });
+
+test('a hold gets the template summary without asking ai, so the ai budget goes to buy signals', function () {
+    $this->ai->shouldNotReceive('json');
+
+    $result = app(AnalysisSummarizer::class)->summarize($this->token, Recommendation::Hold, [
+        'final_score' => 55, 'scores' => ['technical' => 60, 'sentiment' => 44], 'levels' => [], 'reasons' => [], 'news_headlines' => [],
+    ], null);
+
+    expect($result['provider'])->toBe('template')
+        ->and($result['summary'])->toContain('GANG mendapat skor akhir 55/100');
+});
+
+test('a hold is summarized by ai again when the bullish-only setting is off', function () {
+    config(['market.ai.summary_ai_bullish_only' => false]);
+    $this->ai->shouldReceive('json')->once()->andReturn(['summary' => 'baru']);
+
+    $result = app(AnalysisSummarizer::class)->summarize($this->token, Recommendation::Hold, [
+        'final_score' => 55, 'scores' => ['technical' => 60], 'levels' => [], 'reasons' => [], 'news_headlines' => [],
+    ], null);
+
+    expect($result['summary'])->toBe('baru');
+});
+
+test('a buy summary asks ai as an optional request that gives way to news sentiment', function () {
+    $this->ai->shouldReceive('json')->once()->withArgs(fn (string $system, string $prompt, bool $optional): bool => $optional)->andReturn(['summary' => 'baru']);
+
+    $result = app(AnalysisSummarizer::class)->summarize($this->token, Recommendation::Buy, [
+        'final_score' => 75, 'scores' => ['technical' => 80], 'levels' => [], 'reasons' => [], 'news_headlines' => [],
+    ], null);
+
+    expect($result['summary'])->toBe('baru');
+});

@@ -233,6 +233,12 @@ return [
         'fallback_provider' => env('AI_FALLBACK_PROVIDER', 'none'),
         // Cadangan kedua: dipakai bila utama dan cadangan pertama sama-sama dijeda atau anggarannya habis.
         'fallback_provider_2' => env('AI_FALLBACK_PROVIDER_2', 'none'),
+        // Cadangan ketiga: dipakai bila tiga provider sebelumnya dijeda atau anggarannya habis.
+        'fallback_provider_3' => env('AI_FALLBACK_PROVIDER_3', 'none'),
+        // Bagian anggaran harian tiap provider yang hanya boleh dipakai sentimen berita, karena sentimen ikut
+        // menentukan skor. Ringkasan berhenti memakai provider itu begitu sisanya tinggal bagian ini
+        // (11 Nov: ketiga provider habis pukul 16.41 WIB oleh ringkasan, sentimen jatuh ke kamus kata).
+        'sentiment_reserve_percent' => (int) env('AI_SENTIMENT_RESERVE_PERCENT', 20),
         'gemini' => [
             'key' => env('GEMINI_API_KEY'),
             // Alias "latest" mengikuti versi terbaru, jadi tidak pensiun seperti model bernomor.
@@ -291,6 +297,15 @@ return [
             // Tanpa mode thinking: jawaban JSON pendek jauh lebih cepat.
             'request' => ['reasoning_effort' => 'none'],
         ],
+        'mistral' => [
+            'key' => env('MISTRAL_API_KEY'),
+            'base_url' => 'https://api.mistral.ai/v1',
+            // Alias "latest" mengikuti versi terbaru dan mendukung mode JSON.
+            'model' => env('MISTRAL_MODEL', 'mistral-small-latest'),
+            // Paket gratis Experiment: sekitar 1 request per detik; batas harian ini batas aplikasi sendiri.
+            'max_per_minute' => (int) env('MISTRAL_MAX_PER_MINUTE', 20),
+            'max_per_day' => (int) env('MISTRAL_MAX_PER_DAY', 500),
+        ],
         'openai' => [
             'key' => env('OPENAI_API_KEY'),
             'base_url' => 'https://api.openai.com/v1',
@@ -301,6 +316,9 @@ return [
         // Ringkasan AI dibuat ulang jika rekomendasi berubah, ringkasan lebih tua dari ini (dihitung sejak ditulis),
         // atau skor akhir bergeser sebanyak ini atau lebih sejak ringkasan ditulis.
         'summary_ttl_minutes' => 180,
+        // Ringkasan AI hanya untuk Buy dan Strong Buy; rekomendasi lain memakai template. HOLD memakan sekitar
+        // separuh ringkasan AI (8-11 Nov), padahal tidak ada keputusan beli di sana.
+        'summary_ai_bullish_only' => (bool) env('AI_SUMMARY_BULLISH_ONLY', true),
         'summary_refresh_score_change' => 5,
     ],
 
