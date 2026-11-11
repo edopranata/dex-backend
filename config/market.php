@@ -375,11 +375,12 @@ return [
         // Nominal tetap saat risk_pct = 0; juga ukuran acuan biaya pada hasil R bersih sinyal.
         'amount_usd' => (float) env('AUTO_FOLLOW_AMOUNT_USD', 100),
         // Maksimal posisi terbuka + order beli menunggu (0 = tanpa batas).
-        'max_open_positions' => (int) env('AUTO_FOLLOW_MAX_OPEN', 3),
+        // v5 (12 Nov): 4 posisi x risiko 0,5% = total risiko terbuka 2% (sebelumnya 3 x 1%).
+        'max_open_positions' => (int) env('AUTO_FOLLOW_MAX_OPEN', 4),
         // Rugi terealisasi per hari (WIB), dalam % ekuitas, sebelum pembelian baru dijeda (0 = tanpa batas).
         'max_daily_loss_pct' => (float) env('AUTO_FOLLOW_MAX_DAILY_LOSS_PCT', 3.0),
         // Rugi saat kena stop, dalam % ekuitas.
-        'risk_pct' => (float) env('AUTO_FOLLOW_RISK_PCT', 1.0),
+        'risk_pct' => (float) env('AUTO_FOLLOW_RISK_PCT', 0.5),
         'max_position_pct' => 25.0,
         // Order dibatasi % likuiditas pool supaya slippage tetap kecil.
         'max_liquidity_pct' => 0.25,
@@ -448,7 +449,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v4',
+        'strategy_version' => 'v5',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [
@@ -487,6 +488,9 @@ return [
         // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.
         'buy_max_rise_24h_pct' => 15.0,
         'buy_min_below_high_24h_pct' => 5.0,
+        // v5 (review 12 Nov): hanya rekomendasi ini yang membuat sinyal; Buy tetap dianalisa dan tampil sebagai pantauan.
+        // Semua sinyal tertutup s.d. 12 Nov: Buy -0,46R/sinyal (n=114, rugi di setiap periode), Strong Buy +0,07R (n=43).
+        'signal_recommendations' => ['STRONG_BUY'],
     ],
 
 ];

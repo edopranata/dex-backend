@@ -93,7 +93,7 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v4-');
+    expect($version)->toStartWith('v5-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);
@@ -150,7 +150,7 @@ test('v4 holds a Buy that chases the move, with the reason, and opens no signal'
 ]);
 
 test('v4 keeps a Buy that waited for a pullback, and a Buy without a day of history', function (?float $rise, ?float $belowHigh) {
-    config(['market.analysis.thresholds.STRONG_BUY' => 101]);
+    config(['market.analysis.thresholds.STRONG_BUY' => 101, 'market.analysis.signal_recommendations' => ['BUY', 'STRONG_BUY']]);
     fakeTechnicalMove($rise, $belowHigh);
     $token = Token::factory()->create(['price_usd' => 1.0]);
     TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
@@ -210,7 +210,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 
     expect(config('market.analysis.buy_min_below_high_24h_pct'))->toEqual(0.0)
         ->and(config('market.analysis.buy_max_rise_24h_pct'))->toEqual(15.0)
-        ->and(StrategyVersion::current())->toStartWith('v4-')->not->toBe($before);
+        ->and(StrategyVersion::current())->toStartWith('v5-')->not->toBe($before);
 
     $this->actingAs($admin)->putJson('/api/admin/settings', ['values' => ['market.analysis.buy_max_rise_24h_pct' => -1]])->assertUnprocessable();
 });
@@ -218,7 +218,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 test('the v4 limits are part of the strategy version', function () {
     $version = StrategyVersion::current();
 
-    expect($version)->toStartWith('v4-');
+    expect($version)->toStartWith('v5-');
 
     config(['market.analysis.buy_max_rise_24h_pct' => 20.0]);
 
@@ -278,4 +278,32 @@ test('a lone Hold between Buys is not a second downgrade, and a Hold from before
 
     expect($active->refresh()->downgraded_at)->not->toBeNull()
         ->and($active->second_downgraded_at)->toBeNull();
+});
+
+test('v5 opens signals only for Strong Buy, and a Buy stays a watch-only analysis with its levels', function () {
+    config(['market.analysis.thresholds.STRONG_BUY' => 101]);
+    fakeTechnicalMove(10.0, 8.0);
+    $buy = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($buy)->create(['risk_score' => 100]);
+
+    $analysis = app(SignalEngine::class)->analyze($buy);
+
+    expect($analysis->recommendation)->toBe(Recommendation::Buy)
+        ->and($analysis->entry_low)->not->toBeNull()
+        ->and($buy->signals()->count())->toBe(0);
+
+    config(['market.analysis.thresholds.STRONG_BUY' => 72]);
+    $strong = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($strong)->create(['risk_score' => 100]);
+
+    expect(app(SignalEngine::class)->analyze($strong)->recommendation)->toBe(Recommendation::StrongBuy)
+        ->and($strong->signals()->count())->toBe(1);
+});
+
+test('the recommendations that open signals are part of the strategy version', function () {
+    $version = StrategyVersion::current();
+
+    config(['market.analysis.signal_recommendations' => ['BUY', 'STRONG_BUY']]);
+
+    expect(StrategyVersion::current())->not->toBe($version);
 });

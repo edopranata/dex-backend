@@ -99,9 +99,11 @@ class AnalysisSummarizer
             $scores[$strongest],
             $labels[$weakest],
             $scores[$weakest],
-            $recommendation->isBullish()
-                ? 'Setup beli valid selama harga bertahan di atas stop loss.'
-                : 'Belum ada setup beli yang layak; tunggu konfirmasi.',
+            match (true) {
+                in_array($recommendation->value, config('market.analysis.signal_recommendations'), true) => 'Setup beli valid selama harga bertahan di atas stop loss.',
+                $recommendation->isBullish() => 'Hanya pantauan: sejak v5 sinyal beli dibuat untuk Strong Buy saja.',
+                default => 'Belum ada setup beli yang layak; tunggu konfirmasi.',
+            },
         );
     }
 }

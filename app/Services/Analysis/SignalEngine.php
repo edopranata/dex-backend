@@ -132,7 +132,7 @@ class SignalEngine
             $this->notifier->riskAlert($token, $onchain['reasons']);
         }
 
-        if ($levels !== []) {
+        if ($levels !== [] && in_array($recommendation->value, config('market.analysis.signal_recommendations'), true)) {
             $signal = $token->withMembershipLock(function () use ($token, $analysis, $recommendation, $strategyVersion, $levels): ?Signal {
                 if (! $token->isInMarket() || $token->signals()->open()->exists()) {
                     return null;

@@ -100,3 +100,18 @@ test('a buy summary asks ai as an optional request that gives way to news sentim
 
     expect($result['summary'])->toBe('baru');
 });
+
+test('the template tells a Buy apart as watch-only once only Strong Buy opens signals', function (string $recommendation, string $closing) {
+    $ai = Mockery::mock(AiClient::class, ['isEnabled' => false]);
+
+    $summary = (new AnalysisSummarizer($ai))->summarize($this->token, Recommendation::from($recommendation), [
+        'final_score' => 70, 'scores' => ['technical' => 90, 'onchain' => 60], 'levels' => [], 'reasons' => [], 'news_headlines' => [],
+    ], null);
+
+    expect($summary['provider'])->toBe('template')
+        ->and($summary['summary'])->toEndWith($closing);
+})->with([
+    'strong buy' => ['STRONG_BUY', 'Setup beli valid selama harga bertahan di atas stop loss.'],
+    'buy' => ['BUY', 'Hanya pantauan: sejak v5 sinyal beli dibuat untuk Strong Buy saja.'],
+    'hold' => ['HOLD', 'Belum ada setup beli yang layak; tunggu konfirmasi.'],
+]);
