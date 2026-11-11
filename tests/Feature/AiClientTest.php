@@ -438,3 +438,32 @@ test('mistral is the third fallback, called through its openai-compatible endpoi
         && $request['model'] === 'mistral-small-latest'
         && $request['response_format'] === ['type' => 'json_object']);
 });
+
+test('the gemini budget follows the google quota day, which starts at 15.00 wib', function () {
+    config(['market.ai.gemini.max_per_day' => 1]);
+    Http::fake([GEMINI_URL => Http::response(geminiOk())]);
+    $ai = app(AiClient::class);
+
+    // 10.00 WIB on 12 Nov is still 11 Nov in California.
+    $this->travelTo(Carbon::parse('2026-11-12 10:00', 'Asia/Jakarta'));
+    expect($ai->json('s', 'p'))->toBe(['ok' => true])
+        ->and($ai->json('s', 'p'))->toBeNull()
+        ->and(Carbon::parse(aiStatusOf('gemini')['paused_until'])->setTimezone('Asia/Jakarta')->format('Y-m-d H:i'))->toBe('2026-11-12 15:00');
+
+    $this->travelTo(Carbon::parse('2026-11-12 15:01', 'Asia/Jakarta'));
+    expect($ai->json('s', 'p'))->toBe(['ok' => true]);
+
+    Http::assertSentCount(2);
+});
+
+test('a provider without its own quota day is counted per day in wib', function () {
+    config(['market.ai.provider' => 'xai', 'market.ai.xai.max_per_day' => 1]);
+    Http::fake([XAI_URL => Http::response(xaiOk())]);
+    $ai = app(AiClient::class);
+
+    $this->travelTo(Carbon::parse('2026-11-12 10:00', 'Asia/Jakarta'));
+    $ai->json('s', 'p');
+    $ai->json('s', 'p');
+
+    expect(Carbon::parse(aiStatusOf('xai')['paused_until'])->setTimezone('Asia/Jakarta')->format('Y-m-d H:i'))->toBe('2026-11-13 00:00');
+});

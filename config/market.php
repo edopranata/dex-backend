@@ -244,8 +244,11 @@ return [
             // Alias "latest" mengikuti versi terbaru, jadi tidak pensiun seperti model bernomor.
             'model' => env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
             // Anggaran agar tidak melewati free tier; request di atasnya pindah ke cadangan atau template/kamus.
-            'max_per_minute' => (int) env('GEMINI_MAX_PER_MINUTE', env('AI_MAX_REQUESTS_PER_MINUTE', 5)),
-            'max_per_day' => (int) env('GEMINI_MAX_PER_DAY', env('AI_MAX_REQUESTS_PER_DAY', 250)),
+            // AI Studio 11 Nov, Gemini 3.5 Flash Lite gratis: 15 request/menit, 500/hari; sisanya ruang aman.
+            'max_per_minute' => (int) env('GEMINI_MAX_PER_MINUTE', env('AI_MAX_REQUESTS_PER_MINUTE', 12)),
+            'max_per_day' => (int) env('GEMINI_MAX_PER_DAY', env('AI_MAX_REQUESTS_PER_DAY', 450)),
+            // Kuota harian Google dihitung ulang tengah malam waktu Pasifik (15.00 WIB, 16.00 WIB saat musim panas AS).
+            'daily_reset_timezone' => 'America/Los_Angeles',
         ],
         'groq' => [
             'key' => env('GROQ_API_KEY'),

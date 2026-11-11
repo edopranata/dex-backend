@@ -221,7 +221,7 @@ class AiClient
         Cache::add($this->dayKey($provider), 0, now()->addDays(2));
 
         if (Cache::increment($this->dayKey($provider)) > (int) config("market.ai.{$provider}.max_per_day")) {
-            $this->pause($provider, now('Asia/Jakarta')->addDay()->startOfDay(), 'Batas harian aplikasi tercapai (atur di Pengaturan → AI).');
+            $this->pause($provider, now($this->dayTimezone($provider))->addDay()->startOfDay(), 'Batas harian aplikasi tercapai (atur di Pengaturan → AI).');
 
             return false;
         }
@@ -324,7 +324,17 @@ class AiClient
 
     private function dayKey(string $provider): string
     {
-        return "ai:requests:{$provider}:".now('Asia/Jakarta')->format('Y-m-d');
+        return "ai:requests:{$provider}:".now($this->dayTimezone($provider))->format('Y-m-d');
+    }
+
+    /**
+     * The day the app counts a provider's requests in: the provider's own quota day where it is known, so the
+     * budget comes back when the provider's does (11 Nov: Gemini's day starts 15.00 WIB, and AI Studio showed
+     * 27/500 while the app still counted 252 since midnight WIB).
+     */
+    private function dayTimezone(string $provider): string
+    {
+        return (string) config("market.ai.{$provider}.daily_reset_timezone", 'Asia/Jakarta');
     }
 
     /**
