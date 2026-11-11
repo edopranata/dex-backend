@@ -107,7 +107,10 @@ class NewsSentimentService
 
         $scores = [];
 
-        foreach ($result['items'] ?? [] as $row) {
+        // Gemma 4 answers with the bare list instead of the {"items": [...]} wrapper.
+        $rows = is_array($result) && array_is_list($result) ? $result : ($result['items'] ?? []);
+
+        foreach ($rows as $row) {
             if (isset($row['id'], $row['score']) && is_numeric($row['score'])) {
                 $scores[(int) $row['id']] = (int) max(1, min(100, (int) $row['score']));
             }

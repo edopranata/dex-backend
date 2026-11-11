@@ -26,7 +26,7 @@ use Throwable;
 class AiClient
 {
     /** Providers this client can talk to; all but Gemini share the OpenAI chat-completions format. */
-    public const PROVIDERS = ['gemini' => 'Google Gemini', 'groq' => 'Groq', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'mistral' => 'Mistral', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
+    public const PROVIDERS = ['gemini' => 'Google Gemini', 'gemini_2' => 'Google Gemini (model kedua)', 'groq' => 'Groq', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'mistral' => 'Mistral', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
 
     private ?string $lastProvider = null;
 
@@ -44,7 +44,7 @@ class AiClient
             $chain,
             fn ($provider): bool => is_string($provider)
                 && isset(self::PROVIDERS[$provider])
-                && filled(config("market.ai.{$provider}.key"))
+                && filled($this->apiKey($provider))
                 && config("market.ai.{$provider}.enabled", true),
         ));
     }
@@ -357,22 +357,43 @@ class AiClient
 
     private function send(string $provider, string $system, string $prompt): ?string
     {
-        return $provider === 'gemini' ? $this->gemini($system, $prompt) : $this->chatCompletions($provider, $system, $prompt);
+        return str_starts_with($provider, 'gemini') ? $this->gemini($provider, $system, $prompt) : $this->chatCompletions($provider, $system, $prompt);
     }
 
-    private function gemini(string $system, string $prompt): ?string
+    /**
+     * A provider's API key; the second Gemini slot borrows the first one's, since quotas are per model.
+     */
+    private function apiKey(string $provider): ?string
     {
-        $model = config('market.ai.gemini.model');
+        $key = config('market.ai.'.config("market.ai.{$provider}.key_from", $provider).'.key');
 
-        return Http::withHeaders(['x-goog-api-key' => config('market.ai.gemini.key')])
+        return is_string($key) ? $key : null;
+    }
+
+    /**
+     * Gemini API (Gemini and Gemma models). Thinking models put their thoughts in parts marked `thought`,
+     * so only the other parts make up the answer.
+     */
+    private function gemini(string $provider, string $system, string $prompt): ?string
+    {
+        $model = config("market.ai.{$provider}.model");
+
+        $parts = Http::withHeaders(['x-goog-api-key' => $this->apiKey($provider)])
             ->timeout(60)
             ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent", [
                 'systemInstruction' => ['parts' => [['text' => $system]]],
                 'contents' => [['role' => 'user', 'parts' => [['text' => $prompt]]]],
-                'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.2],
+                'generationConfig' => ['responseMimeType' => 'application/json', 'temperature' => 0.2, ...$this->modelRequest($provider)],
             ])
             ->throw()
-            ->json('candidates.0.content.parts.0.text');
+            ->json('candidates.0.content.parts') ?? [];
+
+        $text = implode('', array_map(
+            fn (array $part): string => (string) ($part['text'] ?? ''),
+            array_filter($parts, fn (array $part): bool => ($part['thought'] ?? false) !== true),
+        ));
+
+        return $text === '' ? null : $text;
     }
 
     /**
@@ -380,7 +401,7 @@ class AiClient
      */
     private function chatCompletions(string $provider, string $system, string $prompt): ?string
     {
-        return Http::withToken(config("market.ai.{$provider}.key"))
+        return Http::withToken($this->apiKey($provider))
             ->withHeaders(config("market.ai.{$provider}.headers", []))
             ->timeout((int) config("market.ai.{$provider}.timeout", 60))
             ->post(rtrim((string) config("market.ai.{$provider}.base_url"), '/').'/chat/completions', [

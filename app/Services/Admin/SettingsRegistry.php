@@ -30,6 +30,9 @@ class SettingsRegistry
                     ['key' => 'market.ai.gemini.model', 'label' => 'Model Gemini', 'type' => 'string', 'description' => 'Disarankan gemini-flash-lite-latest (kuota gratis paling longgar, tidak pensiun).'],
                     ['key' => 'market.ai.gemini.max_per_minute', 'label' => 'Gemini: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Sesuaikan dengan batas free tier model (lihat AI Studio → Rate limits). 11 Nov: Flash Lite 15 per menit.'],
                     ['key' => 'market.ai.gemini.max_per_day', 'label' => 'Gemini: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => '11 Nov: Flash Lite 500 per hari, dihitung ulang pukul 15.00 WIB (waktu Pasifik), dan aplikasi menghitung hari yang sama.'],
+                    ['key' => 'market.ai.gemini_2.model', 'label' => 'Gemini model kedua', 'type' => 'string', 'description' => 'Memakai Gemini API key di atas, dengan kuota model ini sendiri. Disarankan gemma-4-26b-a4b-it (11 Nov: 14.400 request/hari gratis; gemma-4-31b-it sering sibuk).'],
+                    ['key' => 'market.ai.gemini_2.max_per_minute', 'label' => 'Gemini model kedua: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Gemma 4 dibatasi 16K token per menit, kira-kira 8 request.'],
+                    ['key' => 'market.ai.gemini_2.max_per_day', 'label' => 'Gemini model kedua: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => 'Dihitung ulang pukul 15.00 WIB, sama seperti Gemini.'],
                     ['key' => 'market.ai.groq.key', 'label' => 'Groq API key', 'type' => 'secret', 'description' => 'Dari console.groq.com/keys.'],
                     ['key' => 'market.ai.groq.model', 'label' => 'Model Groq', 'type' => 'string', 'description' => 'Disarankan openai/gpt-oss-20b. Daftar model: console.groq.com/docs/models.'],
                     ['key' => 'market.ai.groq.max_per_minute', 'label' => 'Groq: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Batas Groq dihitung juga per token, jadi jangan dinaikkan tanpa melihat halaman Limits di akun Groq.'],
@@ -194,6 +197,7 @@ class SettingsRegistry
         return [
             'none' => 'Nonaktif',
             'gemini' => 'Google Gemini',
+            'gemini_2' => 'Google Gemini (model kedua)',
             'groq' => 'Groq',
             'openrouter' => 'OpenRouter',
             'xai' => 'xAI Grok',

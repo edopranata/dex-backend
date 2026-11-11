@@ -250,6 +250,21 @@ return [
             // Kuota harian Google dihitung ulang tengah malam waktu Pasifik (15.00 WIB, 16.00 WIB saat musim panas AS).
             'daily_reset_timezone' => 'America/Los_Angeles',
         ],
+        // Slot Gemini kedua dengan key yang sama: kuota gratis Google dihitung per model, jadi model lain punya
+        // kuota sendiri. AI Studio 11 Nov: Gemma 4 26B/31B 30 request/menit, 16K token/menit, 14.400/hari.
+        // Uji 11 Nov: 31B menjawab 503 (permintaan tinggi), 26B menjawab dalam 1,5 detik dengan thinking minimal.
+        'gemini_2' => [
+            'key_from' => 'gemini',
+            'model' => env('GEMINI_2_MODEL', 'gemma-4-26b-a4b-it'),
+            // 16K token/menit dibagi ±1.800 token per request.
+            'max_per_minute' => (int) env('GEMINI_2_MAX_PER_MINUTE', 6),
+            'max_per_day' => (int) env('GEMINI_2_MAX_PER_DAY', 1000),
+            'daily_reset_timezone' => 'America/Los_Angeles',
+            // Tanpa ini Gemma 4 berpikir ±500 token dan 13 detik dulu; thinkingBudget tidak didukung Gemma.
+            'request_by_model' => [
+                'gemma-4' => ['thinkingConfig' => ['thinkingLevel' => 'minimal']],
+            ],
+        ],
         'groq' => [
             'key' => env('GROQ_API_KEY'),
             'base_url' => 'https://api.groq.com/openai/v1',

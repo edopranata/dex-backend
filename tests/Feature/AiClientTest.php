@@ -467,3 +467,39 @@ test('a provider without its own quota day is counted per day in wib', function 
 
     expect(Carbon::parse(aiStatusOf('xai')['paused_until'])->setTimezone('Asia/Jakarta')->format('Y-m-d H:i'))->toBe('2026-11-13 00:00');
 });
+
+test('the second gemini slot borrows the gemini key, asks its own model with minimal thinking and skips thought parts', function () {
+    config([
+        'market.ai.fallback_provider' => 'gemini_2',
+        'market.ai.gemini.max_per_day' => 1,
+        'market.ai.gemini_2.model' => 'gemma-4-26b-a4b-it',
+    ]);
+    Http::fake([
+        '*/models/gemini-flash-lite-latest:generateContent' => Http::response(geminiOk()),
+        '*/models/gemma-4-26b-a4b-it:generateContent' => Http::response(['candidates' => [['content' => ['parts' => [
+            ['text' => '', 'thought' => true],
+            ['text' => '[{"id":1,"score":85}]'],
+        ]]]]]),
+    ]);
+    $ai = app(AiClient::class);
+
+    expect($ai->providers())->toBe(['gemini', 'gemini_2']);
+
+    $ai->json('s', 'p');
+    expect($ai->lastProvider())->toBe('gemini')
+        ->and($ai->json('s', 'p'))->toBe([['id' => 1, 'score' => 85]])
+        ->and($ai->lastProvider())->toBe('gemini_2')
+        ->and(aiStatusOf('gemini_2')['requests_today'])->toBe(1);
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'gemma-4-26b-a4b-it')
+        && $request->hasHeader('x-goog-api-key', 'test-key')
+        && $request['generationConfig']['thinkingConfig'] === ['thinkingLevel' => 'minimal']);
+    Http::assertNotSent(fn ($request) => str_contains($request->url(), 'gemini-flash-lite-latest')
+        && isset($request['generationConfig']['thinkingConfig']));
+});
+
+test('the second gemini slot is left out while there is no gemini key', function () {
+    config(['market.ai.fallback_provider' => 'gemini_2', 'market.ai.gemini.key' => null, 'market.ai.provider' => 'xai']);
+
+    expect(app(AiClient::class)->providers())->toBe(['xai']);
+});
