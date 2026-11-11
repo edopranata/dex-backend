@@ -510,6 +510,7 @@ test('the second groq slot borrows the groq key and asks its own model, qwen wit
         'market.ai.fallback_provider' => 'groq_2',
         'market.ai.groq.key' => 'groq-key',
         'market.ai.groq.max_per_day' => 1,
+        'market.ai.groq.model' => 'openai/gpt-oss-120b',
         'market.ai.groq_2.model' => 'qwen/qwen3.8-27b',
     ]);
     Http::fake(['api.groq.com/*' => Http::response(['choices' => [['message' => ['content' => '{"summary":"ok"}']]]])]);
