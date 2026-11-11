@@ -2,6 +2,8 @@
 
 namespace App\Services\Admin;
 
+use App\Services\Ai\AiClient;
+
 /**
  * Settings that admins may change from the web panel. Each key is a config path; the stored
  * value overrides the value from config files / .env at runtime.
@@ -21,7 +23,8 @@ class SettingsRegistry
                 'key' => 'ai',
                 'label' => 'AI (sentimen berita & ringkasan analisis)',
                 'description' => 'Tanpa API key, sentimen memakai kamus kata dan ringkasan memakai template.',
-                'fields' => [
+                'sections' => self::aiSections(),
+                'fields' => self::withAiSections([
                     ['key' => 'market.ai.provider', 'label' => 'Provider utama', 'type' => 'select', 'options' => self::aiProviders()],
                     ['key' => 'market.ai.fallback_provider', 'label' => 'Provider cadangan 1', 'type' => 'select', 'options' => self::aiProviders(), 'description' => 'Dipakai otomatis saat provider utama terkena limit, kuota habis, atau error.'],
                     ['key' => 'market.ai.fallback_provider_2', 'label' => 'Provider cadangan 2', 'type' => 'select', 'options' => self::aiProviders(), 'description' => 'Dipakai bila provider utama dan cadangan sama-sama dijeda atau batas hariannya habis.'],
@@ -30,7 +33,7 @@ class SettingsRegistry
                     ['key' => 'market.ai.gemini.model', 'label' => 'Model Gemini', 'type' => 'string', 'description' => 'Disarankan gemini-flash-lite-latest (kuota gratis paling longgar, tidak pensiun).'],
                     ['key' => 'market.ai.gemini.max_per_minute', 'label' => 'Gemini: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Sesuaikan dengan batas free tier model (lihat AI Studio → Rate limits). 11 Nov: Flash Lite 15 per menit.'],
                     ['key' => 'market.ai.gemini.max_per_day', 'label' => 'Gemini: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => '11 Nov: Flash Lite 500 per hari, dihitung ulang pukul 15.00 WIB (waktu Pasifik), dan aplikasi menghitung hari yang sama.'],
-                    ['key' => 'market.ai.gemini_2.model', 'label' => 'Gemini model kedua', 'type' => 'string', 'description' => 'Memakai Gemini API key di atas, dengan kuota model ini sendiri. Disarankan gemma-4-26b-a4b-it (11 Nov: 14.400 request/hari gratis; gemma-4-31b-it sering sibuk).'],
+                    ['key' => 'market.ai.gemini_2.model', 'label' => 'Gemini model kedua', 'type' => 'string', 'description' => 'Disarankan gemma-4-26b-a4b-it (11 Nov: 14.400 request/hari gratis; gemma-4-31b-it sering sibuk).'],
                     ['key' => 'market.ai.gemini_2.max_per_minute', 'label' => 'Gemini model kedua: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Gemma 4 dibatasi 16K token per menit, kira-kira 8 request.'],
                     ['key' => 'market.ai.gemini_2.max_per_day', 'label' => 'Gemini model kedua: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => 'Dihitung ulang pukul 15.00 WIB, sama seperti Gemini.'],
                     ['key' => 'market.ai.groq.key', 'label' => 'Groq API key', 'type' => 'secret', 'description' => 'Dari console.groq.com/keys.'],
@@ -56,7 +59,7 @@ class SettingsRegistry
                     ['key' => 'market.ai.sentiment_reserve_percent', 'label' => 'Cadangan kuota untuk sentimen (%)', 'type' => 'int', 'min' => 0, 'max' => 90, 'description' => 'Bagian batas harian tiap provider yang hanya dipakai sentimen berita, karena sentimen ikut menentukan skor. Ringkasan berhenti memakai provider itu begitu sisanya tinggal bagian ini.'],
                     ['key' => 'market.ai.summary_ai_bullish_only', 'label' => 'Ringkasan AI hanya untuk Buy dan Strong Buy', 'type' => 'bool', 'description' => 'Rekomendasi lain memakai ringkasan template, supaya kuota AI tidak habis untuk token yang tidak dibeli.'],
                     ['key' => 'market.ai.summary_ttl_minutes', 'label' => 'Umur ringkasan AI (menit)', 'type' => 'int', 'min' => 5, 'max' => 1440, 'description' => 'Ringkasan dibuat ulang jika rekomendasi berubah atau lebih tua dari ini.'],
-                ],
+                ]),
             ],
             [
                 'key' => 'telegram',
@@ -185,6 +188,53 @@ class SettingsRegistry
                 ],
             ],
         ];
+    }
+
+    /**
+     * Sub-sections of the AI card: the provider chain, how the quota is spent, then one per provider.
+     *
+     * @return list<array{key: string, label: string, provider?: string, description?: string}>
+     */
+    private static function aiSections(): array
+    {
+        $providers = array_map(
+            fn (string $provider): array => ['key' => $provider, 'label' => AiClient::PROVIDERS[$provider], 'provider' => $provider],
+            ['gemini', 'gemini_2', 'groq', 'openrouter', 'mistral', 'xai', 'openai'],
+        );
+        $providers[1]['description'] = 'Memakai Gemini API key, dengan kuota model ini sendiri.';
+
+        return [
+            ['key' => 'chain', 'label' => 'Urutan provider', 'description' => 'Dicoba berurutan; provider berikutnya dipakai saat yang sebelumnya dijeda atau batas hariannya habis.'],
+            ['key' => 'usage', 'label' => 'Pemakaian kuota & ringkasan'],
+            ...$providers,
+        ];
+    }
+
+    /**
+     * Tags every AI field with its sub-section, and gives provider fields a short label for use under the
+     * provider's own heading (the full label stays for messages such as "reset ke .env").
+     *
+     * @param  list<array<string, mixed>>  $fields
+     * @return list<array<string, mixed>>
+     */
+    private static function withAiSections(array $fields): array
+    {
+        return array_map(function (array $field): array {
+            if (preg_match('/^market\.ai\.(provider|fallback_provider(_\d)?)$/', $field['key']) === 1) {
+                return [...$field, 'section' => 'chain'];
+            }
+
+            if (preg_match('/^market\.ai\.([a-z0-9_]+)\.(key|model|max_per_minute|max_per_day)$/', $field['key'], $match) === 1) {
+                return [...$field, 'section' => $match[1], 'short_label' => match ($match[2]) {
+                    'key' => 'API key',
+                    'model' => 'Model',
+                    'max_per_minute' => 'Maks. request per menit',
+                    'max_per_day' => 'Maks. request per hari',
+                }];
+            }
+
+            return [...$field, 'section' => 'usage'];
+        }, $fields);
     }
 
     /**
