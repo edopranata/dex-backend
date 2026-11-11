@@ -169,11 +169,12 @@ test('the ai card is split into the chain, quota use and one section per provide
     $groups = $this->actingAs($this->admin)->getJson('/api/admin/settings')->assertOk()->json('groups');
     $fields = collect($groups[0]['fields'])->keyBy('key');
 
-    expect(collect($groups[0]['sections'])->pluck('key')->all())->toBe(['chain', 'usage', 'gemini', 'gemini_2', 'groq', 'openrouter', 'mistral', 'xai', 'openai'])
+    expect(collect($groups[0]['sections'])->pluck('key')->all())->toBe(['chain', 'usage', 'gemini', 'gemini_2', 'groq', 'groq_2', 'openrouter', 'mistral', 'xai', 'openai'])
         ->and($fields['market.ai.fallback_provider_3']['section'])->toBe('chain')
         ->and($fields['market.ai.sentiment_reserve_percent']['section'])->toBe('usage')
         ->and($fields['market.ai.mistral.key']['section'])->toBe('mistral')
         ->and($fields['market.ai.mistral.key']['short_label'])->toBe('API key')
         ->and($fields['market.ai.gemini_2.max_per_day']['short_label'])->toBe('Maks. request per hari')
+        ->and($fields['market.ai.groq_2.model']['section'])->toBe('groq_2')
         ->and($fields->every(fn (array $field): bool => isset($field['section'])))->toBeTrue();
 });

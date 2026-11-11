@@ -37,9 +37,12 @@ class SettingsRegistry
                     ['key' => 'market.ai.gemini_2.max_per_minute', 'label' => 'Gemini model kedua: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Gemma 4 dibatasi 16K token per menit, kira-kira 8 request.'],
                     ['key' => 'market.ai.gemini_2.max_per_day', 'label' => 'Gemini model kedua: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => 'Dihitung ulang pukul 15.00 WIB, sama seperti Gemini.'],
                     ['key' => 'market.ai.groq.key', 'label' => 'Groq API key', 'type' => 'secret', 'description' => 'Dari console.groq.com/keys.'],
-                    ['key' => 'market.ai.groq.model', 'label' => 'Model Groq', 'type' => 'string', 'description' => 'Disarankan openai/gpt-oss-20b. Daftar model: console.groq.com/docs/models.'],
+                    ['key' => 'market.ai.groq.model', 'label' => 'Model Groq', 'type' => 'string', 'description' => 'Disarankan openai/gpt-oss-120b (uji 11 Nov: paling dekat ke skor Gemini). Daftar model: console.groq.com/docs/models.'],
                     ['key' => 'market.ai.groq.max_per_minute', 'label' => 'Groq: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Batas Groq dihitung juga per token, jadi jangan dinaikkan tanpa melihat halaman Limits di akun Groq.'],
-                    ['key' => 'market.ai.groq.max_per_day', 'label' => 'Groq: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000],
+                    ['key' => 'market.ai.groq.max_per_day', 'label' => 'Groq: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => '11 Nov: 200K token per hari per model; satu request sentimen ±1.650 token, ringkasan ±700.'],
+                    ['key' => 'market.ai.groq_2.model', 'label' => 'Groq model kedua', 'type' => 'string', 'description' => 'Disarankan openai/gpt-oss-20b, atau qwen/qwen3.8-27b (uji 11 Nov: tercepat, tanpa token berpikir). Harus berbeda dari model Groq pertama.'],
+                    ['key' => 'market.ai.groq_2.max_per_minute', 'label' => 'Groq model kedua: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => '8K token per menit, kira-kira 4 request.'],
+                    ['key' => 'market.ai.groq_2.max_per_day', 'label' => 'Groq model kedua: maks. request per hari', 'type' => 'int', 'min' => 1, 'max' => 100000, 'description' => 'Kuota model ini terpisah dari model Groq pertama.'],
                     ['key' => 'market.ai.openrouter.key', 'label' => 'OpenRouter API key', 'type' => 'secret', 'description' => 'Dari openrouter.ai/settings/keys. Model gratis tidak memakai kredit.'],
                     ['key' => 'market.ai.openrouter.model', 'label' => 'Model OpenRouter', 'type' => 'string', 'description' => 'Disarankan openrouter/free: OpenRouter memilih model gratis yang sedang tersedia. Hindari model gratis Google (Gemma), karena ikut sibuk saat Gemini sibuk.'],
                     ['key' => 'market.ai.openrouter.max_per_minute', 'label' => 'OpenRouter: maks. request per menit', 'type' => 'int', 'min' => 1, 'max' => 1000, 'description' => 'Batas OpenRouter untuk model gratis 20 per menit.'],
@@ -199,9 +202,10 @@ class SettingsRegistry
     {
         $providers = array_map(
             fn (string $provider): array => ['key' => $provider, 'label' => AiClient::PROVIDERS[$provider], 'provider' => $provider],
-            ['gemini', 'gemini_2', 'groq', 'openrouter', 'mistral', 'xai', 'openai'],
+            ['gemini', 'gemini_2', 'groq', 'groq_2', 'openrouter', 'mistral', 'xai', 'openai'],
         );
         $providers[1]['description'] = 'Memakai Gemini API key, dengan kuota model ini sendiri.';
+        $providers[3]['description'] = 'Memakai Groq API key, dengan kuota model ini sendiri.';
 
         return [
             ['key' => 'chain', 'label' => 'Urutan provider', 'description' => 'Dicoba berurutan; provider berikutnya dipakai saat yang sebelumnya dijeda atau batas hariannya habis.'],
@@ -249,6 +253,7 @@ class SettingsRegistry
             'gemini' => 'Google Gemini',
             'gemini_2' => 'Google Gemini (model kedua)',
             'groq' => 'Groq',
+            'groq_2' => 'Groq (model kedua)',
             'openrouter' => 'OpenRouter',
             'xai' => 'xAI Grok',
             'mistral' => 'Mistral',

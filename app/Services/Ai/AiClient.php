@@ -26,7 +26,7 @@ use Throwable;
 class AiClient
 {
     /** Providers this client can talk to; all but Gemini share the OpenAI chat-completions format. */
-    public const PROVIDERS = ['gemini' => 'Google Gemini', 'gemini_2' => 'Google Gemini (model kedua)', 'groq' => 'Groq', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'mistral' => 'Mistral', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
+    public const PROVIDERS = ['gemini' => 'Google Gemini', 'gemini_2' => 'Google Gemini (model kedua)', 'groq' => 'Groq', 'groq_2' => 'Groq (model kedua)', 'openrouter' => 'OpenRouter', 'xai' => 'xAI Grok', 'mistral' => 'Mistral', 'openai' => 'OpenAI', 'ollama' => 'Ollama (lokal)'];
 
     private ?string $lastProvider = null;
 

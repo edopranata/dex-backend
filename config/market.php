@@ -1,5 +1,12 @@
 <?php
 
+// Opsi per model untuk kedua slot Groq. GPT-OSS berpikir dulu dan token itu ikut dihitung; "low" cukup untuk
+// sentimen & ringkasan. Qwen di Groq bisa tanpa berpikir sama sekali (uji 11 Nov: 0 token berpikir, <1 detik).
+$groqRequestByModel = [
+    'openai/gpt-oss' => ['reasoning_effort' => 'low', 'include_reasoning' => false],
+    'qwen/' => ['reasoning_effort' => 'none'],
+];
+
 return [
 
     // Vue app built by `npm run build:laravel` (served for every non-API path).
@@ -265,18 +272,29 @@ return [
                 'gemma-4' => ['thinkingConfig' => ['thinkingLevel' => 'minimal']],
             ],
         ],
+        // Groq juga menghitung kuota gratis per model (11 Nov: 30 request/menit, 1.000/hari, 8K token/menit,
+        // 200K token/hari untuk gpt-oss-120b, gpt-oss-20b, dan qwen3.8-27b). Yang lebih dulu habis adalah token.
+        // Uji 11 Nov dengan prompt produksi: sentimen 20 berita ±1.550-1.650 token, ringkasan ±650-750 token.
         'groq' => [
             'key' => env('GROQ_API_KEY'),
             'base_url' => 'https://api.groq.com/openai/v1',
             // Model produksi dengan batas publik; Llama di Groq kini tertulis "contact sales".
-            'model' => env('GROQ_MODEL', 'openai/gpt-oss-20b'),
-            // Di bawah batas Groq (8K token/menit, 200K token/hari) dengan perkiraan ±1.800 token per request.
+            // Uji 11 Nov: 120B lebih dekat ke skor Gemini dan ringkasannya lebih hati-hati daripada 20B.
+            'model' => env('GROQ_MODEL', 'openai/gpt-oss-120b'),
+            // 8K token/menit muat ±4 request sentimen.
             'max_per_minute' => (int) env('GROQ_MAX_PER_MINUTE', 4),
-            'max_per_day' => (int) env('GROQ_MAX_PER_DAY', 100),
-            // GPT-OSS berpikir dulu dan token itu ikut dihitung; cukup singkat untuk sentimen & ringkasan.
-            'request_by_model' => [
-                'openai/gpt-oss' => ['reasoning_effort' => 'low', 'include_reasoning' => false],
-            ],
+            // 200K token/hari dibagi ±1.650 token (kasus terburuk: semuanya sentimen).
+            'max_per_day' => (int) env('GROQ_MAX_PER_DAY', 120),
+            'request_by_model' => $groqRequestByModel,
+        ],
+        // Slot Groq kedua dengan key yang sama dan kuota model ini sendiri.
+        'groq_2' => [
+            'key_from' => 'groq',
+            'base_url' => 'https://api.groq.com/openai/v1',
+            'model' => env('GROQ_2_MODEL', 'openai/gpt-oss-20b'),
+            'max_per_minute' => (int) env('GROQ_2_MAX_PER_MINUTE', 4),
+            'max_per_day' => (int) env('GROQ_2_MAX_PER_DAY', 120),
+            'request_by_model' => $groqRequestByModel,
         ],
         'openrouter' => [
             'key' => env('OPENROUTER_API_KEY'),

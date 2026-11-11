@@ -503,3 +503,31 @@ test('the second gemini slot is left out while there is no gemini key', function
 
     expect(app(AiClient::class)->providers())->toBe(['xai']);
 });
+
+test('the second groq slot borrows the groq key and asks its own model, qwen without thinking', function () {
+    config([
+        'market.ai.provider' => 'groq',
+        'market.ai.fallback_provider' => 'groq_2',
+        'market.ai.groq.key' => 'groq-key',
+        'market.ai.groq.max_per_day' => 1,
+        'market.ai.groq_2.model' => 'qwen/qwen3.8-27b',
+    ]);
+    Http::fake(['api.groq.com/*' => Http::response(['choices' => [['message' => ['content' => '{"summary":"ok"}']]]])]);
+    $ai = app(AiClient::class);
+
+    expect($ai->providers())->toBe(['groq', 'groq_2']);
+
+    $ai->json('s', 'p');
+    expect($ai->lastProvider())->toBe('groq')
+        ->and($ai->json('s', 'p'))->toBe(['summary' => 'ok'])
+        ->and($ai->lastProvider())->toBe('groq_2')
+        ->and(aiStatusOf('groq_2')['requests_today'])->toBe(1);
+
+    Http::assertSent(fn ($request) => $request['model'] === 'openai/gpt-oss-120b'
+        && $request['reasoning_effort'] === 'low'
+        && $request->hasHeader('Authorization', 'Bearer groq-key'));
+    Http::assertSent(fn ($request) => $request['model'] === 'qwen/qwen3.8-27b'
+        && $request['reasoning_effort'] === 'none'
+        && ! isset($request['include_reasoning'])
+        && $request->hasHeader('Authorization', 'Bearer groq-key'));
+});
