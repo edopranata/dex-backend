@@ -59,11 +59,13 @@ class TokenSecurityService
             return null;
         }
 
+        [$data, $holderFlags] = $this->withoutImpossibleHolders($data);
         $result = $chain === 'solana' ? $this->scoreSolana($data) : $this->scoreEvm($data);
         $topHolders = $this->topHolders($data, $pairAddress);
 
         return [
             ...$result,
+            'flags' => [...$result['flags'], ...$holderFlags],
             'holder_count' => isset($data['holder_count']) ? (int) $data['holder_count'] : null,
             'top10_percent' => $this->top10Percent($data['holders'] ?? []),
             'top_holders' => $topHolders,
@@ -226,6 +228,28 @@ class TokenSecurityService
         }
 
         return ['penalty' => $penalty, 'flags' => $flags];
+    }
+
+    /**
+     * GoPlus sometimes lists holder shares far above the whole supply (TROLL on 10 Nov: its pool at 4,029,241%),
+     * which overflowed the stored percentage so the whole check failed to save. Such a holder list is left out,
+     * so it is neither stored nor scored as concentration; the rest of the check still counts.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{0: array<string, mixed>, 1: list<array{level: string, message: string}>}
+     */
+    private function withoutImpossibleHolders(array $data): array
+    {
+        $impossible = collect($data['holders'] ?? [])
+            ->contains(fn ($holder): bool => is_array($holder) && (float) ($holder['percent'] ?? 0) > 1);
+
+        if (! $impossible) {
+            return [$data, []];
+        }
+
+        unset($data['holders']);
+
+        return [$data, [['level' => 'info', 'message' => 'Data holder dari GoPlus tidak masuk akal (di atas 100% supply), jadi diabaikan.']]];
     }
 
     /**

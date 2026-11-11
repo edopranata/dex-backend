@@ -183,13 +183,19 @@ class WatchlistManager
     }
 
     /**
-     * The only way out of the Market. A token still in use stays, whoever asks.
+     * The only way out of the Market. A token still in use stays, whoever asks. A token that already left is
+     * not logged again (11 Nov: a manual removal of VVV, which discovery had replaced the night before, wrote
+     * a second, wrong "removed" event).
      *
-     * @return bool Whether the token left.
+     * @return bool Whether the token is out of the Market now.
      */
     public function remove(Token $token, string $reason): bool
     {
         return $token->withMembershipLock(function () use ($token, $reason): bool {
+            if (! $token->newQuery()->whereKey($token->id)->value('is_active')) {
+                return true;
+            }
+
             if ($this->isInUse($token)) {
                 return false;
             }

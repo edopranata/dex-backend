@@ -129,6 +129,15 @@ test('a token nobody uses can still be removed by hand', function () {
         ->and($token->watchlistEvents()->where('action', WatchlistAction::Removed)->exists())->toBeTrue();
 });
 
+test('removing a token that already left logs nothing new', function () {
+    $token = Token::factory()->create(['is_pinned' => false]);
+    $manager = app(WatchlistManager::class);
+    $manager->remove($token, 'Digantikan token lain karena Market penuh.');
+
+    expect($manager->remove($token->fresh(), 'Dikeluarkan manual.'))->toBeTrue()
+        ->and($token->watchlistEvents()->where('action', WatchlistAction::Removed)->pluck('reason')->all())->toBe(['Digantikan token lain karena Market penuh.']);
+});
+
 test('a replacement stops when the weakest token gained an order at the last moment', function () {
     $token = Token::factory()->create(['is_pinned' => false]);
     $manager = app(WatchlistManager::class);

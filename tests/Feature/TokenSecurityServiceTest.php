@@ -7,9 +7,11 @@ use App\Services\Analysis\OnchainAnalyzer;
 use App\Services\MarketData\GoPlusRefusedException;
 use App\Services\MarketData\TokenSecurityService;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Sleep;
 
 test('honeypot evm token scores zero', function () {
     $result = app(TokenSecurityService::class)->scoreEvm(['is_honeypot' => '1', 'is_open_source' => '1']);
@@ -126,6 +128,45 @@ test('a goplus refusal is tried again later, then only logged so a new token goe
     $last->handle(app(TokenSecurityService::class));
 
     Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'gagal') && str_contains($message, '4029'))->once();
+    expect(TokenSecurityCheck::count())->toBe(0);
+});
+
+test('holder shares above the whole supply are left out while the rest of the check is saved, like TROLL on 10 Nov', function () {
+    $token = Token::factory()->create(['chain_id' => 'solana', 'token_address' => 'TrollMint', 'pair_address' => 'TrollPool']);
+    goPlusHolders($token, [
+        'mintable' => ['status' => '1'],
+        'holders' => [
+            ['account' => 'TrollPool', 'percent' => '40292.416600', 'is_locked' => 0],
+            ['account' => 'Whale', 'percent' => '5663.641000', 'is_locked' => 0],
+        ],
+    ]);
+
+    $check = app(TokenSecurityService::class)->check($token);
+
+    expect($check)->not->toBeNull()
+        ->and($check->top10_percent)->toBeNull()
+        ->and($check->top_holders)->toBe([])
+        ->and($check->top1_percent)->toBeNull()
+        ->and($check->risk_score)->toBe(80)
+        ->and(collect($check->flags)->pluck('message'))->toContain('Data holder dari GoPlus tidak masuk akal (di atas 100% supply), jadi diabaikan.')
+        ->and(collect($check->flags)->pluck('message')->filter(fn (string $message): bool => str_contains($message, 'Top 10')))->toBeEmpty();
+});
+
+test('no answer from goplus is tried again later, then only logged', function () {
+    Sleep::fake();
+    $token = Token::factory()->create(['chain_id' => 'solana', 'token_address' => 'MintAddress']);
+    Http::fake(fn () => throw new ConnectionException('cURL error 28: Operation timed out after 15001 milliseconds'));
+
+    $job = (new CheckTokenSecurity($token))->withFakeQueueInteractions();
+    $job->handle(app(TokenSecurityService::class));
+    $job->assertReleased(60);
+
+    Log::spy();
+    $last = Mockery::mock(CheckTokenSecurity::class.'[attempts]', [$token])->makePartial();
+    $last->shouldReceive('attempts')->andReturn(3);
+    $last->handle(app(TokenSecurityService::class));
+
+    Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'gagal') && str_contains($message, 'timed out'))->once();
     expect(TokenSecurityCheck::count())->toBe(0);
 });
 
