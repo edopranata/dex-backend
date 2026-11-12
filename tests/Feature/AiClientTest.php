@@ -212,6 +212,9 @@ test('invalid json from the model moves on to the fallback without pausing the p
 });
 
 test('a groq daily limit pauses until tomorrow, a per-minute limit only briefly', function () {
+    // Fixed clock: the daily pause ends at midnight Pacific (08:00 UTC), so near that hour "tomorrow" is under an hour
+    // away (CI failed at 06:57 UTC on 12 Nov 2026).
+    $this->travelTo(Carbon::parse('2026-11-12 03:00:00', 'UTC'));
     config(['market.ai.provider' => 'groq', 'market.ai.groq.key' => 'groq-test-key', 'market.ai.groq.max_per_minute' => 4, 'market.ai.groq.max_per_day' => 100]);
     Http::fake([GROQ_URL => Http::sequence()
         ->push(['error' => ['message' => 'Rate limit reached on tokens per minute (TPM)', 'code' => 'rate_limit_exceeded']], 429, ['retry-after' => '7'])
