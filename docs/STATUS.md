@@ -6,7 +6,7 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
 - Server: VPS NAT vpsindonesia (3 vCPU, 6 GB), Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1 bulan (lihat [ROADMAP.md](ROADMAP.md) Fase 3).
-- Produksi per 12 Nov sore: backend 26a5f37. Frontend 1890457, dengan 5f46fff menyusul di jendela berikutnya.
+- Produksi per 12 Nov 15.43 WIB: backend 26a5f37, frontend 5f46fff.
 
 ### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
 
@@ -35,9 +35,8 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 
 ## Langkah berikutnya
 
-1. Rapikan dokumen DEX ke susunan standar (sedang dikerjakan 12 Nov).
-2. Saring bot dari data whale (wallet dengan beli dan jual hampir seimbang), supaya uji wallet 60 hari bersih. Belum disetujui.
-3. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan.
+1. Saring bot dari data whale (wallet dengan beli dan jual hampir seimbang), supaya uji wallet 60 hari bersih. Belum disetujui.
+2. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan.
 
 ## Menunggu
 
@@ -52,11 +51,10 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 ## Menunggu pemilik
 
 - Key Mistral (opsional; rantai AI sekarang sudah cukup).
-- Persetujuan langkah berikutnya nomor 2.
+- Persetujuan langkah berikutnya nomor 1.
 
 ## Belum terbukti
 
 - Strategi mana pun di pasar yang tidak bearish.
 - Ambang holder 20% di luar sampel.
-- Deploy jalur baru (`deploy <repo> <commit>`) di produksi: diuji di laptop dengan repo tiruan; deploy frontend pertama lewat jalur ini dijadwalkan 12 Nov 15.42 WIB.
 - Halaman Laporan untuk tabel uji aturan holder belum dilihat dengan data asli.
