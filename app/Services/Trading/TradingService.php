@@ -16,6 +16,7 @@ use App\Services\MarketData\CheckedPrice;
 use App\Services\MarketData\PriceCrossCheck;
 use App\Services\MarketData\PriceService;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -345,30 +346,47 @@ class TradingService
             return [];
         }
 
+        $holdings = Position::query()->where('token_id', $token->id)->where('quantity', '>', self::DUST)->with('user')->get();
+
+        if ($holdings->isEmpty()) {
+            return [];
+        }
+
+        // One checked price for every account. Without GeckoTerminal's check the sale waits one analysis cycle, so a
+        // feed far off the candles cannot set the price (FLOAT 12 Nov: sold 9% above the candles, unchecked); after
+        // that it goes ahead on the feed rather than keep a falling token.
+        $check = $this->crossCheck->priceToActOn($token);
+        $waitingSince = Cache::get("close-on-sell:waiting:{$token->id}");
+
+        if (($check === null || $check->source === CheckedPrice::UNCHECKED) && ($waitingSince === null || now()->timestamp - $waitingSince < 14 * 60)) {
+            Cache::add("close-on-sell:waiting:{$token->id}", now()->timestamp, now()->addHour());
+
+            return [];
+        }
+
+        Cache::forget("close-on-sell:waiting:{$token->id}");
         $closed = [];
 
-        Position::query()->where('token_id', $token->id)->where('quantity', '>', self::DUST)->with('user')->get()
-            ->each(function (Position $position) use ($token, $reason, &$closed): void {
-                Order::query()->where('user_id', $position->user_id)->where('token_id', $token->id)->where('status', OrderStatus::Pending)
-                    ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: {$reason}"]);
+        $holdings->each(function (Position $position) use ($token, $reason, $check, &$closed): void {
+            Order::query()->where('user_id', $position->user_id)->where('token_id', $token->id)->where('status', OrderStatus::Pending)
+                ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: {$reason}"]);
 
-                $sell = Order::query()->create([
-                    'user_id' => $position->user_id,
-                    'token_id' => $token->id,
-                    'side' => OrderSide::Sell,
-                    'type' => OrderType::Market,
-                    'status' => OrderStatus::Pending,
-                    'quantity' => (float) $position->quantity,
-                    'note' => "Ditutup otomatis: {$reason}",
-                ]);
+            $sell = Order::query()->create([
+                'user_id' => $position->user_id,
+                'token_id' => $token->id,
+                'side' => OrderSide::Sell,
+                'type' => OrderType::Market,
+                'status' => OrderStatus::Pending,
+                'quantity' => (float) $position->quantity,
+                'note' => "Ditutup otomatis: {$reason}",
+            ]);
 
-                $check = $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
-                $sell = $this->execute($sell, $check?->price ?? (float) $token->price_usd, $check);
+            $sell = $this->execute($sell, $check?->price ?? (float) $token->price_usd, $check);
 
-                if ($sell->status === OrderStatus::Filled) {
-                    $closed[] = ['user' => $position->user, 'quantity' => (float) $sell->filled_quantity, 'price' => (float) $sell->filled_price, 'pnl' => (float) $sell->realized_pnl];
-                }
-            });
+            if ($sell->status === OrderStatus::Filled) {
+                $closed[] = ['user' => $position->user, 'quantity' => (float) $sell->filled_quantity, 'price' => (float) $sell->filled_price, 'pnl' => (float) $sell->realized_pnl];
+            }
+        });
 
         return $closed;
     }

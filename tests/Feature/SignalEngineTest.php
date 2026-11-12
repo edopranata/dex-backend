@@ -4,6 +4,7 @@ use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Analysis;
 use App\Models\Order;
+use App\Models\OrderFillEvidence;
 use App\Models\Position;
 use App\Models\ShadowSignal;
 use App\Models\Signal;
@@ -14,6 +15,7 @@ use App\Services\Analysis\MarketContext;
 use App\Services\Analysis\SignalEngine;
 use App\Services\Analysis\StrategyVersion;
 use App\Services\Analysis\TechnicalAnalyzer;
+use App\Services\MarketData\CheckedPrice;
 use App\Services\MarketData\PriceCrossCheck;
 use Illuminate\Support\Facades\Http;
 
@@ -407,7 +409,7 @@ test('a sell turns every holding of the token into a market sale and cancels wai
         Order::query()->create(['user_id' => $user->id, 'token_id' => $token->id, 'side' => 'sell', 'type' => 'stop_loss', 'status' => 'pending', 'quantity' => 50, 'trigger_price' => 1.2]);
     }
     $signal = Signal::factory()->for($token)->active()->create();
-    $this->mock(PriceCrossCheck::class, fn ($mock) => $mock->shouldReceive('priceToActOn')->andReturn(null));
+    $this->mock(PriceCrossCheck::class, fn ($mock) => $mock->shouldReceive('priceToActOn')->andReturn(new CheckedPrice(2.0, 2.0, CheckedPrice::FEED)));
 
     $analysis = app(SignalEngine::class)->analyze($token);
 
@@ -435,3 +437,21 @@ test('nothing is sold while the rule is off, on a hold, or without a fresh price
 
     expect(Position::query()->where('token_id', $token->id)->value('quantity'))->toEqual(50);
 })->with(['off', 'hold', 'stale']);
+
+test('without a checked price the sale waits one analysis cycle, then goes ahead on the feed', function () {
+    $token = strongSellToken();
+    $user = User::factory()->create(['balance_usd' => 0]);
+    Position::query()->create(['user_id' => $user->id, 'token_id' => $token->id, 'quantity' => 50, 'avg_price' => 1.6, 'realized_pnl' => 0]);
+    $this->mock(PriceCrossCheck::class, fn ($mock) => $mock->shouldReceive('priceToActOn')->andReturn(new CheckedPrice(2.0, null, CheckedPrice::UNCHECKED)));
+    $held = fn (): float => (float) Position::query()->where('token_id', $token->id)->value('quantity');
+
+    app(SignalEngine::class)->analyze($token);
+    expect($held())->toEqual(50.0);
+
+    $this->travel(15)->minutes();
+    $token->update(['price_updated_at' => now()]);
+    app(SignalEngine::class)->analyze($token->refresh());
+
+    expect($held())->toEqual(0.0)
+        ->and(OrderFillEvidence::query()->latest('id')->value('source'))->toBe(CheckedPrice::UNCHECKED);
+});

@@ -165,6 +165,7 @@ Tujuan: eksekusi sungguhan dengan modal kecil, dan setiap pembelian disetujui pe
 - [ ] **Pengaman pemantau:** bila harga tidak terpantau beberapa menit, eksekusi berhenti sendiri dan pemilik mendapat peringatan
 - [ ] Batas slippage per swap, dan swap ditolak bila price impact melewati batas
 - [ ] Rekonsiliasi harian saldo wallet dengan catatan aplikasi; notifikasi Telegram untuk setiap swap
+- [ ] **Pengingat (pemilik, 12 Nov 2026):** jual otomatis saat analisa menjadi Sell sekarang aturan aplikasi untuk semua akun. Sebelum uang sungguhan, pisahkan aturan aplikasi dan aturan pengguna, dan jadikan jual otomatis ini pilihan di pengaturan tiap pengguna
 
 **Kriteria lolos:** 2-4 minggu tanpa kesalahan operasional (swap nyasar, SL tidak terpasang, selisih saldo), dan hasil nyata sejalan dengan hasil paper.
 

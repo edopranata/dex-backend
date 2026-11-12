@@ -59,4 +59,4 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 - Strategi mana pun di pasar yang tidak bearish.
 - Ambang holder 20% di luar sampel.
 - Halaman Laporan untuk tabel uji aturan holder belum dilihat dengan data asli.
-- Jual otomatis saat Sell belum pernah terjadi di produksi.
+- Jual otomatis dengan menunggu cek silang belum pernah terjadi di produksi. Penjualan pertama (12 Nov 20.56 WIB, AMDc dan FLOAT) memakai versi sebelumnya.
