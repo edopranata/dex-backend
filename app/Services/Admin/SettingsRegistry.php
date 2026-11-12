@@ -118,6 +118,7 @@ class SettingsRegistry
                 'description' => 'Batas request dan ambang data pasar.',
                 'fields' => [
                     ['key' => 'market.discovery.coingecko_key', 'label' => 'CoinGecko Demo API key', 'type' => 'secret', 'description' => 'Opsional; lebih stabil dari endpoint publik.'],
+                    ['key' => 'market.birdeye.key', 'label' => 'Birdeye API key', 'type' => 'secret', 'description' => 'Opsional, untuk mencatat daftar trader paling untung sekali sehari (Fase R). Paket Standard gratis di bds.birdeye.so. Datanya hanya untuk pemilik.'],
                     ['key' => 'market.geckoterminal_requests_per_minute', 'label' => 'GeckoTerminal request/menit', 'type' => 'int', 'min' => 1, 'max' => 500, 'description' => 'Gratis ±10/menit per IP. Naikkan hanya jika memakai paket berbayar.'],
                     ['key' => 'market.whale.min_usd', 'label' => 'Ambang whale maksimum (USD)', 'type' => 'float', 'min' => 100, 'max' => 10000000],
                     ['key' => 'market.whale.floor_usd', 'label' => 'Ambang whale minimum (USD)', 'type' => 'float', 'min' => 10, 'max' => 1000000],

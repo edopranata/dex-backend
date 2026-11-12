@@ -73,6 +73,32 @@ return [
         'key' => env('JUPITER_API_KEY'),
     ],
 
+    // Birdeye Data Services, key milik pemilik. Paket Standard gratis: 30.000 unit per bulan, 1 request per detik
+    // (dicek 12 Nov 2026). Syarat layanannya melarang membagikan atau menampilkan datanya ke pihak lain.
+    'birdeye' => [
+        'base_url' => env('BIRDEYE_BASE_URL', 'https://public-api.birdeye.so'),
+        'key' => env('BIRDEYE_API_KEY'),
+    ],
+
+    // Fase R (Radar Whale), hanya pencatatan: daftar trader paling untung disimpan sekali sehari untuk mengukur
+    // apakah wallet bertahan di daftar itu. Tanpa key Birdeye tidak ada yang diambil. Satu daftar = 1 request
+    // = 30 unit; 2 jaringan x 3 daftar = 180 unit per hari, sekitar 5.400 dari 30.000 unit per bulan.
+    'radar' => [
+        'enabled' => (bool) env('RADAR_TRADER_RANKINGS', true),
+        'chains' => ['solana', 'bsc'],
+        // Diurutkan menurut untung terealisasi atau skor trader, bukan total PnL: untung yang belum dijual bisa
+        // mencapai puluhan juta dolar di atas kertas dan mengisi daftar dengan pemegang lama.
+        'lists' => [
+            ['period' => 'yesterday', 'sort_by' => 'realized_pnl'],
+            ['period' => '1W', 'sort_by' => 'realized_pnl'],
+            ['period' => '30d', 'sort_by' => 'trader_score'],
+        ],
+        'limit' => 100,
+        // Di bawah 1.000 request (30.000 unit) per bulan, dengan ruang untuk percobaan manual.
+        'monthly_request_budget' => 600,
+        'retention_days' => 180,
+    ],
+
     // API publik GeckoTerminal dibatasi per IP; naikkan jika memakai paket berbayar.
     'geckoterminal_requests_per_minute' => (int) env('GECKOTERMINAL_RPM', 10),
 
