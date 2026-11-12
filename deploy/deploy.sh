@@ -3,13 +3,15 @@
 #   bash /opt/dex/backend/deploy/deploy.sh            (normal)
 #   bash /opt/dex/backend/deploy/deploy.sh --no-pull  (build dari kode yang sudah ada)
 #   bash /opt/dex/backend/deploy/deploy.sh --force    (deploy walau commit sama dengan deploy terakhir)
+#   bash /opt/dex/backend/deploy/deploy.sh --ref=frontend:<commit>  (dari CI: hanya repo itu yang maju, sampai commit
+#        yang lolos tes/build; repo lain tetap di versi yang sudah ter-deploy)
 # Urutan: build -> migrasi -> app, app2, web (situs langsung pakai versi baru) -> scheduler -> horizon paling akhir,
 # supaya situs tidak pernah menunggu scheduler atau worker queue berhenti.
 set -euo pipefail
 
 # Wrapped in a function so bash parses the whole script before git pull can change this file.
 main() {
-    local backend frontend pull=1 force=0 arg
+    local backend frontend pull=1 force=0 ref="" arg
     backend="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     frontend="$(cd "$backend/../frontend" && pwd)"
     # Commits of the last successful deploy: a queued deploy with nothing new is skipped.
@@ -19,6 +21,7 @@ main() {
         case "$arg" in
             --no-pull) pull=0 ;;
             --force) force=1 ;;
+            --ref=*) ref="${arg#--ref=}" ;;
         esac
     done
 
@@ -31,8 +34,20 @@ main() {
     if [ "$pull" = 1 ]; then
         local script="$backend/deploy/deploy.sh" before
         before="$(sha1sum "$script")"
-        git -C "$backend" pull --ff-only -q origin main
-        git -C "$frontend" pull --ff-only -q origin main
+        if [ -n "$ref" ]; then
+            local repo="${ref%%:*}" commit="${ref#*:}" dir
+            case "$repo" in
+                backend) dir="$backend" ;;
+                frontend) dir="$frontend" ;;
+                *) echo "Repo tidak dikenal: $repo" >&2; return 2 ;;
+            esac
+            git -C "$dir" fetch -q origin main
+            # An older commit than the one already here is a no-op, never a step back.
+            git -C "$dir" merge --ff-only -q "$commit"
+        else
+            git -C "$backend" pull --ff-only -q origin main
+            git -C "$frontend" pull --ff-only -q origin main
+        fi
 
         # This run was parsed from the old file: when the pull changed it, continue with the new one.
         if [ "$(sha1sum "$script")" != "$before" ]; then

@@ -99,6 +99,8 @@ ssh-keygen -t ed25519 -N "" -f ~/.ssh/dex_github_actions -C "github-actions dex 
 
 Pasang public key-nya di VPS. Key ini dibatasi (*forced command*) sehingga hanya bisa menjalankan `deploy/ci-deploy.sh`: tidak bisa membuka shell, tidak bisa port forwarding.
 
+Workflow mengirim `deploy backend <commit>` atau `deploy frontend <commit>`, yaitu commit yang tesnya (backend) atau build-nya (frontend) baru saja lolos. Server hanya memajukan repo itu sampai commit tersebut; repo lain tetap di versi yang sudah ter-deploy, jadi deploy frontend tidak bisa membawa backend yang tesnya gagal. Permintaan lain ditolak. `deploy` tanpa argumen (dan `deploy.sh` yang dijalankan manual) tetap menarik `main` kedua repo.
+
 ```bash
 ssh dex-vps "ACTIONS_PUBKEY='$(cat ~/.ssh/dex_github_actions.pub)' bash -s" < deploy/server-setup.sh
 ```

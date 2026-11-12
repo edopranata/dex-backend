@@ -38,7 +38,8 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      # The key on the server is restricted to deploy/ci-deploy.sh (pull both repos, build, restart).
+      # The key on the server is restricted to deploy/ci-deploy.sh. It moves only this repo, and only to the commit
+      # whose tests passed here, then builds and restarts.
       - name: Deploy to VPS
         env:
           SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -53,7 +54,7 @@ jobs:
           # The VPS NAT sometimes resets connections from some runner IPs before sshd sees them (exit 255).
           for attempt in 1 2 3 4 5; do
             status=0
-            ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 deploy@"$HOST" deploy || status=$?
+            ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" -o BatchMode=yes -o ConnectTimeout=20 deploy@"$HOST" "deploy backend $GITHUB_SHA" || status=$?
             [ "$status" -ne 255 ] && exit "$status"
             echo "SSH gagal tersambung (percobaan $attempt), coba lagi dalam 20 detik…"
             sleep 20
