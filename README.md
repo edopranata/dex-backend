@@ -132,4 +132,4 @@ Atur di `backend/config/market.php` bagian `discovery` dan `watchlist`, atau lew
 cd backend && php artisan test --compact
 ```
 
-Dokumentasi lanjutan: **[docs/ROADMAP.md](docs/ROADMAP.md) (fase & timeline)**, [docs/ANALISA_DOKUMEN.md](docs/ANALISA_DOKUMEN.md), [docs/DEPLOY_VPS.md](docs/DEPLOY_VPS.md), dokumen awal [docs/api_requirements_phases.md](docs/api_requirements_phases.md).
+Dokumentasi lanjutan, mulai dari **[docs/STATUS.md](docs/STATUS.md)** (kondisi sekarang dan langkah berikutnya): [ROADMAP.md](docs/ROADMAP.md) (rencana dan checklist), [DECISIONS.md](docs/DECISIONS.md), [DOMAIN_RULES.md](docs/DOMAIN_RULES.md), [DATA_PROVIDERS.md](docs/DATA_PROVIDERS.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [DEPLOY_VPS.md](docs/DEPLOY_VPS.md). Dokumen awal ada di [docs/archive/](docs/archive/).
