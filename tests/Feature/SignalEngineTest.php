@@ -93,7 +93,7 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v5-');
+    expect($version)->toStartWith('v6-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);
@@ -210,7 +210,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 
     expect(config('market.analysis.buy_min_below_high_24h_pct'))->toEqual(0.0)
         ->and(config('market.analysis.buy_max_rise_24h_pct'))->toEqual(15.0)
-        ->and(StrategyVersion::current())->toStartWith('v5-')->not->toBe($before);
+        ->and(StrategyVersion::current())->toStartWith('v6-')->not->toBe($before);
 
     $this->actingAs($admin)->putJson('/api/admin/settings', ['values' => ['market.analysis.buy_max_rise_24h_pct' => -1]])->assertUnprocessable();
 });
@@ -218,7 +218,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 test('the v4 limits are part of the strategy version', function () {
     $version = StrategyVersion::current();
 
-    expect($version)->toStartWith('v5-');
+    expect($version)->toStartWith('v6-');
 
     config(['market.analysis.buy_max_rise_24h_pct' => 20.0]);
 
@@ -306,4 +306,38 @@ test('the recommendations that open signals are part of the strategy version', f
     config(['market.analysis.signal_recommendations' => ['BUY', 'STRONG_BUY']]);
 
     expect(StrategyVersion::current())->not->toBe($version);
+});
+
+test('v6 holds a buy when the top ten holders own at least the limit, and skips the rule without holder data', function (?float $top10, Recommendation $expected) {
+    config(['market.analysis.thresholds.STRONG_BUY' => 72]);
+    fakeTechnical(95);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100, 'top10_percent' => $top10]);
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+
+    expect($analysis->recommendation)->toBe($expected)
+        ->and($token->signals()->count())->toBe($expected === Recommendation::StrongBuy ? 1 : 0);
+
+    if ($expected === Recommendation::Hold) {
+        expect($analysis->reasons[0])->toContain('10 holder teratas memegang '.number_format($top10, 1).'%');
+    }
+})->with([
+    'spread out' => [19.9, Recommendation::StrongBuy],
+    'at the limit' => [20.0, Recommendation::Hold],
+    'concentrated' => [28.4, Recommendation::Hold],
+    'no holder data' => [null, Recommendation::StrongBuy],
+]);
+
+test('the v6 holder limit can be switched off and is part of the strategy version', function () {
+    $version = StrategyVersion::current();
+    expect($version)->toStartWith('v6-');
+
+    config(['market.analysis.max_top10_holder_pct' => 0.0]);
+    fakeTechnical(95);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100, 'top10_percent' => 60]);
+
+    expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::StrongBuy)
+        ->and(StrategyVersion::current())->not->toBe($version);
 });

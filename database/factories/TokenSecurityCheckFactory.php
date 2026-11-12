@@ -22,7 +22,7 @@ class TokenSecurityCheckFactory extends Factory
             'token_id' => Token::factory(),
             'provider' => 'goplus',
             'holder_count' => 10_000,
-            'top10_percent' => 20,
+            'top10_percent' => 12,
             'lp_locked_percent' => 90,
             'is_honeypot' => false,
             'buy_tax' => 0,

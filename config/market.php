@@ -449,7 +449,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v5',
+        'strategy_version' => 'v6',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [
@@ -491,6 +491,10 @@ return [
         // v5 (review 12 Nov): hanya rekomendasi ini yang membuat sinyal; Buy tetap dianalisa dan tampil sebagai pantauan.
         // Semua sinyal tertutup s.d. 12 Nov: Buy -0,46R/sinyal (n=114, rugi di setiap periode), Strong Buy +0,07R (n=43).
         'signal_recommendations' => ['STRONG_BUY'],
+        // v6 (12 Nov): tidak ada rekomendasi beli bila 10 holder teratas memegang sebanyak ini atau lebih (cek keamanan
+        // terakhir). Strong Buy sejak 29 Okt: sinyal live < 20% +0,50R (n=25) lawan >= 20% -0,55R (n=19); putar ulang
+        // 89 analisa +0,09R lawan -0,54R, di kedua paruh waktu. Tanpa data holder, aturan ini dilewati. 0 = nonaktif.
+        'max_top10_holder_pct' => (float) env('SIGNAL_MAX_TOP10_HOLDER_PCT', 20.0),
     ],
 
 ];

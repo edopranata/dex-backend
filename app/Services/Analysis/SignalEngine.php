@@ -271,6 +271,13 @@ class SignalEngine
             return [Recommendation::Hold, 'Skor total positif tetapi teknikal belum mengonfirmasi entry.'];
         }
 
+        $top10 = $onchain['metrics']['top10_percent'] ?? null;
+        $maxTop10 = (float) ($config['max_top10_holder_pct'] ?? 0);
+
+        if ($recommendation->isBullish() && $maxTop10 > 0 && $top10 !== null && (float) $top10 >= $maxTop10) {
+            return [Recommendation::Hold, sprintf('Skor cukup untuk beli, tetapi 10 holder teratas memegang %.1f%% supply (batas %.0f%%): terlalu terpusat.', (float) $top10, $maxTop10)];
+        }
+
         return [$recommendation, null];
     }
 
