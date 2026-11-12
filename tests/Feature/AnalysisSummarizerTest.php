@@ -2,7 +2,10 @@
 
 use App\Enums\Recommendation;
 use App\Models\Analysis;
+use App\Models\Order;
+use App\Models\Position;
 use App\Models\Token;
+use App\Models\User;
 use App\Services\Ai\AiClient;
 use App\Services\Analysis\AnalysisSummarizer;
 
@@ -114,4 +117,24 @@ test('the template tells a Buy apart as watch-only once only Strong Buy opens si
     'strong buy' => ['STRONG_BUY', 'Setup beli valid selama harga bertahan di atas stop loss.'],
     'buy' => ['BUY', 'Hanya pantauan: sejak v5 sinyal beli dibuat untuk Strong Buy saja.'],
     'hold' => ['HOLD', 'Belum ada setup beli yang layak; tunggu konfirmasi.'],
+]);
+
+test('a held token gets an AI summary whatever its recommendation, an unheld hold keeps the template', function (string $holding, string $provider) {
+    $user = User::factory()->create(['is_system' => true]);
+    match ($holding) {
+        'position' => Position::query()->create(['user_id' => $user->id, 'token_id' => $this->token->id, 'quantity' => 5, 'avg_price' => 1, 'realized_pnl' => 0]),
+        'waiting order' => Order::query()->create(['user_id' => $user->id, 'token_id' => $this->token->id, 'side' => 'sell', 'type' => 'take_profit', 'status' => 'pending', 'quantity' => 5, 'trigger_price' => 2]),
+        'nothing' => null,
+    };
+    $this->ai->shouldReceive('json')->andReturn(['summary' => 'oleh AI']);
+
+    $summary = app(AnalysisSummarizer::class)->summarize($this->token, Recommendation::Hold, [
+        'final_score' => 50, 'scores' => ['technical' => 50, 'onchain' => 60], 'levels' => [], 'reasons' => [], 'news_headlines' => [],
+    ], null);
+
+    expect($summary['provider'])->toBe($provider);
+})->with([
+    'position' => ['position', 'gemini'],
+    'waiting order' => ['waiting order', 'gemini'],
+    'nothing' => ['nothing', 'template'],
 ]);

@@ -11,6 +11,7 @@ use App\Models\Signal;
 use App\Models\Token;
 use App\Observers\SignalObserver;
 use App\Services\Notifications\TelegramNotifier;
+use App\Services\Trading\TradingService;
 use Illuminate\Support\Collection;
 
 /**
@@ -141,6 +142,7 @@ class SignalEngine
         ]);
 
         $this->noteDowngrade($token, $analysis);
+        $this->closeHoldingsOnSell($token, $analysis);
 
         if ($onchain['rug_alert'] || $onchain['is_honeypot']) {
             $this->notifier->riskAlert($token, $onchain['reasons']);
@@ -183,6 +185,29 @@ class SignalEngine
      * that is no longer bullish, and the second one in a row, each with the price and the targets already
      * reached at that moment.
      */
+    /**
+     * Sell every account's holding once the analysis turns to Sell, Strong Sell or Avoid (owner's rule, 12 Nov 2026).
+     * Never breaks the analysis: a failed sale is retried by the next analysis while the recommendation holds.
+     */
+    private function closeHoldingsOnSell(Token $token, Analysis $analysis): void
+    {
+        if (! config('market.simulator.close_on_sell') || ! in_array($analysis->recommendation->value, config('market.simulator.close_on_recommendations'), true)) {
+            return;
+        }
+
+        if (! $token->positions()->where('quantity', '>', 0)->exists()) {
+            return;
+        }
+
+        $reason = sprintf('analisa %s menjadi %s (skor %d).', $analysis->created_at->timezone('Asia/Jakarta')->format('H.i').' WIB', $analysis->recommendation->label(), $analysis->final_score);
+
+        $closed = rescue(fn (): array => app(TradingService::class)->closeHoldingsOnSell($token, $reason), []);
+
+        foreach ($closed as $sale) {
+            $this->notifier->holdingClosed($sale['user'], $token, ucfirst($reason), $sale['pnl']);
+        }
+    }
+
     private function noteDowngrade(Token $token, Analysis $analysis): void
     {
         if ($analysis->recommendation->isBullish()) {

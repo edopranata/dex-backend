@@ -13,6 +13,7 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 - Hanya Strong Buy yang membuat sinyal. Buy tetap dianalisa dan tampil sebagai pantauan (v5).
 - Buy dan Strong Buy menjadi Hold bila 10 holder teratas memegang 20% supply atau lebih (v6).
 - Auto-follow: maksimal 4 posisi, risiko 0,5% per posisi, batas rugi harian 3%.
+- Semua akun menjual posisinya otomatis saat analisa token menjadi Sell, Strong Sell, atau Hindari. Sinyal v6 tetap diukur dengan aturan aslinya, jadi selisih hasil akun dan hasil sinyal menunjukkan dampak aturan ini.
 - Aturan lengkapnya di [DOMAIN_RULES.md](DOMAIN_RULES.md); alasan v5 dan v6 di [DECISIONS.md](DECISIONS.md).
 - Bukti yang mendasarinya belum memenuhi kriteria Fase 2. Strong Buy historis +0,07R per sinyal (PF 1,14); dengan top 10 di bawah 20%, sinyal live +0,50R (n=25) dan putar ulang +0,09R (n=44). Ambang 20% dipilih dari data yang sama.
 - Seluruh data sejak 31 Okt berasal dari pasar bearish: tren 4 jam SOL dan ETH bearish di semua 125 sinyal yang punya konteks pasar.
@@ -30,7 +31,7 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 ### AI
 
 - Urutan provider: Gemini → Gemini model kedua (Gemma 4) → Groq (gpt-oss-120b) → Groq model kedua (gpt-oss-20b), diatur pemilik di panel.
-- Ringkasan AI hanya untuk Buy dan Strong Buy. 20% kuota harian tiap provider disisakan untuk sentimen berita.
+- Ringkasan AI untuk Buy, Strong Buy, dan token yang sedang dipegang atau punya order menunggu. 20% kuota harian tiap provider disisakan untuk sentimen berita.
 - Pemakaian 24 jam sampai 12 Nov 15.15 WIB: sekitar 210 permintaan (186 ringkasan unik, sekitar 22 batch sentimen), jauh di bawah kapasitas rantai sekitar 1.700 per hari.
 
 ## Langkah berikutnya
@@ -58,3 +59,4 @@ Terakhir diperbarui: 12 November 2026. Perbarui file ini di commit yang sama set
 - Strategi mana pun di pasar yang tidak bearish.
 - Ambang holder 20% di luar sampel.
 - Halaman Laporan untuk tabel uji aturan holder belum dilihat dengan data asli.
+- Jual otomatis saat Sell belum pernah terjadi di produksi.

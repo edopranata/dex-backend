@@ -42,6 +42,8 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
 - Saldo awal $10.000, fee swap 0,3%, price impact dari likuiditas pool. Harga lebih tua dari 30 detik diambil ulang sebelum order dieksekusi.
 - Akun auto-follow mengikuti setiap sinyal baru: maksimal 4 posisi terbuka, risiko 0,5% ekuitas per posisi (sejak 12 Nov 2026), posisi maksimal 25% ekuitas dan 0,25% likuiditas pool, berhenti membeli untuk hari itu (WIB) setelah rugi terealisasi 3%.
 - Gas per swap: Solana, BSC, dan Base $0,01; Ethereum $0,25.
+- **Jual otomatis saat Sell** (sejak 12 Nov 2026): begitu analisa sebuah token menjadi Sell, Strong Sell, atau Hindari, posisi token itu di semua akun (termasuk auto-follow) dijual di harga pasar dan order yang menunggu dibatalkan. Pemilik posisi mendapat pesan Telegram. Kalau harga tidak segar, penjualan menunggu analisa berikutnya. Hasil sinyal tidak berubah: sinyal tetap diukur dengan TP, SL, dan batas 72 jam. Bisa dimatikan di Admin → Pengaturan → Simulator.
+- Token yang sedang dipegang atau punya order menunggu selalu mendapat ringkasan AI, apa pun rekomendasinya (sejak 12 Nov 2026). Token lain hanya untuk Buy dan Strong Buy.
 
 ## Catatan bayangan (berlaku)
 

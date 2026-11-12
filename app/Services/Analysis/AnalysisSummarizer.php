@@ -2,6 +2,7 @@
 
 namespace App\Services\Analysis;
 
+use App\Enums\OrderStatus;
 use App\Enums\Recommendation;
 use App\Models\Analysis;
 use App\Models\Token;
@@ -25,7 +26,7 @@ class AnalysisSummarizer
             return ['summary' => $previous->summary, 'provider' => $previous->summary_provider];
         }
 
-        if ($this->ai->isEnabled() && ($recommendation->isBullish() || ! config('market.ai.summary_ai_bullish_only'))) {
+        if ($this->ai->isEnabled() && ($recommendation->isBullish() || ! config('market.ai.summary_ai_bullish_only') || $this->isHeld($token))) {
             $result = $this->ai->json(
                 'Kamu analis kripto yang berhati-hati. Tulis ringkasan analisis dalam Bahasa Indonesia, maksimal 4 kalimat, '
                 .'berdasarkan data JSON. Sebutkan faktor terkuat, risiko utama, dan alasan rekomendasi. Jangan mengarang data '
@@ -45,6 +46,16 @@ class AnalysisSummarizer
         }
 
         return ['summary' => $this->template($token, $recommendation, $context), 'provider' => 'template'];
+    }
+
+    /**
+     * Someone (a person or an auto-follow account) holds the token or has an order waiting on it: the summary then
+     * explains a position, so it is written by AI whatever the recommendation (owner, 12 Nov 2026).
+     */
+    private function isHeld(Token $token): bool
+    {
+        return $token->positions()->where('quantity', '>', 0)->exists()
+            || $token->orders()->where('status', OrderStatus::Pending)->exists();
     }
 
     /**

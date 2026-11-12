@@ -132,6 +132,7 @@ class SettingsRegistry
                     ['key' => 'market.simulator.starting_balance', 'label' => 'Saldo awal (USD)', 'type' => 'float', 'min' => 10, 'max' => 100000000],
                     ['key' => 'market.simulator.fee_rate', 'label' => 'Fee swap (desimal, 0.003 = 0,3%)', 'type' => 'float', 'min' => 0, 'max' => 0.05, 'step' => 0.0005],
                     ['key' => 'market.simulator.max_tokens', 'label' => 'Kapasitas Market (token)', 'type' => 'int', 'min' => 1, 'max' => 100, 'description' => 'Dibatasi rate limit GeckoTerminal; ±20 untuk paket gratis.'],
+                    ['key' => 'market.simulator.close_on_sell', 'label' => 'Jual otomatis saat analisa menjadi Sell', 'type' => 'bool', 'description' => 'Posisi semua akun, termasuk auto-follow, dijual di harga pasar begitu analisa token menjadi Sell, Strong Sell, atau Hindari, dan order yang menunggu dibatalkan. Pemilik posisi mendapat pesan Telegram. Hasil sinyal tidak berubah.'],
                 ],
             ],
             [

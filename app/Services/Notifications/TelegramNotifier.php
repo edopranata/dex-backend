@@ -116,6 +116,24 @@ class TelegramNotifier
         }
     }
 
+    /**
+     * A holding was sold automatically because the token's analysis turned to Sell or worse. Sent to the account's
+     * owner only; auto-follow accounts have no chat and show the sale in their orders.
+     */
+    public function holdingClosed(User $user, Token $token, string $reason, float $pnl): void
+    {
+        if ($user->telegram_chat_id === null || ! $this->telegram->isActive() || ! $user->wantsTelegram('risk')) {
+            return;
+        }
+
+        $this->send($user, 'risk', implode("\n", [
+            '🔻 <b>Posisi '.$this->symbol($token).' ditutup otomatis</b>',
+            e($reason),
+            'Hasil: '.($pnl >= 0 ? '+' : '−').'$'.number_format(abs($pnl), 2),
+            $this->link($token),
+        ]));
+    }
+
     public function watchlist(WatchlistEvent $event): void
     {
         [$icon, $verb] = match ($event->action) {

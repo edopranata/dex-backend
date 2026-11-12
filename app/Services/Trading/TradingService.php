@@ -332,6 +332,48 @@ class TradingService
     }
 
     /**
+     * Sell every holding of a token at market, for every account (people and auto-follow), once its analysis turns to
+     * Sell, Strong Sell or Avoid (owner's rule, 12 Nov 2026). Waiting orders on the token are cancelled first, so no
+     * stop, target or buy fires afterwards. Signals are not touched: their v6 results keep the original exits, and the
+     * accounts show the effect of this rule. A token without a fresh price waits for the next analysis.
+     *
+     * @return list<array{user: User, quantity: float, price: float, pnl: float}> One row per account sold.
+     */
+    public function closeHoldingsOnSell(Token $token, string $reason): array
+    {
+        if ($token->isPriceStale((int) config('market.simulator.max_price_age_seconds'))) {
+            return [];
+        }
+
+        $closed = [];
+
+        Position::query()->where('token_id', $token->id)->where('quantity', '>', self::DUST)->with('user')->get()
+            ->each(function (Position $position) use ($token, $reason, &$closed): void {
+                Order::query()->where('user_id', $position->user_id)->where('token_id', $token->id)->where('status', OrderStatus::Pending)
+                    ->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: {$reason}"]);
+
+                $sell = Order::query()->create([
+                    'user_id' => $position->user_id,
+                    'token_id' => $token->id,
+                    'side' => OrderSide::Sell,
+                    'type' => OrderType::Market,
+                    'status' => OrderStatus::Pending,
+                    'quantity' => (float) $position->quantity,
+                    'note' => "Ditutup otomatis: {$reason}",
+                ]);
+
+                $check = $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
+                $sell = $this->execute($sell, $check?->price ?? (float) $token->price_usd, $check);
+
+                if ($sell->status === OrderStatus::Filled) {
+                    $closed[] = ['user' => $position->user, 'quantity' => (float) $sell->filled_quantity, 'price' => (float) $sell->filled_price, 'pnl' => (float) $sell->realized_pnl];
+                }
+            });
+
+        return $closed;
+    }
+
+    /**
      * Wipe positions and orders and restore the starting balance.
      */
     public function reset(User $user): void

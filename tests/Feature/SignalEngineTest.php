@@ -3,6 +3,8 @@
 use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Analysis;
+use App\Models\Order;
+use App\Models\Position;
 use App\Models\ShadowSignal;
 use App\Models\Signal;
 use App\Models\Token;
@@ -12,6 +14,7 @@ use App\Services\Analysis\MarketContext;
 use App\Services\Analysis\SignalEngine;
 use App\Services\Analysis\StrategyVersion;
 use App\Services\Analysis\TechnicalAnalyzer;
+use App\Services\MarketData\PriceCrossCheck;
 use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
@@ -381,3 +384,54 @@ test('no shadow is kept for a held buy, which opens no signal anyway, or while t
     'buy' => [['market.analysis.thresholds.STRONG_BUY' => 101]],
     'rule off' => [['market.analysis.thresholds.STRONG_BUY' => 72, 'market.analysis.max_top10_holder_pct' => 0.0]],
 ]);
+
+/**
+ * A token whose analysis comes out Strong Sell: technical 5 with neutral other scores.
+ */
+function strongSellToken(): Token
+{
+    fakeTechnical(5);
+    config(['market.analysis.thresholds.SELL' => 30, 'market.analysis.thresholds.HOLD' => 90]);
+    $token = Token::factory()->create(['price_usd' => 2.0, 'price_updated_at' => now()]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    return $token;
+}
+
+test('a sell turns every holding of the token into a market sale and cancels waiting orders, signals untouched', function () {
+    $token = strongSellToken();
+    $owner = User::factory()->create(['balance_usd' => 0]);
+    $robot = User::factory()->create(['balance_usd' => 0, 'is_system' => true]);
+    foreach ([$owner, $robot] as $user) {
+        Position::query()->create(['user_id' => $user->id, 'token_id' => $token->id, 'quantity' => 50, 'avg_price' => 1.6, 'realized_pnl' => 0]);
+        Order::query()->create(['user_id' => $user->id, 'token_id' => $token->id, 'side' => 'sell', 'type' => 'stop_loss', 'status' => 'pending', 'quantity' => 50, 'trigger_price' => 1.2]);
+    }
+    $signal = Signal::factory()->for($token)->active()->create();
+    $this->mock(PriceCrossCheck::class, fn ($mock) => $mock->shouldReceive('priceToActOn')->andReturn(null));
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+
+    expect($analysis->recommendation->isBullish())->toBeFalse()
+        ->and(in_array($analysis->recommendation->value, ['SELL', 'STRONG_SELL', 'AVOID'], true))->toBeTrue()
+        ->and(Position::query()->where('token_id', $token->id)->sum('quantity'))->toEqual(0)
+        ->and(Order::query()->where('type', 'stop_loss')->pluck('status')->map->value->unique()->all())->toBe(['cancelled'])
+        ->and(Order::query()->where('type', 'market')->where('status', 'filled')->count())->toBe(2)
+        ->and(Order::query()->where('type', 'market')->first()->note)->toContain('Ditutup otomatis: analisa')
+        ->and($owner->refresh()->balance_usd)->toBeGreaterThan(90.0)
+        ->and($signal->refresh()->status)->toBe(SignalStatus::Active);
+});
+
+test('nothing is sold while the rule is off, on a hold, or without a fresh price', function (string $case) {
+    $token = strongSellToken();
+    match ($case) {
+        'off' => config(['market.simulator.close_on_sell' => false]),
+        'hold' => fakeTechnical(60),
+        'stale' => $token->update(['price_updated_at' => now()->subHour()]),
+    };
+    $user = User::factory()->create();
+    Position::query()->create(['user_id' => $user->id, 'token_id' => $token->id, 'quantity' => 50, 'avg_price' => 1.6, 'realized_pnl' => 0]);
+
+    app(SignalEngine::class)->analyze($token->refresh());
+
+    expect(Position::query()->where('token_id', $token->id)->value('quantity'))->toEqual(50);
+})->with(['off', 'hold', 'stale']);

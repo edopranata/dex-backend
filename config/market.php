@@ -26,6 +26,12 @@ return [
         'starting_balance' => (float) env('SIM_STARTING_BALANCE', 10000),
         'fee_rate' => (float) env('SIM_FEE_RATE', 0.003),
         'max_tokens' => (int) env('SIM_MAX_TOKENS', 20),
+        // Keputusan pemilik 12 Nov 2026: posisi semua akun (termasuk auto-follow) dijual di harga pasar begitu analisa
+        // token itu menjadi salah satu rekomendasi ini, dan order yang masih menunggu dibatalkan. Hasil sinyal tidak
+        // berubah. Data 12 Nov: 13 dari 165 sinyal selesai sempat Sell/Strong Sell/Avoid setelah entry; keluar saat itu
+        // -2,76R dibanding -7,32R sebenarnya (9 lebih baik, 3 lebih buruk), hampir semuanya Buy sebelum v4.
+        'close_on_sell' => (bool) env('SIM_CLOSE_ON_SELL', true),
+        'close_on_recommendations' => ['SELL', 'STRONG_SELL', 'AVOID'],
         'min_order_usd' => 1,
         // Harga lebih tua dari ini dianggap basi dan diambil ulang sebelum order dieksekusi.
         'max_price_age_seconds' => 30,
