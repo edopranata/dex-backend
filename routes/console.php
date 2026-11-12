@@ -33,6 +33,9 @@ Schedule::command('market:security --out-of-market')->dailyAt('03:35')->withoutO
 
 Schedule::command('market:discover')->cron('25,55 * * * *')->withoutOverlapping();
 
+// v6 comparison: shadow signals followed on stored 15m candles; no API requests.
+Schedule::command('market:shadow-signals')->hourlyAt(50)->withoutOverlapping();
+
 // Fase R, recording only: the day's lists of most profitable traders, after the UTC day has closed. Six short
 // requests to Birdeye, none to GeckoTerminal; skipped while no key is set.
 Schedule::command('market:trader-rankings')->dailyAt('00:35')->withoutOverlapping();

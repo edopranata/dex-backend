@@ -5,6 +5,7 @@ namespace App\Services\Analysis;
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
 use App\Models\EquitySnapshot;
+use App\Models\ShadowSignal;
 use App\Models\Signal;
 use App\Models\User;
 use App\Services\Trading\AutoFollowRisk;
@@ -76,7 +77,33 @@ class PerformanceReport
                 ->values(),
             'accounts' => $accounts,
             'shadow_exit' => $this->shadowExit($signals),
+            'holder_filter' => $this->holderFilter(),
         ];
+    }
+
+    /**
+     * v6 comparison from shadow signals, both groups followed on 15m candles by the same method.
+     *
+     * @return list<array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null}>
+     */
+    private function holderFilter(): array
+    {
+        return collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS])->map(function (string $rule): array {
+            $shadows = ShadowSignal::query()->where('rule', $rule)->get(['status', 'net_r']);
+            $traded = $shadows->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r !== null);
+
+            return [
+                'rule' => $rule,
+                'recorded' => $shadows->count(),
+                'open' => $shadows->where('status', ShadowSignal::PENDING)->count(),
+                'overlap' => $shadows->where('status', ShadowSignal::OVERLAP)->count(),
+                'not_entered' => $shadows->where('status', ShadowSignal::NOT_ENTERED)->count(),
+                'trades' => $traded->count(),
+                'wins' => $traded->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r > 0)->count(),
+                'total_r' => round((float) $traded->sum('net_r'), 2),
+                'avg_r' => $traded->isEmpty() ? null : round((float) $traded->avg('net_r'), 2),
+            ];
+        })->all();
     }
 
     /**

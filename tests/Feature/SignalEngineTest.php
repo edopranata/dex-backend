@@ -3,6 +3,7 @@
 use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Analysis;
+use App\Models\ShadowSignal;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\TokenSecurityCheck;
@@ -341,3 +342,42 @@ test('the v6 holder limit can be switched off and is part of the strategy versio
     expect(app(SignalEngine::class)->analyze($token)->recommendation)->toBe(Recommendation::StrongBuy)
         ->and(StrategyVersion::current())->not->toBe($version);
 });
+
+test('a strong buy held by the holder rule is kept as an untraded shadow, and a real signal as the comparison', function () {
+    config(['market.analysis.thresholds.STRONG_BUY' => 72]);
+    fakeTechnical(95);
+    $held = Token::factory()->create(['price_usd' => 1.0, 'liquidity_usd' => 250_000]);
+    TokenSecurityCheck::factory()->for($held)->create(['risk_score' => 100, 'top10_percent' => 28.4]);
+    $taken = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($taken)->create(['risk_score' => 100, 'top10_percent' => 12]);
+
+    $analysis = app(SignalEngine::class)->analyze($held);
+    app(SignalEngine::class)->analyze($taken);
+
+    $shadow = ShadowSignal::query()->where('token_id', $held->id)->sole();
+    $reference = ShadowSignal::query()->where('token_id', $taken->id)->sole();
+
+    expect($analysis->recommendation)->toBe(Recommendation::Hold)
+        ->and($analysis->entry_low)->toBeNull()
+        ->and($held->signals()->count())->toBe(0)
+        ->and($shadow->only(['rule', 'recommendation', 'metric', 'liquidity_usd', 'status']))
+        ->toBe(['rule' => 'top10_holders', 'recommendation' => 'STRONG_BUY', 'metric' => 28.4, 'liquidity_usd' => 250000.0, 'status' => 'pending'])
+        ->and($shadow->stop_loss)->toBeLessThan($shadow->entry_low)
+        ->and($shadow->take_profit_3)->toBeGreaterThan($shadow->take_profit_1)
+        ->and($reference->rule)->toBe('accepted')
+        ->and($reference->signal_id)->toBe($taken->signals()->sole()->id);
+});
+
+test('no shadow is kept for a held buy, which opens no signal anyway, or while the holder rule is off', function (array $config) {
+    config($config);
+    fakeTechnicalMove(10.0, 8.0);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100, 'top10_percent' => 40]);
+
+    app(SignalEngine::class)->analyze($token);
+
+    expect(ShadowSignal::query()->where('rule', 'top10_holders')->count())->toBe(0);
+})->with([
+    'buy' => [['market.analysis.thresholds.STRONG_BUY' => 101]],
+    'rule off' => [['market.analysis.thresholds.STRONG_BUY' => 72, 'market.analysis.max_top10_holder_pct' => 0.0]],
+]);

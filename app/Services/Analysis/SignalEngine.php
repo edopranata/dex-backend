@@ -6,6 +6,7 @@ use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Analysis;
 use App\Models\Candle;
+use App\Models\ShadowSignal;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Observers\SignalObserver;
@@ -62,6 +63,11 @@ class SignalEngine
         )));
 
         [$recommendation, $overrideReason] = $this->recommend($finalScore, $technical, $onchain, $config);
+        $heldByHolders = null;
+
+        if ($recommendation->isBullish() && ($holders = $this->concentratedHolders($onchain, $config)) !== null) {
+            [$heldByHolders, $recommendation, $overrideReason] = [$recommendation, Recommendation::Hold, $holders];
+        }
 
         if ($recommendation === Recommendation::Buy && ($chase = $this->chasesTheMove($technical['indicators'], $config)) !== null) {
             [$recommendation, $overrideReason] = [Recommendation::Hold, $chase];
@@ -70,6 +76,14 @@ class SignalEngine
         $levels = $recommendation->isBullish() && $technical['atr']
             ? TradeLevels::calculate($price, $technical['atr'], $technical['swing_low'], $config['tp_r_multiples'], $config['sl_atr_min'], $config['sl_atr_max'])
             : [];
+        // The levels a held Strong Buy would have traded with, under the same minimum stop.
+        $shadowLevels = $heldByHolders !== null && in_array($heldByHolders->value, $config['signal_recommendations'], true) && $technical['atr']
+            ? TradeLevels::calculate($price, $technical['atr'], $technical['swing_low'], $config['tp_r_multiples'], $config['sl_atr_min'], $config['sl_atr_max'])
+            : [];
+
+        if ($shadowLevels !== [] && ($price - $shadowLevels['stop_loss']) / $price * 100 < $config['min_stop_pct']) {
+            $shadowLevels = [];
+        }
 
         if ($levels !== [] && ($price - $levels['stop_loss']) / $price * 100 < $config['min_stop_pct']) {
             $overrideReason = sprintf(
@@ -153,7 +167,12 @@ class SignalEngine
             // After the lock: following the signal places orders, which take the same lock.
             if ($signal !== null) {
                 app(SignalObserver::class)->created($signal);
+                $this->recordShadow($token, $analysis, ShadowSignal::ACCEPTED, $recommendation, $levels, $this->top10($onchain), $signal);
             }
+        }
+
+        if ($shadowLevels !== []) {
+            $this->recordShadow($token, $analysis, ShadowSignal::HELD_BY_HOLDERS, $heldByHolders, $shadowLevels, $this->top10($onchain));
         }
 
         return $analysis;
@@ -271,14 +290,55 @@ class SignalEngine
             return [Recommendation::Hold, 'Skor total positif tetapi teknikal belum mengonfirmasi entry.'];
         }
 
+        return [$recommendation, null];
+    }
+
+    /**
+     * @param  array<string, mixed>  $onchain
+     */
+    private function top10(array $onchain): ?float
+    {
+        $top10 = $onchain['metrics']['top10_percent'] ?? null;
+
+        return $top10 === null ? null : (float) $top10;
+    }
+
+    /**
+     * v6: the reason to hold a buy whose top ten holders own at least the limit, or null. Skipped without holder data.
+     *
+     * @param  array<string, mixed>  $onchain
+     * @param  array<string, mixed>  $config
+     */
+    private function concentratedHolders(array $onchain, array $config): ?string
+    {
         $top10 = $onchain['metrics']['top10_percent'] ?? null;
         $maxTop10 = (float) ($config['max_top10_holder_pct'] ?? 0);
 
-        if ($recommendation->isBullish() && $maxTop10 > 0 && $top10 !== null && (float) $top10 >= $maxTop10) {
-            return [Recommendation::Hold, sprintf('Skor cukup untuk beli, tetapi 10 holder teratas memegang %.1f%% supply (batas %.0f%%): terlalu terpusat.', (float) $top10, $maxTop10)];
+        if ($maxTop10 <= 0 || $top10 === null || (float) $top10 < $maxTop10) {
+            return null;
         }
 
-        return [$recommendation, null];
+        return sprintf('Skor cukup untuk beli, tetapi 10 holder teratas memegang %.1f%% supply (batas %.0f%%): terlalu terpusat.', (float) $top10, $maxTop10);
+    }
+
+    /**
+     * Keep an untraded copy for the v6 comparison: a held Strong Buy, or a real signal as the reference.
+     *
+     * @param  array<string, float>  $levels
+     */
+    private function recordShadow(Token $token, Analysis $analysis, string $rule, Recommendation $recommendation, array $levels, ?float $top10, ?Signal $signal = null): void
+    {
+        rescue(fn () => ShadowSignal::query()->create([
+            'token_id' => $token->id,
+            'analysis_id' => $analysis->id,
+            'signal_id' => $signal?->id,
+            'rule' => $rule,
+            'recommendation' => $recommendation->value,
+            'strategy_version' => $analysis->strategy_version,
+            'metric' => $top10,
+            'liquidity_usd' => $token->liquidity_usd,
+            ...array_intersect_key($levels, array_flip(['entry_low', 'entry_high', 'stop_loss', 'take_profit_1', 'take_profit_2', 'take_profit_3'])),
+        ]));
     }
 
     /**
