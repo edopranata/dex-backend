@@ -67,6 +67,12 @@ return [
         'avalanche' => ['label' => 'Avalanche', 'short' => 'AVAX', 'geckoterminal' => 'avax', 'goplus' => '43114'],
     ],
 
+    // Jupiter Tokens API v2. Tanpa key sekitar 30 request per menit (dicek 11 Nov 2026); key diisi pemilik bila perlu.
+    'jupiter' => [
+        'base_url' => env('JUPITER_BASE_URL', 'https://api.jup.ag'),
+        'key' => env('JUPITER_API_KEY'),
+    ],
+
     // API publik GeckoTerminal dibatasi per IP; naikkan jika memakai paket berbayar.
     'geckoterminal_requests_per_minute' => (int) env('GECKOTERMINAL_RPM', 10),
 
@@ -135,6 +141,13 @@ return [
         'trending_duration' => '6h',
         'use_coingecko_trending' => true,
         'use_dexscreener_boosts' => true,
+        // Daftar Jupiter (Solana) hanya dicatat sejak 12 Nov: tidak mengubah skor, cek mendalam, atau token yang masuk
+        // Market. Dua request per putaran (top trending dan top organic score).
+        'use_jupiter' => (bool) env('DISCOVERY_USE_JUPITER', true),
+        'jupiter_interval' => '6h',
+        'jupiter_limit' => 30,
+        // Catatan sumber per putaran discovery, untuk mengukur apakah kecocokan antar-sumber memilih token lebih baik.
+        'sighting_retention_days' => 60,
         'coingecko_key' => env('COINGECKO_DEMO_API_KEY'),
         'min_liquidity_usd' => 50_000,
         'min_volume_h24_usd' => 100_000,

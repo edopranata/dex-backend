@@ -3,6 +3,7 @@
 use App\Enums\CandidateStatus;
 use App\Enums\WatchlistAction;
 use App\Models\Analysis;
+use App\Models\DiscoverySighting;
 use App\Models\Token;
 use App\Models\TokenCandidate;
 use App\Models\User;
@@ -385,4 +386,48 @@ test('a second pool of a token already in the Market is not tracked, like VVV tw
 
     expect(fn () => app(TokenRegistry::class)->add('solana', 'PairVvvSecond1111111111111111111111111111111'))
         ->toThrow(ValidationException::class, 'VVV sudah ada di Market lewat pair lain.');
+});
+
+test('jupiter lists are recorded and labelled without changing scores or adding jupiter-only candidates', function () {
+    Http::fake(['api.jup.ag/tokens/v2/toptrending/*' => Http::response([
+        ['id' => 'TokenGood111111111111111111111111111111111', 'symbol' => 'GOOD', 'organicScore' => 88.4],
+        ['id' => 'So11111111111111111111111111111111111111112', 'symbol' => 'SOL'],
+    ]), 'api.jup.ag/tokens/v2/toporganicscore/*' => Http::response([
+        ['id' => 'TokenOnly111111111111111111111111111111111', 'symbol' => 'ONLY', 'organicScore' => 91.0],
+    ])]);
+    fakeDiscoveryApis([
+        'GOOD' => [
+            'pair' => dexPair('PairGood1111111111111111111111111111111111', 'TokenGood111111111111111111111111111111111', 'GOOD'),
+            'trades' => [['side' => 'buy', 'usd' => 20_000, 'wallet' => 'w1']],
+            'security' => ['mintable' => ['status' => '0'], 'freezable' => ['status' => '0'], 'holder_count' => '25000'],
+        ],
+    ]);
+
+    app(TokenDiscoveryService::class)->run();
+    $good = TokenCandidate::firstWhere('symbol', 'GOOD');
+
+    expect($good->sources)->toBe(['geckoterminal_trending', 'jupiter_trending'])
+        ->and($good->attention_score)->toBe(35)
+        ->and(TokenCandidate::where('symbol', 'ONLY')->exists())->toBeFalse()
+        ->and(DiscoverySighting::query()->orderBy('source')->get(['symbol', 'source', 'list_rank', 'organic_score'])->toArray())->toBe([
+            ['symbol' => 'GOOD', 'source' => 'geckoterminal_trending', 'list_rank' => null, 'organic_score' => null],
+            ['symbol' => 'ONLY', 'source' => 'jupiter_organic', 'list_rank' => 1, 'organic_score' => 91.0],
+            ['symbol' => 'GOOD', 'source' => 'jupiter_trending', 'list_rank' => 1, 'organic_score' => 88.4],
+        ]);
+});
+
+test('discovery carries on when jupiter is down', function () {
+    Http::fake(['api.jup.ag/*' => Http::response('busy', 503)]);
+    fakeDiscoveryApis([
+        'GOOD' => [
+            'pair' => dexPair('PairGood1111111111111111111111111111111111', 'TokenGood111111111111111111111111111111111', 'GOOD'),
+            'trades' => [],
+            'security' => ['mintable' => ['status' => '0'], 'freezable' => ['status' => '0'], 'holder_count' => '25000'],
+        ],
+    ]);
+
+    app(TokenDiscoveryService::class)->run();
+
+    expect(TokenCandidate::firstWhere('symbol', 'GOOD')->sources)->toBe(['geckoterminal_trending'])
+        ->and(DiscoverySighting::query()->pluck('source')->all())->toBe(['geckoterminal_trending']);
 });

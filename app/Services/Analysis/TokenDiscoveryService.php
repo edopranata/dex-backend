@@ -5,12 +5,14 @@ namespace App\Services\Analysis;
 use App\Enums\CandidateStatus;
 use App\Enums\OrderSide;
 use App\Enums\WatchlistAction;
+use App\Models\DiscoverySighting;
 use App\Models\NewsItem;
 use App\Models\Token;
 use App\Models\TokenCandidate;
 use App\Services\MarketData\CoinGeckoClient;
 use App\Services\MarketData\DexScreenerClient;
 use App\Services\MarketData\GeckoTerminalClient;
+use App\Services\MarketData\JupiterClient;
 use App\Services\MarketData\TokenRegistry;
 use App\Services\MarketData\TokenSecurityService;
 use App\Services\MarketData\WhaleSyncService;
@@ -47,10 +49,17 @@ class TokenDiscoveryService
      */
     public const PAID_ONLY_PENALTY = 15;
 
+    /**
+     * Jupiter lists (Solana), recorded since 12 Nov 2026 without changing scores, deep checks or auto-tracking:
+     * whether agreement between sources predicts better tokens is measured first.
+     */
+    public const JUPITER_SOURCES = ['toptrending' => 'jupiter_trending', 'toporganicscore' => 'jupiter_organic'];
+
     public function __construct(
         private GeckoTerminalClient $geckoTerminal,
         private DexScreenerClient $dexScreener,
         private CoinGeckoClient $coinGecko,
+        private JupiterClient $jupiter,
         private TokenSecurityService $security,
         private TokenRegistry $registry,
         private WatchlistManager $watchlist,
@@ -65,6 +74,9 @@ class TokenDiscoveryService
         $trendingSymbols = $config['use_coingecko_trending'] ? collect($this->coinGecko->trending())->keyBy('symbol') : collect();
 
         $found = $this->collect($config, $trendingSymbols);
+        $jupiter = $this->jupiterTokens($config);
+        $found = $this->labelJupiter($found, $jupiter);
+        rescue(fn () => $this->recordSightings($found, $jupiter));
         $newsTitles = NewsItem::query()->where('published_at', '>=', now()->subDay())->pluck('title');
 
         // One bad pool must not stop the whole round (and with it deep checks and auto-tracking).
@@ -239,6 +251,100 @@ class TokenDiscoveryService
         }
 
         return $this->preferStandardQuotes($found, $config);
+    }
+
+    /**
+     * Top Jupiter tokens per list, best first. A failing list is skipped like the other sources.
+     *
+     * @param  array<string, mixed>  $config
+     * @return list<array{token_address: string, symbol: string, source: string, list_rank: int, organic_score: float|null}>
+     */
+    private function jupiterTokens(array $config): array
+    {
+        if (! $config['use_jupiter'] || ! in_array('solana', $config['networks'], true)) {
+            return [];
+        }
+
+        $tokens = [];
+
+        foreach (self::JUPITER_SOURCES as $category => $source) {
+            try {
+                $list = $this->jupiter->topTokens($category, $config['jupiter_interval'], $config['jupiter_limit']);
+            } catch (Throwable $e) {
+                Log::warning("Discovery: Jupiter {$category} failed: {$e->getMessage()}");
+
+                continue;
+            }
+
+            foreach (array_values($list) as $index => $token) {
+                $symbol = strtoupper((string) ($token['symbol'] ?? ''));
+
+                if (! isset($token['id']) || in_array($symbol, $config['excluded_symbols'], true)) {
+                    continue;
+                }
+
+                $tokens[] = [
+                    'token_address' => $token['id'],
+                    'symbol' => mb_substr((string) $token['symbol'], 0, 64),
+                    'source' => $source,
+                    'list_rank' => $index + 1,
+                    'organic_score' => isset($token['organicScore']) ? round((float) $token['organicScore'], 2) : null,
+                ];
+            }
+        }
+
+        return $tokens;
+    }
+
+    /**
+     * Add the Jupiter lists to the sources of Solana candidates found elsewhere. Jupiter-only tokens are not added as
+     * candidates, and the label changes no score.
+     *
+     * @param  Collection<string, array{pair: array<string, mixed>, sources: list<string>, buyers: int|null, sellers: int|null}>  $found
+     * @param  list<array{token_address: string, symbol: string, source: string, list_rank: int, organic_score: float|null}>  $jupiter
+     * @return Collection<string, array{pair: array<string, mixed>, sources: list<string>, buyers: int|null, sellers: int|null}>
+     */
+    private function labelJupiter(Collection $found, array $jupiter): Collection
+    {
+        $byAddress = collect($jupiter)->groupBy('token_address');
+
+        return $found->map(function (array $item) use ($byAddress): array {
+            if ($item['pair']['chainId'] !== 'solana' || ! $byAddress->has($item['pair']['baseToken']['address'])) {
+                return $item;
+            }
+
+            $item['sources'] = array_values(array_unique([...$item['sources'], ...$byAddress->get($item['pair']['baseToken']['address'])->pluck('source')]));
+
+            return $item;
+        });
+    }
+
+    /**
+     * One row per token and source for this run, Jupiter-only tokens included.
+     *
+     * @param  Collection<string, array{pair: array<string, mixed>, sources: list<string>, buyers: int|null, sellers: int|null}>  $found
+     * @param  list<array{token_address: string, symbol: string, source: string, list_rank: int, organic_score: float|null}>  $jupiter
+     */
+    private function recordSightings(Collection $found, array $jupiter): void
+    {
+        $now = now();
+        $rows = collect($jupiter)->map(fn (array $token): array => ['chain_id' => 'solana', ...$token, 'seen_at' => $now]);
+
+        foreach ($found as $item) {
+            foreach (array_diff($item['sources'], self::JUPITER_SOURCES) as $source) {
+                $rows->push([
+                    'chain_id' => $item['pair']['chainId'],
+                    'token_address' => $item['pair']['baseToken']['address'],
+                    'symbol' => mb_substr((string) $item['pair']['baseToken']['symbol'], 0, 64),
+                    'source' => $source,
+                    'list_rank' => null,
+                    'organic_score' => null,
+                    'seen_at' => $now,
+                ]);
+            }
+        }
+
+        $rows->chunk(500)->each(fn (Collection $chunk) => DiscoverySighting::query()->insert($chunk->values()->all()));
     }
 
     /**
