@@ -208,7 +208,7 @@ test('order history reads by the time it shows, not by when the order was placed
 });
 
 test('each shadow variant counts signals entered since it started, and only changes what its rule touches', function () {
-    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00']);
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_young_pair_since' => '2026-11-07 13:00:00']);
     $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'cost_r' => 0.1];
     $analysis = fn (Token $token, string $at, string $recommendation, float $price = 1.0) => Analysis::factory()->for($token)->create(['recommendation' => $recommendation, 'price' => $price, 'created_at' => $at]);
 
@@ -245,13 +245,32 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
         ->and($variants['first_check'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.2])
         ->and($variants['second_downgrade'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.5])
         ->and($variants['confirmed_entry'])->toMatchArray(['affected' => 1, 'shadow_r' => -0.6]);
+});
+
+test('the young pair shadow skips signals on pairs younger than the limit, entered since it started', function () {
+    config(['market.analysis.shadow_young_pair_since' => '2026-11-13 16:00:00', 'market.analysis.shadow_young_pair_days' => 14]);
+    $signal = function (?float $ageDays, float $netR, string $enteredAt): void {
+        $token = Token::factory()->create();
+        $analysis = Analysis::factory()->for($token)->create(['indicators' => $ageDays === null ? [] : ['fundamental' => ['age_days' => $ageDays]]]);
+        reportSignal($token, $netR, '2026-11-15 00:00:00', ['analysis_id' => $analysis->id, 'stop_loss' => 0.9, 'entered_at' => $enteredAt]);
+    };
+
+    $signal(5.2, -1.0, '2026-11-13 17:00:00');   // young: skipped, counts 0R
+    $signal(13.9, 2.0, '2026-11-13 18:00:00');   // young: skipped
+    $signal(40.0, -1.0, '2026-11-13 19:00:00');  // old enough: kept
+    $signal(null, 0.5, '2026-11-13 20:00:00');   // no age data: kept
+    $signal(3.0, -1.0, '2026-11-13 10:00:00');   // entered before the shadow started: left out
+
+    $young = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'young_pair');
+
+    expect($young)->toMatchArray(['label' => 'Lewati pair berumur di bawah 14 hari', 'signals' => 4, 'affected' => 2, 'actual_r' => 0.5, 'shadow_r' => -0.5]);
 });
 
 test('results are also grouped per network, split by recommendation', function () {

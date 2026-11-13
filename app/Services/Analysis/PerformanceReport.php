@@ -118,6 +118,8 @@ class PerformanceReport
     {
         $since = Carbon::parse((string) config('market.analysis.shadow_exit_since'), 'UTC');
         $secondSince = Carbon::parse((string) config('market.analysis.shadow_second_since'), 'UTC');
+        $youngSince = Carbon::parse((string) config('market.analysis.shadow_young_pair_since'), 'UTC');
+        $youngDays = (int) config('market.analysis.shadow_young_pair_days');
         $entered = fn (Carbon $from): Collection => $signals->filter(fn (Signal $signal): bool => $signal->entered_at !== null && $signal->entered_at->gte($from));
 
         return [
@@ -143,6 +145,11 @@ class PerformanceReport
                 $confirmed = $previous !== null && $previous->recommendation->isBullish() && $previous->created_at->gte($s->created_at->copy()->subMinutes(20));
 
                 return $confirmed ? null : 0.0;
+            }),
+            $this->variant('young_pair', 'Lewati pair berumur di bawah '.$youngDays.' hari', $youngSince, $entered($youngSince), function (Signal $s) use ($youngDays): ?float {
+                $age = $s->analysis?->indicators['fundamental']['age_days'] ?? null;
+
+                return is_numeric($age) && $age < $youngDays ? 0.0 : null;
             }),
         ];
     }

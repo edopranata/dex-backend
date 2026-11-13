@@ -50,6 +50,7 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
 Tidak mengubah trading, hanya mengukur calon aturan:
 
 - Exit bila analisa pertama setelah entry tidak lagi Buy, exit setelah dua analisa berturut-turut tidak Buy, dan entry yang dikonfirmasi analisa sebelumnya (sejak 7 Nov 2026).
+- Lewati sinyal pada pair berumur di bawah 14 hari: sinyal itu dihitung 0R (sejak 13 Nov 2026 16.00 UTC).
 - Strong Buy yang ditahan aturan holder, dan setiap sinyal asli sebagai pembanding, diikuti di candle 15 menit dengan aturan sinyal di atas (sejak 12 Nov 2026). Disimpan terpisah dari sinyal asli, jadi tidak memblokir sinyal, membuat order, atau mengirim notifikasi.
 
 ## Aturan keputusan strategi (berlaku sejak 4 Nov 2026)
