@@ -6,7 +6,7 @@ Terakhir diperbarui: 13 November 2026. Perbarui file ini di commit yang sama set
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
 - Server: VPS NAT vpsindonesia (3 vCPU, 6 GB), Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1 bulan (lihat [ROADMAP.md](ROADMAP.md) Fase 3).
-- Produksi per 12 Nov 15.43 WIB: backend 26a5f37, frontend 5f46fff.
+- Produksi per 13 Nov 22.45 WIB: backend b758240, frontend 5f46fff.
 
 ### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
 
