@@ -27,6 +27,9 @@ Batas dan urutannya diatur di Admin → Pengaturan → AI. Tiap provider punya b
 | OpenRouter (`openrouter/free`) | Tanpa kredit: 20 per menit, 50 per hari, dihitung ulang 07.00 WIB. Tidak di rantai sejak 12 Nov |
 | Mistral (`mistral-small-latest`) | Paket gratis Experiment, sekitar 1 permintaan per detik. Key belum diisi |
 | xAI, OpenAI | Berbayar per token, opsional, tidak dipakai |
+| VPSMurah AI Service (`my.vpsmurah.co.id/api/v1`, kompatibel OpenAI) | Kredit prabayar, 1 kredit = Rp 10; menurut panel Rp 50.000 ≈ 15 juta token dengan model hemat (13 Nov). Belum di rantai; pemilik hanya menyiapkan anggaran (13 Nov) |
+
+Pemakaian token tidak dicatat aplikasi. Perkiraan dari data produksi 24 jam sampai 13 Nov 10.10 WIB: 143 ringkasan unik (prompt ±2.400 karakter, jawaban ±520 karakter) dan 86 berita, sekitar 210-260 ribu token per hari atau 7-8 juta per bulan. Dengan harga VPSMurah di atas sekitar Rp 25.000-30.000 per bulan.
 
 ## Lainnya (dipakai)
 
