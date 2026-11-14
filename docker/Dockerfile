@@ -50,5 +50,5 @@ ENTRYPOINT ["entrypoint"]
 CMD ["php-fpm"]
 
 
-FROM nginx:1.27-alpine AS web
+FROM nginx:1.30-alpine AS web
 COPY backend/docker/web/nginx.conf /etc/nginx/conf.d/default.conf

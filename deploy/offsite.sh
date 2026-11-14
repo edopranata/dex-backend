@@ -9,7 +9,7 @@
 #   BACKUP_PING_URL=https://hc-ping.com/<uuid>   (opsional, Healthchecks.io)
 
 OFFSITE_ENV="${OFFSITE_ENV:-/etc/dex/offsite.env}"
-RCLONE_IMAGE="rclone/rclone:1.68.2"
+RCLONE_IMAGE="rclone/rclone:1.76.0"
 
 # offsite HOST_DIR[:ro] ARGS...: run rclone with HOST_DIR mounted at /data; the bucket is the remote "offsite:".
 # Keys are passed to docker by name only, so they never show up in the process list.
