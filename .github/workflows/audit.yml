@@ -1,0 +1,22 @@
+name: Security audit
+
+# Warns only; it never blocks or starts a deploy. Scheduled runs use main; GitHub emails the owner when one fails.
+on:
+  push:
+    branches: [dev]
+  pull_request:
+  schedule:
+    - cron: "0 1 * * 1" # Monday 08:00 WIB
+  workflow_dispatch:
+
+jobs:
+  composer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+      - name: Audit production packages
+        run: composer audit --locked --no-dev --abandoned=report

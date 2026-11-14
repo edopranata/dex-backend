@@ -1,0 +1,26 @@
+# Weekly dependency PRs into dev (never main, so nothing deploys by itself). Security alerts are on in the
+# repo settings; automatic security PRs are off because they would target main. Base images (Dockerfile) are
+# checked by hand each month: see docs/INFRASTRUKTUR.md in the simulator-workspace repo.
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: Asia/Jakarta
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: dev
+    schedule:
+      interval: monthly
+      timezone: Asia/Jakarta
+    groups:
+      actions:
+        patterns: ["*"]

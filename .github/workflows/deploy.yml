@@ -7,6 +7,8 @@ on:
     paths-ignore:
       - 'docs/**'
       - 'README.md'
+      - '.github/dependabot.yml'
+      - '.github/workflows/audit.yml'
   workflow_dispatch:
 
 concurrency:
