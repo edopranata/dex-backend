@@ -45,7 +45,7 @@ Terakhir diperbarui: 14 November 2026. Perbarui file ini di commit yang sama set
 | Kapan | Yang dicek |
 |---|---|
 | 13 Nov pagi | Sentimen berita tidak lagi jatuh ke kamus kata (24 berita pada 11-12 Nov, sebelum perbaikan penghitung Gemini); hasil Birdeye hari kedua |
-| Sebelum 29 Nov | Pemilik memperpanjang VPS |
+| 26 Nov | Pemilik menaikkan RAM VPS ke 8 GB dan memperpanjang 1-3 bulan (masa aktif sekarang sampai 29 Nov); cek layanan DEX setelah reboot |
 | Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
 | Sekitar 30 sinyal v6 | Review v6, termasuk tabel uji aturan holder |
 | 28 Des | Data whale sendiri mencapai 60 hari; uji wallet bisa diulang dengan bot disaring |
