@@ -6,7 +6,7 @@ Terakhir diperbarui: 14 November 2026. Perbarui file ini di commit yang sama set
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
 - Server: VPSMurah kanaka-vps (3 vCPU, 6 GB) dengan IP dedicated sejak 13 Nov, Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1-2 bulan sekaligus. Detail di `docs/INFRASTRUKTUR.md` repo bersama.
-- Produksi per 13 Nov 22.45 WIB: backend b758240, frontend 5f46fff.
+- Produksi per 14 Nov 16.55 WIB: backend 96edccc, frontend 203fd41 (update keamanan Laravel 13.42 dan Symfony 8.1.11).
 
 ### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
 
