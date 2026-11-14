@@ -12,6 +12,10 @@ updates:
       time: "08:00"
       timezone: Asia/Jakarta
     open-pull-requests-limit: 5
+    # Major versions are judged by hand (e.g. @types/node must match the Node we run).
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]
