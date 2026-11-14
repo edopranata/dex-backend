@@ -1,11 +1,11 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 13 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 14 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
-- Server: VPS NAT vpsindonesia (3 vCPU, 6 GB), Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1 bulan (lihat [ROADMAP.md](ROADMAP.md) Fase 3).
+- Server: VPSMurah kanaka-vps (3 vCPU, 6 GB) dengan IP dedicated sejak 13 Nov, Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1-2 bulan sekaligus. Detail di `docs/INFRASTRUKTUR.md` repo bersama.
 - Produksi per 13 Nov 22.45 WIB: backend b758240, frontend 5f46fff.
 
 ### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
