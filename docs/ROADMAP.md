@@ -88,8 +88,12 @@ Aturan kerja: satu perubahan strategi per versi, dipertahankan hanya jika hasil 
 - [x] Jarak SL minimum 4% (strategi `v2`) — **31 Okt 2026: pengembangan +0,10R (PF 1,21), pengujian -0,12R (PF 0,81), drawdown 41R. TP 1R/2R/3R diuji dan lebih buruk**
 - [x] Setup entry breakout/pullback dengan hasil `NO_TRADE` jika setup tidak terpenuhi — **31 Okt 2026: diuji, belum dipakai. Breakout 24 jam: -0,01R / -0,11R. Pullback 0,25 ATR: +0,11R / -0,05R. Volume 1,5x: +0,15R / -0,14R. Semua pengujian masih negatif dan selisihnya masih dalam batas noise**
 
+- [x] Tujuh setup entry lain dan satu pola pantulan, backtest masa di Market (`dex/review/hasil-15nov-strategi.md`) — **15 Nov 2026: breakout, pullback EMA20, RSI oversold, volume akumulasi, EMA cross, kuat vs BTC, dip setelah pump: semua negatif (-0,01R sampai -0,52R). Beli-tahan selama di Market median -9,7%; yang dominan adalah pasar turun, bukan pola entry**
+- [ ] **Calon bayangan S8, ditunda: beli setelah turun lebih dari 15% dalam 1 jam dengan volume ≥ rata-rata 20 jam** (stop 2×ATR14 1h, TP 2R, maks 72 jam). 15 Nov 2026: seluruh riwayat +0,24R (n=172), tetapi sejak token ditemukan hanya +0,07R (n=77, CI90 -0,17..+0,31, paruh kedua -0,08R); sisanya bias seleksi. **Pasang sebagai catatan bayangan saat salah satu terjadi:** (1) review v6 selesai dan bayangan yang ada sudah dinilai, atau (2) data sejak token ditemukan mencapai sekitar 200 kejadian. Uji ulang dengan `dex/review/bt15-strategies.py` sebelum memasang, dan hanya pakai candle sejak token ditemukan
+
 **2C. Kondisi pasar**
 - [ ] Deteksi regime (bullish, bearish, sideways, volatil) dari data yang sudah direkam — **31 Okt 2026: aturan sederhana tren 4 jam SOL/ETH diuji, belum konsisten (tolak saat bearish: pengujian -0,24R; hanya saat bullish: pengembangan +0,01R, pengujian -0,03R dari 44 trade). Belum dipakai; perlu data di lebih banyak kondisi pasar**
+- [ ] Hubungan dengan BTC: korelasi, beta, dan kekuatan relatif per analisa; BTC (cbBTC di Base) di konteks pasar; bayangan A (lewati pengikut BTC saat BTC tidak naik) dan B (hanya pengikut BTC saat BTC naik) — **15 Nov 2026: dibangun (backend 79e87e5, frontend f3022b4) dari studi `dex/review/hasil-15nov-btc.md`; A dinilai bersama review v6, B butuh fase BTC naik. Acuan SOL/WETH yang basi sejak 1-3 Nov ikut diperbaiki**
 
 **2D. Risiko & kelayakan keluar**
 - [ ] Status `PASS / REJECTED / REVIEW / INSUFFICIENT_DATA`; data kosong tidak lagi bernilai 50
