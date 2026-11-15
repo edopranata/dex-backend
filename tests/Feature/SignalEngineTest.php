@@ -381,6 +381,26 @@ test('a strong buy held by the holder rule is kept as an untraded shadow, and a 
         ->and($reference->signal_id)->toBe($taken->signals()->sole()->id);
 });
 
+test('every buy is followed as an untraded shadow with the fear and greed value, a strong buy is not', function () {
+    fakeTechnical(95);
+    $buy = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($buy)->create(['risk_score' => 100, 'top10_percent' => 10]);
+    $strong = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($strong)->create(['risk_score' => 100, 'top10_percent' => 10]);
+
+    config(['market.analysis.thresholds.STRONG_BUY' => 101]);
+    $analysis = app(SignalEngine::class)->analyze($buy);
+    config(['market.analysis.thresholds.STRONG_BUY' => 72]);
+    app(SignalEngine::class)->analyze($strong);
+
+    $shadow = ShadowSignal::query()->where('rule', 'buy_watch')->sole();
+
+    expect($analysis->recommendation)->toBe(Recommendation::Buy)
+        ->and($buy->signals()->count())->toBe(0)
+        ->and($shadow->only(['token_id', 'recommendation', 'metric', 'status']))->toBe(['token_id' => $buy->id, 'recommendation' => 'BUY', 'metric' => 60.0, 'status' => 'pending'])
+        ->and($shadow->stop_loss)->toBeLessThan($shadow->entry_low);
+});
+
 test('no shadow is kept for a held buy, which opens no signal anyway, or while the holder rule is off', function (array $config) {
     config($config);
     fakeTechnicalMove(10.0, 8.0);

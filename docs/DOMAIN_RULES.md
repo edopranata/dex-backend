@@ -52,6 +52,7 @@ Tidak mengubah trading, hanya mengukur calon aturan:
 - Exit bila analisa pertama setelah entry tidak lagi Buy, exit setelah dua analisa berturut-turut tidak Buy, dan entry yang dikonfirmasi analisa sebelumnya (sejak 7 Nov 2026).
 - Lewati sinyal pada pair berumur di bawah 14 hari: sinyal itu dihitung 0R (sejak 13 Nov 2026 16.00 UTC).
 - Hubungan dengan BTC (sejak 15 Nov 2026 12.00 UTC): setiap analisa menyimpan korelasi dan beta return 1 jam token terhadap BTC selama 72 jam (minimal 40 jam data), serta perubahan 24 jam token, BTC, dan selisihnya. Tren 4 jam BTC diambil dari konteks pasar (close dan EMA20 terhadap EMA50, sama seperti tren token). A: sinyal dari token yang ikut BTC (korelasi ≥ 0,3, varian ≥ 0,1) dihitung 0R bila tren 4 jam BTC tidak naik. B: hanya sinyal dari token dengan korelasi ≥ 0,3 saat tren 4 jam BTC naik yang dihitung; sisanya 0R. Sinyal tanpa data BTC tidak disentuh A dan berada di luar B.
+- Setiap Buy (yang tidak menjadi sinyal sejak v5) dengan level entry, stop, dan target diikuti sebagai sinyal bayangan dengan cara yang sama seperti aturan holder, dengan nilai Fear & Greed saat analisa (sejak 15 Nov 2026). Di Laporan dipisah menurut tren 4 jam BTC saat analisa (naik atau tidak naik).
 - Strong Buy yang ditahan aturan holder, dan setiap sinyal asli sebagai pembanding, diikuti di candle 15 menit dengan aturan sinyal di atas (sejak 12 Nov 2026). Disimpan terpisah dari sinyal asli, jadi tidak memblokir sinyal, membuat order, atau mengirim notifikasi.
 
 ## Aturan keputusan strategi (berlaku sejak 4 Nov 2026)

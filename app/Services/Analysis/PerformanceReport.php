@@ -82,28 +82,45 @@ class PerformanceReport
     }
 
     /**
-     * v6 comparison from shadow signals, both groups followed on 15m candles by the same method.
+     * Shadow signals followed on 15m candles by one method: the v6 holder rule against the real signals, and the Buys
+     * that no longer trade, split by the BTC 4h trend when they were analyzed.
      *
      * @return list<array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null}>
      */
     private function holderFilter(): array
     {
-        return collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS])->map(function (string $rule): array {
-            $shadows = ShadowSignal::query()->where('rule', $rule)->get(['status', 'net_r']);
-            $traded = $shadows->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r !== null);
+        $rows = collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS])
+            ->map(fn (string $rule): array => $this->shadowRow($rule, ShadowSignal::query()->where('rule', $rule)->get(['status', 'net_r'])));
+        $buys = ShadowSignal::query()->where('rule', ShadowSignal::BUY_WATCH)->with('analysis:id,market_context')->get(['id', 'analysis_id', 'status', 'net_r']);
 
-            return [
-                'rule' => $rule,
-                'recorded' => $shadows->count(),
-                'open' => $shadows->where('status', ShadowSignal::PENDING)->count(),
-                'overlap' => $shadows->where('status', ShadowSignal::OVERLAP)->count(),
-                'not_entered' => $shadows->where('status', ShadowSignal::NOT_ENTERED)->count(),
-                'trades' => $traded->count(),
-                'wins' => $traded->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r > 0)->count(),
-                'total_r' => round((float) $traded->sum('net_r'), 2),
-                'avg_r' => $traded->isEmpty() ? null : round((float) $traded->avg('net_r'), 2),
-            ];
-        })->all();
+        if ($buys->isEmpty()) {
+            return $rows->all();
+        }
+
+        [$rising, $other] = $buys->partition(fn (ShadowSignal $shadow): bool => ($shadow->analysis?->market_context['benchmarks']['BTC']['trend_4h'] ?? null) === 'bullish');
+
+        return $rows->push($this->shadowRow('buy_btc_rising', $rising), $this->shadowRow('buy_btc_not_rising', $other))->all();
+    }
+
+    /**
+     * @param  Collection<int, ShadowSignal>  $shadows
+     * @return array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null}
+     */
+    private function shadowRow(string $rule, Collection $shadows): array
+    {
+        $traded = $shadows->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r !== null);
+
+        return [
+            'rule' => $rule,
+            'recorded' => $shadows->count(),
+            'open' => $shadows->where('status', ShadowSignal::PENDING)->count(),
+            'overlap' => $shadows->where('status', ShadowSignal::OVERLAP)->count(),
+            'not_entered' => $shadows->where('status', ShadowSignal::NOT_ENTERED)->count(),
+            'trades' => $traded->count(),
+            'wins' => $traded->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r > 0)->count(),
+            'total_r' => round((float) $traded->sum('net_r'), 2),
+            'avg_r' => $traded->isEmpty() ? null : round((float) $traded->avg('net_r'), 2),
+        ];
     }
 
     /**

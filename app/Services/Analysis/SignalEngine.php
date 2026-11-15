@@ -180,6 +180,13 @@ class SignalEngine
             $this->recordShadow($token, $analysis, ShadowSignal::HELD_BY_HOLDERS, $heldByHolders, $shadowLevels, $this->top10($onchain));
         }
 
+        // Buy has not made a signal since v5. Each one is followed untraded with the Fear & Greed value, so whether to
+        // trade Buy again when BTC rises can be judged on data (owner, 15 Nov 2026).
+        if ($recommendation === Recommendation::Buy && $levels !== []) {
+            $fearGreed = $analysis->market_context['fear_greed']['value'] ?? null;
+            $this->recordShadow($token, $analysis, ShadowSignal::BUY_WATCH, $recommendation, $levels, $fearGreed === null ? null : (float) $fearGreed);
+        }
+
         return $analysis;
     }
 
@@ -350,11 +357,12 @@ class SignalEngine
     }
 
     /**
-     * Keep an untraded copy for the v6 comparison: a held Strong Buy, or a real signal as the reference.
+     * Keep an untraded copy: a held Strong Buy or a real signal as the reference (v6 holder rule, metric = top 10 share),
+     * or a Buy (metric = Fear & Greed).
      *
      * @param  array<string, float>  $levels
      */
-    private function recordShadow(Token $token, Analysis $analysis, string $rule, Recommendation $recommendation, array $levels, ?float $top10, ?Signal $signal = null): void
+    private function recordShadow(Token $token, Analysis $analysis, string $rule, Recommendation $recommendation, array $levels, ?float $metric, ?Signal $signal = null): void
     {
         rescue(fn () => ShadowSignal::query()->create([
             'token_id' => $token->id,
@@ -363,7 +371,7 @@ class SignalEngine
             'rule' => $rule,
             'recommendation' => $recommendation->value,
             'strategy_version' => $analysis->strategy_version,
-            'metric' => $top10,
+            'metric' => $metric,
             'liquidity_usd' => $token->liquidity_usd,
             ...array_intersect_key($levels, array_flip(['entry_low', 'entry_high', 'stop_loss', 'take_profit_1', 'take_profit_2', 'take_profit_3'])),
         ]));

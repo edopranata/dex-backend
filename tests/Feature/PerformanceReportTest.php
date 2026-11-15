@@ -6,6 +6,7 @@ use App\Models\Analysis;
 use App\Models\EquitySnapshot;
 use App\Models\Order;
 use App\Models\Position;
+use App\Models\ShadowSignal;
 use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
@@ -302,6 +303,25 @@ test('the BTC shadows skip BTC followers while BTC is not rising, and keep only 
             'label' => 'Hanya token yang ikut BTC (korelasi ≥ 0,3) saat tren 4 jam BTC naik',
             'affected' => 4, 'shadow_r' => 1.5,
         ]);
+});
+
+test('buy shadows are reported apart, split by the BTC 4h trend when they were analyzed', function () {
+    $shadow = function (?string $btcTrend, ?float $netR, string $status): void {
+        $token = Token::factory()->create();
+        $analysis = Analysis::factory()->for($token)->create(['market_context' => ['benchmarks' => ['BTC' => ['trend_4h' => $btcTrend]]]]);
+        ShadowSignal::query()->create(['token_id' => $token->id, 'analysis_id' => $analysis->id, 'rule' => 'buy_watch', 'recommendation' => 'BUY',
+            'strategy_version' => 'v6-test', 'metric' => 45, 'entry_low' => 0.99, 'entry_high' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15,
+            'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'status' => $status, 'net_r' => $netR]);
+    };
+    $shadow('bullish', 1.5, 'take_profit');
+    $shadow('bullish', null, 'pending');
+    $shadow('bearish', -1.0, 'stop_loss');
+    $shadow(null, -0.5, 'stop_loss');
+
+    $rows = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('holder_filter'))->keyBy('rule');
+
+    expect($rows['buy_btc_rising'])->toMatchArray(['recorded' => 2, 'open' => 1, 'trades' => 1, 'total_r' => 1.5])
+        ->and($rows['buy_btc_not_rising'])->toMatchArray(['recorded' => 2, 'trades' => 2, 'total_r' => -1.5]);
 });
 
 test('results are also grouped per network, split by recommendation', function () {

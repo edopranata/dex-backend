@@ -25,6 +25,12 @@ class ShadowSignal extends Model
     /** A real signal, followed the same way as the comparison. */
     public const ACCEPTED = 'accepted';
 
+    /**
+     * A Buy, which no longer makes a signal since v5, with the Fear & Greed value as the metric (15 Nov 2026): kept to
+     * judge, once BTC turns up, whether Buy should trade again and at which market sentiment.
+     */
+    public const BUY_WATCH = 'buy_watch';
+
     public const PENDING = 'pending';
 
     /** Another one of the same rule was still open on this token, as a real signal would have been. */
@@ -68,5 +74,13 @@ class ShadowSignal extends Model
     public function token(): BelongsTo
     {
         return $this->belongsTo(Token::class);
+    }
+
+    /**
+     * @return BelongsTo<Analysis, $this>
+     */
+    public function analysis(): BelongsTo
+    {
+        return $this->belongsTo(Analysis::class);
     }
 }
