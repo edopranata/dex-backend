@@ -22,6 +22,14 @@ class WalletDirectory
     private const BOT_MIN_TRADES_PER_DAY = 20;
 
     /**
+     * A wallet with this many trades whose buys and sells are about even is more likely a market maker or arbitrage
+     * bot than a holder (15 Nov 2026: 109 such wallets made 39% of the whale trades). Also only a guess.
+     */
+    private const BOT_BALANCED_MIN_TRADES = 10;
+
+    private const BOT_BALANCED_BUY_SHARE = [0.35, 0.65];
+
+    /**
      * One row per wallet and chain, because the same address can be used on several EVM chains.
      *
      * @return Collection<int, array<string, mixed>>
@@ -97,11 +105,24 @@ class WalletDirectory
                     'volume_usd' => round((float) $row->volume_usd, 2),
                     'first_at' => $first->toIso8601String(),
                     'last_at' => $last->toIso8601String(),
-                    'likely_bot' => $trades >= self::BOT_MIN_TRADES
-                        && $trades / max(1, $first->diffInDays($last)) >= self::BOT_MIN_TRADES_PER_DAY,
+                    ...$this->botGuess($trades, (int) $row->buys, $first, $last),
                 ];
             })
             ->all();
+    }
+
+    /**
+     * @return array{likely_bot: bool, bot_reason: string|null}
+     */
+    private function botGuess(int $trades, int $buys, Carbon $first, Carbon $last): array
+    {
+        $reason = match (true) {
+            $trades >= self::BOT_MIN_TRADES && $trades / max(1, $first->diffInDays($last)) >= self::BOT_MIN_TRADES_PER_DAY => 'pace',
+            $trades >= self::BOT_BALANCED_MIN_TRADES && $buys / $trades >= self::BOT_BALANCED_BUY_SHARE[0] && $buys / $trades <= self::BOT_BALANCED_BUY_SHARE[1] => 'balanced',
+            default => null,
+        };
+
+        return ['likely_bot' => $reason !== null, 'bot_reason' => $reason];
     }
 
     private function totals(): string

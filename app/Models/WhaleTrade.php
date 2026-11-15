@@ -22,7 +22,7 @@ class WhaleTrade extends Model
      */
     public function prunable(): Builder
     {
-        return static::query()->where('traded_at', '<', now()->subDays(60));
+        return static::query()->where('traded_at', '<', now()->subDays((int) config('market.whale.keep_days')));
     }
 
     /**

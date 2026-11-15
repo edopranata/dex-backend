@@ -81,6 +81,32 @@ test('a wallet that trades constantly is marked as a likely bot and can be hidde
         ->and($this->actingAs($this->user)->getJson('/api/wallets?hide_bots=1')->json('data.*.wallet'))->not->toContain('0xBOT');
 });
 
+test('a wallet whose buys and sells are about even is also marked as a likely bot', function () {
+    foreach (range(1, 12) as $i) {
+        walletTrade($this->eth, '0xMAKER', 1000, $i % 2 === 0 ? OrderSide::Buy : OrderSide::Sell, now()->subHours($i * 20)->toDateTimeString());
+        walletTrade($this->eth, '0xHOLDER', 1000, $i <= 10 ? OrderSide::Buy : OrderSide::Sell, now()->subHours($i * 20)->toDateTimeString());
+    }
+    foreach (range(1, 4) as $i) {
+        walletTrade($this->eth, '0xFEW', 1000, $i % 2 === 0 ? OrderSide::Buy : OrderSide::Sell);
+    }
+
+    $rows = collect($this->actingAs($this->user)->getJson('/api/wallets')->json('data'))->keyBy('wallet');
+
+    expect($rows['0xMAKER'])->likely_bot->toBeTrue()->bot_reason->toBe('balanced')
+        ->and($rows['0xHOLDER'])->likely_bot->toBeFalse()->bot_reason->toBeNull()
+        ->and($rows['0xFEW']['likely_bot'])->toBeFalse();
+});
+
+test('whale trades are kept for the configured number of days', function () {
+    config(['market.whale.keep_days' => 180]);
+    walletTrade($this->eth, '0xOLD', 1000, OrderSide::Buy, now()->subDays(181)->toDateTimeString());
+    walletTrade($this->eth, '0xKEPT', 1000, OrderSide::Buy, now()->subDays(90)->toDateTimeString());
+
+    $this->artisan('model:prune', ['--model' => [WhaleTrade::class]])->assertSuccessful();
+
+    expect(WhaleTrade::query()->pluck('wallet')->all())->toBe(['0xKEPT']);
+});
+
 test('a wallet page shows its totals, tokens and trades on that chain only', function () {
     $other = Token::factory()->create(['chain_id' => 'ethereum', 'symbol' => 'SHIB']);
     walletTrade($this->eth, '0xAbC123', 100_000);

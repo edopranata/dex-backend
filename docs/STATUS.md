@@ -38,8 +38,7 @@ Terakhir diperbarui: 15 November 2026. Perbarui file ini di commit yang sama set
 
 ## Langkah berikutnya
 
-1. Saring bot dari data whale (wallet dengan beli dan jual hampir seimbang), supaya uji wallet 60 hari bersih. Belum disetujui.
-2. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan.
+1. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan.
 
 ## Menunggu
 
@@ -49,12 +48,11 @@ Terakhir diperbarui: 15 November 2026. Perbarui file ini di commit yang sama set
 | 26 Nov | Pemilik menaikkan RAM VPS ke 8 GB dan memperpanjang 1-3 bulan (masa aktif sekarang sampai 29 Nov); cek layanan DEX setelah reboot |
 | Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
 | Sekitar 30 sinyal v6 | Review v6, termasuk tabel uji aturan holder |
-| 28 Des | Data whale sendiri mencapai 60 hari; uji wallet bisa diulang dengan bot disaring |
+| 28 Des | Data whale sendiri mencapai 60 hari; uji wallet diulang tanpa wallet yang ditandai bot (`dex/review/whale-btc.py`), termasuk perbandingan saat tren BTC naik dan turun |
 
 ## Menunggu pemilik
 
 - Key Mistral (opsional; rantai AI sekarang sudah cukup).
-- Persetujuan langkah berikutnya nomor 1.
 
 ## Belum terbukti
 

@@ -180,6 +180,9 @@ return [
         'floor_usd' => (float) env('WHALE_FLOOR_USD', 1000),
         'liquidity_ratio' => 0.02,
         'lookback_hours' => 24,
+        // Transaksi whale disimpan sekian hari (sejak 15 Nov 2026; sebelumnya 60), supaya riwayat wallet mencakup
+        // beberapa fase pasar. Sekitar 300 ribu baris per tahun.
+        'keep_days' => (int) env('WHALE_KEEP_DAYS', 180),
     ],
 
     /*
