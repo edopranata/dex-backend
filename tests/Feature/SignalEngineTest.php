@@ -3,6 +3,7 @@
 use App\Enums\Recommendation;
 use App\Enums\SignalStatus;
 use App\Models\Analysis;
+use App\Models\Candle;
 use App\Models\Order;
 use App\Models\OrderFillEvidence;
 use App\Models\Position;
@@ -52,7 +53,8 @@ test('strong scores produce a buy with ordered levels and a tracked signal', fun
         ->and($analysis->take_profit_1)->toBeLessThan($analysis->take_profit_2)
         ->and($analysis->take_profit_2)->toBeLessThan($analysis->take_profit_3)
         ->and($analysis->summary)->not->toBeEmpty()
-        ->and($token->signals()->first()->status)->toBe(SignalStatus::Pending);
+        ->and($token->signals()->first()->status)->toBe(SignalStatus::Pending)
+        ->and($analysis->indicators)->toHaveKey('btc');
 });
 
 test('honeypot tokens are always avoided', function () {
@@ -88,14 +90,20 @@ test('a second bullish analysis does not open a duplicate signal', function () {
 });
 
 test('analyses and signals record the strategy version and the market around them', function () {
-    Token::factory()->create(['chain_id' => 'solana', 'symbol' => 'SOL', 'price_change_h24' => -2.5]);
+    $this->freezeTime();
+    $sol = Token::factory()->create(['chain_id' => 'solana', 'symbol' => 'SOL', 'is_active' => false]);
+    $hour = now()->startOfHour()->timestamp;
+    Candle::factory()->for($sol)->create(['timeframe' => '1h', 'open_time' => $hour - 86400, 'close' => 200.0]);
+    Candle::factory()->for($sol)->create(['timeframe' => '1h', 'open_time' => $hour, 'close' => 195.0]);
     Token::factory()->create(['price_change_h24' => 4.0]);
+    Token::factory()->create(['price_change_h24' => -1.0]);
 
     $context = app(MarketContext::class)->snapshot();
 
     expect($context['fear_greed']['value'])->toBe(60)
-        ->and($context['benchmarks']['SOL']['change_24h'])->toEqual(-2.5)
-        ->and($context['benchmarks']['ETH'])->toBe(['change_24h' => null, 'trend_4h' => null])
+        ->and($context['benchmarks']['SOL'])->toMatchArray(['price' => 195.0, 'change_24h' => -2.5, 'trend_4h' => null])
+        ->and($context['benchmarks']['ETH'])->toBe(['price' => null, 'change_24h' => null, 'trend_4h' => null, 'as_of' => null])
+        ->and($context['benchmarks'])->toHaveKey('BTC')
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();

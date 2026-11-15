@@ -20,7 +20,7 @@ CoinGecko, RSS, AI provider, Telegram
 | Tugas | Kapan (UTC) | Isi |
 |---|---|---|
 | `market:prices` | Tiap 15 detik | Harga DEX Screener, pelacakan order dan sinyal |
-| `market:candles`, `market:whales` | Menit 0, 15, 30, 45 | Candle 15 menit (1h, 4h, 1d dibangun darinya) dan transaksi whale dari GeckoTerminal |
+| `market:candles`, `market:whales` | Menit 0, 15, 30, 45 | Candle 15 menit (1h, 4h, 1d dibangun darinya) untuk token di Market dan acuan pasar (BTC lewat cbBTC di Base, SOL, WETH; `config/market.php` → `benchmarks`), dan transaksi whale dari GeckoTerminal |
 | `market:candles --out-of-market` | Tiap jam, menit 20 | Candle token yang sudah keluar Market |
 | `market:analyze` | Menit 11, 26, 41, 56 | Analisa, rekomendasi, sinyal, dan sinyal bayangan |
 | `market:evaluate` | Menit 7, 22, 37, 52 | Harga 1, 4, dan 24 jam setelah tiap analisa |
@@ -41,8 +41,8 @@ Tugas penting bisa dijalankan manual dari Admin → Tugas terjadwal; daftar yang
 
 | Bagian | Isi |
 |---|---|
-| `app/Services/MarketData` | Klien penyedia data, sinkron candle, whale, berita, cek keamanan, harga dengan cek silang |
-| `app/Services/Analysis` | Lima analyzer, `SignalEngine`, `SignalTracker`, `TradeLevels`, `TokenDiscoveryService`, `WatchlistManager`, laporan, backtest, sinyal bayangan, daftar trader |
+| `app/Services/MarketData` | Klien penyedia data, sinkron candle, token acuan pasar (`BenchmarkTokens`), whale, berita, cek keamanan, harga dengan cek silang |
+| `app/Services/Analysis` | Lima analyzer, `SignalEngine`, `MarketContext` dan `BtcRelation` (konteks pasar dan hubungan token dengan BTC per analisa), `SignalTracker`, `TradeLevels`, `TokenDiscoveryService`, `WatchlistManager`, laporan, backtest, sinyal bayangan, daftar trader |
 | `app/Services/Ai` | `AiClient` (rantai empat provider, kuota per menit dan per hari) dan sentimen berita |
 | `app/Services/Notifications` | Bot Telegram per pengguna, alur beli lewat tombol, email |
 | `app/Services/Admin` | Pengaturan panel (`SettingsRegistry`, nilai di tabel `settings` menimpa `.env`), backup, log, sistem, container |

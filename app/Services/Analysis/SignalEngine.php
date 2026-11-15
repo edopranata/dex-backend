@@ -27,6 +27,7 @@ class SignalEngine
         private FundamentalAnalyzer $fundamental,
         private AnalysisSummarizer $summarizer,
         private MarketContext $marketContext,
+        private BtcRelation $btcRelation,
         private TelegramNotifier $notifier,
     ) {}
 
@@ -135,6 +136,8 @@ class SignalEngine
                 'sentiment' => $sentiment['metrics'],
                 'onchain' => $onchain['metrics'],
                 'fundamental' => $fundamental['metrics'],
+                // Recorded only: no rule uses it yet (shadow A and B in the performance report).
+                'btc' => $this->btcRelation->measure($token),
             ],
             'reasons' => $reasons,
             'summary' => $summary['summary'],

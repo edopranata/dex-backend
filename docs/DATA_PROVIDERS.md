@@ -7,7 +7,7 @@ Kuota, lisensi, dan hasil uji, masing-masing dengan tanggal pengecekannya. Angka
 | Provider | Peran | Kuota dan catatan |
 |---|---|---|
 | DEX Screener | Harga real-time, pair, likuiditas, volume, transaksi beli/jual, boost | Gratis tanpa akun, 300 permintaan per menit. Harga hanya 4 digit bermakna. Feed bisa menyimpang dari candle: FLOAT 5-14% di atas candle (audit 9-10 Nov), STANK isi 12% di bawah candle (9 Nov), sebabnya harga dicek silang ke GeckoTerminal sejak 10 Nov. Tidak punya candle atau daftar transaksi per wallet |
-| GeckoTerminal | Candle 15m/1h/4h/1d, transaksi whale, trending pool | Gratis, dibatasi per IP. Resminya 30 per menit, tetapi uji 29 Okt diblokir (HTTP 429) setelah sekitar 11 permintaan, jadi aplikasi memakai 10 per menit (`GECKOTERMINAL_RPM`). IP VPS dipakai bersama (NAT). Ini hambatan utama: 69% terpakai pada 11 Nov 13.11-14.10 WIB, dan job menunggu 2-5,6 menit |
+| GeckoTerminal | Candle 15m/1h/4h/1d, transaksi whale, trending pool | Gratis, dibatasi per IP. Resminya 30 per menit, tetapi uji 29 Okt diblokir (HTTP 429) setelah sekitar 11 permintaan, jadi aplikasi memakai 10 per menit (`GECKOTERMINAL_RPM`). IP keluar VPS sejak 13 Nov adalah IP dedicated. Ini hambatan utama: 69% terpakai pada 11 Nov 13.11-14.10 WIB, dan job menunggu 2-5,6 menit |
 | GoPlus Security | Cek keamanan: honeypot, pajak, mint/freeze, top holder, LP terkunci, jumlah holder | Gratis tanpa akun. Satu cek per 10 detik. Pernah memberi porsi holder di atas 100% (TROLL, 10 Nov; diabaikan sejak 11 Nov) dan tidak menjawab untuk Solana (11 Nov 10.36-10.47 WIB). Di Solana, top 10 holder bisa ikut menghitung vault pool dan bursa |
 | CoinGecko | Trending pencarian untuk discovery | Gratis; Demo API key opsional |
 | Jupiter Tokens API v2 | Daftar top trending dan top organic score (Solana) untuk discovery, hanya dicatat sejak 12 Nov | `api.jup.ag`, tanpa key sekitar 30 permintaan per menit (dicek 11 Nov); dengan key Free 60 per menit. `lite-api.jup.ag` sedang dihentikan. Dipakai 2 permintaan per putaran discovery. Rencana Fase 4: penawaran swap, 1 permintaan per detik dengan key Free |
@@ -52,3 +52,7 @@ Pemakaian token tidak dicatat aplikasi. Perkiraan dari data produksi 24 jam samp
 | Etherscan, Solscan | Data holder berbayar; diganti GoPlus (29 Okt) |
 
 Penilaian awal penyedia (29 Okt) tersimpan di [archive/ANALISA_DOKUMEN.md](archive/ANALISA_DOKUMEN.md).
+
+## Acuan pasar (15 Nov 2026)
+
+BTC diambil dari pool cbBTC/USDC di Base (Aerodrome, `0x42609aa1…`, likuiditas sekitar US$5,8 juta, volume sekitar US$90 juta per hari, pool dibuat 22 Okt 2026) lewat GeckoTerminal, bersama SOL dan WETH. Ketiganya menambah satu permintaan per token per putaran 15 menit. Harga ini harga DEX, tidak dicampur dengan harga bursa terpusat. Alamatnya di `config/market.php` (`benchmarks`). Binance archive hanya dipakai untuk riset, karena terbit sehari kemudian.

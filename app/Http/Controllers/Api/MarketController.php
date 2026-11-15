@@ -14,12 +14,13 @@ use App\Models\NewsItem;
 use App\Models\Token;
 use App\Models\TokenCandidate;
 use App\Models\WhaleTrade;
+use App\Services\Analysis\MarketContext;
 use App\Services\MarketData\FearGreedClient;
 use Illuminate\Http\JsonResponse;
 
 class MarketController extends Controller
 {
-    public function overview(FearGreedClient $fearGreed): JsonResponse
+    public function overview(FearGreedClient $fearGreed, MarketContext $marketContext): JsonResponse
     {
         $analyses = Analysis::query()
             ->whereIn('id', Analysis::query()->selectRaw('MAX(id)')->whereIn('token_id', Token::query()->active()->select('id'))->groupBy('token_id'))
@@ -29,6 +30,7 @@ class MarketController extends Controller
 
         return response()->json([
             'fear_greed' => $fearGreed->latest(),
+            'benchmarks' => $marketContext->snapshot()['benchmarks'],
             'recommendation_counts' => collect(Recommendation::cases())->mapWithKeys(fn (Recommendation $r): array => [
                 $r->value => $analyses->where('recommendation', $r)->count(),
             ]),

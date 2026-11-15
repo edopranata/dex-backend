@@ -4,6 +4,7 @@ namespace App\Services\Analysis;
 
 use App\Models\Candle;
 use App\Models\Token;
+use App\Services\MarketData\BenchmarkTokens;
 use App\Services\MarketData\FearGreedClient;
 use Illuminate\Support\Facades\Cache;
 
@@ -13,13 +14,13 @@ use Illuminate\Support\Facades\Cache;
  */
 class MarketContext
 {
-    /** Main asset per chain that is followed as the market benchmark. */
-    private const BENCHMARKS = ['SOL' => ['solana', 'SOL'], 'ETH' => ['ethereum', 'WETH']];
+    /** A benchmark whose newest candle is older than this is treated as unknown rather than reported stale. */
+    private const STALE_SECONDS = 3 * 3600;
 
-    public function __construct(private FearGreedClient $fearGreed, private TechnicalAnalyzer $technical) {}
+    public function __construct(private FearGreedClient $fearGreed, private TechnicalAnalyzer $technical, private BenchmarkTokens $benchmarks) {}
 
     /**
-     * @return array{captured_at: string, fear_greed: array{value: int, classification: string}|null, benchmarks: array<string, array{change_24h: float|null, trend_4h: string|null}>, breadth: array{tokens: int, up_24h_pct: float|null, avg_change_24h: float|null}}
+     * @return array{captured_at: string, fear_greed: array{value: int, classification: string}|null, benchmarks: array<string, array{price: float|null, change_24h: float|null, trend_4h: string|null, as_of: string|null}>, breadth: array{tokens: int, up_24h_pct: float|null, avg_change_24h: float|null}}
      */
     public function snapshot(): array
     {
@@ -27,7 +28,9 @@ class MarketContext
         return Cache::remember('market:context', now()->addMinutes(5), fn (): array => [
             'captured_at' => now()->toIso8601String(),
             'fear_greed' => $this->fearGreedValue(),
-            'benchmarks' => array_map(fn (array $pair): array => $this->benchmark(...$pair), self::BENCHMARKS),
+            'benchmarks' => collect($this->benchmarks->names())
+                ->mapWithKeys(fn (string $name): array => [$name => $this->benchmark($this->benchmarks->find($name))])
+                ->all(),
             'breadth' => $this->breadth(),
         ]);
     }
@@ -43,20 +46,38 @@ class MarketContext
     }
 
     /**
-     * @return array{change_24h: float|null, trend_4h: string|null}
+     * Price, 24 hour change and 4 hour trend from the benchmark's own candles. Benchmarks are outside the Market,
+     * so their price columns are not refreshed; candles are, every market:candles round.
+     *
+     * @return array{price: float|null, change_24h: float|null, trend_4h: string|null, as_of: string|null}
      */
-    private function benchmark(string $chainId, string $symbol): array
+    private function benchmark(?Token $token): array
     {
-        $token = Token::query()->where('chain_id', $chainId)->where('symbol', $symbol)->orderByDesc('liquidity_usd')->first();
+        $unknown = ['price' => null, 'change_24h' => null, 'trend_4h' => null, 'as_of' => null];
 
         if ($token === null) {
-            return ['change_24h' => null, 'trend_4h' => null];
+            return $unknown;
         }
 
-        $candles = Candle::query()->where('token_id', $token->id)->where('timeframe', config('market.analysis.trend_timeframe'))
+        $hourly = Candle::query()->where('token_id', $token->id)->where('timeframe', '1h')
+            ->orderByDesc('open_time')->limit(25)->pluck('close', 'open_time');
+        $latest = $hourly->keys()->first();
+
+        if ($latest === null || now()->getTimestamp() - ($latest + 3600) > self::STALE_SECONDS) {
+            return $unknown;
+        }
+
+        $price = (float) $hourly->first();
+        $dayAgo = $hourly->get($latest - 86400);
+        $trend = Candle::query()->where('token_id', $token->id)->where('timeframe', config('market.analysis.trend_timeframe'))
             ->orderByDesc('open_time')->limit(120)->get()->reverse()->values();
 
-        return ['change_24h' => $token->price_change_h24, 'trend_4h' => $this->technical->higherTimeframeTrend($candles)];
+        return [
+            'price' => $price,
+            'change_24h' => $dayAgo > 0 ? round(($price / (float) $dayAgo - 1) * 100, 2) : null,
+            'trend_4h' => $this->technical->higherTimeframeTrend($trend),
+            'as_of' => now()->setTimestamp(min(now()->getTimestamp(), $latest + 3600))->toIso8601String(),
+        ];
     }
 
     /**

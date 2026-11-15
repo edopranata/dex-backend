@@ -121,6 +121,17 @@ class PerformanceReport
         $youngSince = Carbon::parse((string) config('market.analysis.shadow_young_pair_since'), 'UTC');
         $youngDays = (int) config('market.analysis.shadow_young_pair_days');
         $entered = fn (Carbon $from): Collection => $signals->filter(fn (Signal $signal): bool => $signal->entered_at !== null && $signal->entered_at->gte($from));
+        $btcSince = Carbon::parse((string) config('market.analysis.shadow_btc_since'), 'UTC');
+        $btcFollowerCorr = (float) collect(config('market.analysis.shadow_btc_corr'))->first();
+        $btcRising = fn (Signal $s): ?bool => ($trend = $s->analysis?->market_context['benchmarks']['BTC']['trend_4h'] ?? null) === null ? null : $trend === 'bullish';
+        $followsBtc = fn (Signal $s, float $min): ?bool => is_numeric($corr = $s->analysis?->indicators['btc']['corr'] ?? null) ? $corr >= $min : null;
+        $btcSkips = collect(config('market.analysis.shadow_btc_corr'))->map(fn (float $min): array => $this->variant(
+            'btc_follower_down_'.(int) round($min * 100),
+            'Lewati token yang ikut BTC (korelasi ≥ '.str_replace('.', ',', (string) $min).') saat tren 4 jam BTC tidak naik',
+            $btcSince,
+            $entered($btcSince),
+            fn (Signal $s): ?float => $followsBtc($s, $min) === true && $btcRising($s) === false ? 0.0 : null,
+        ))->all();
 
         return [
             $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?float => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
@@ -151,6 +162,16 @@ class PerformanceReport
 
                 return is_numeric($age) && $age < $youngDays ? 0.0 : null;
             }),
+            ...$btcSkips,
+            // Not a rule to adopt as is: the result of only the BTC followers while BTC rises, the case the
+            // 15 Nov study could not test because BTC fell almost all the time.
+            $this->variant(
+                'btc_follower_up',
+                'Hanya token yang ikut BTC (korelasi ≥ '.str_replace('.', ',', (string) $btcFollowerCorr).') saat tren 4 jam BTC naik',
+                $btcSince,
+                $entered($btcSince),
+                fn (Signal $s): ?float => $followsBtc($s, $btcFollowerCorr) === true && $btcRising($s) === true ? null : 0.0,
+            ),
         ];
     }
 

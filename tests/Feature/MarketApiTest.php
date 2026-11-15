@@ -41,7 +41,7 @@ test('token list and detail include the latest analysis', function () {
 
     $this->actingAs($user)->getJson('/api/tokens')->assertOk()->assertJsonCount(1, 'data');
     $this->actingAs($user)->getJson("/api/tokens/{$token->id}")->assertOk()->assertJsonPath('data.symbol', $token->symbol);
-    $this->actingAs($user)->getJson('/api/market/overview')->assertOk()->assertJsonPath('fear_greed.value', 50);
+    $this->actingAs($user)->getJson('/api/market/overview')->assertOk()->assertJsonPath('fear_greed.value', 50)->assertJsonStructure(['benchmarks' => ['BTC' => ['price', 'change_24h', 'trend_4h', 'as_of'], 'SOL', 'ETH']]);
 });
 
 test('the token list counts each token whale trades and whale buying over the last 24 hours', function () {

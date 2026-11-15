@@ -132,6 +132,32 @@ return [
         'out_of_market_per_hour' => (int) env('CANDLES_OUT_OF_MARKET_PER_HOUR', 10),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Acuan pasar
+    |--------------------------------------------------------------------------
+    |
+    | Aset utama yang diikuti sebagai pembanding, bukan untuk ditradingkan: tidak masuk Market, tetapi candle-nya
+    | ikut diambil setiap putaran market:candles. Tanpa alamat, token dicari dari jaringan dan simbol (yang
+    | likuiditasnya terbesar). Dengan alamat, token dibuat bila belum ada. BTC memakai pool cbBTC/USDC di Base
+    | (harga DEX, tidak dicampur harga bursa terpusat); pool dibuat 22 Okt 2026, ganti di sini bila pindah.
+    |
+    */
+
+    'benchmarks' => [
+        'BTC' => [
+            'chain' => 'base',
+            'symbol' => 'cbBTC',
+            'name' => 'Coinbase Wrapped BTC',
+            'token_address' => '0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf',
+            'pair_address' => '0x42609aa1e58c5dd7e5a012dc74118fff975f0eac',
+            'quote_symbol' => 'USDC',
+            'dex_id' => 'aerodrome-slipstream',
+        ],
+        'SOL' => ['chain' => 'solana', 'symbol' => 'SOL'],
+        'ETH' => ['chain' => 'ethereum', 'symbol' => 'WETH'],
+    ],
+
     // Jobs that call GeckoTerminal run on their own queue (worker "queue-market"), so analysis
     // and Telegram notifications on the default queue never wait behind the API rate limit.
     'market_data_queue' => 'market-data',
@@ -532,6 +558,14 @@ return [
         // umurnya di bawah sekian hari. Hanya dicatat; diukur pada sinyal yang entry sejak waktu ini (UTC).
         'shadow_young_pair_days' => 14,
         'shadow_young_pair_since' => env('SIGNAL_SHADOW_YOUNG_PAIR_SINCE', '2026-11-13 16:00:00'),
+        // Hubungan token dengan BTC (studi 15 Nov 2026, dex/review/hasil-15nov-btc.md): korelasi dan beta return 1 jam
+        // selama sekian jam sebelum analisa. Calon aturan A melewati token yang ikut BTC (korelasi minimal ambang)
+        // saat tren 4 jam BTC tidak naik; catatan B hanya mengambil pengikut BTC saat tren 4 jam BTC naik.
+        // Hanya dicatat; diukur pada sinyal yang entry sejak waktu ini (UTC).
+        'btc_relation_hours' => 72,
+        'btc_relation_min_hours' => 40,
+        'shadow_btc_corr' => [0.3, 0.1],
+        'shadow_btc_since' => env('SIGNAL_SHADOW_BTC_SINCE', '2026-11-15 12:00:00'),
         // v4: Buy (bukan Strong Buy) ditahan bila harga sudah naik lebih dari ini dalam 24 jam, atau entry kurang dari
         // sekian persen di bawah puncak 24 jam; di v3 sinyal seperti itu kebanyakan langsung kena stop. Backtest yang
         // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.

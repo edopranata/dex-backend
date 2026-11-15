@@ -208,7 +208,7 @@ test('order history reads by the time it shows, not by when the order was placed
 });
 
 test('each shadow variant counts signals entered since it started, and only changes what its rule touches', function () {
-    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_young_pair_since' => '2026-11-07 13:00:00']);
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_young_pair_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_btc_since' => '2026-11-07 13:00:00']);
     $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'cost_r' => 0.1];
     $analysis = fn (Token $token, string $at, string $recommendation, float $price = 1.0) => Analysis::factory()->for($token)->create(['recommendation' => $recommendation, 'price' => $price, 'created_at' => $at]);
 
@@ -245,7 +245,7 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
@@ -271,6 +271,37 @@ test('the young pair shadow skips signals on pairs younger than the limit, enter
     $young = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'young_pair');
 
     expect($young)->toMatchArray(['label' => 'Lewati pair berumur di bawah 14 hari', 'signals' => 4, 'affected' => 2, 'actual_r' => 0.5, 'shadow_r' => -0.5]);
+});
+
+test('the BTC shadows skip BTC followers while BTC is not rising, and keep only them while it rises', function () {
+    config(['market.analysis.shadow_btc_since' => '2026-11-15 12:00:00', 'market.analysis.shadow_btc_corr' => [0.3, 0.1]]);
+    $signal = function (?float $corr, ?string $btcTrend, float $netR, string $enteredAt): void {
+        $token = Token::factory()->create();
+        $analysis = Analysis::factory()->for($token)->create([
+            'indicators' => $corr === null ? [] : ['btc' => ['corr' => $corr]],
+            'market_context' => ['benchmarks' => ['BTC' => ['trend_4h' => $btcTrend]]],
+        ]);
+        reportSignal($token, $netR, '2026-11-17 00:00:00', ['analysis_id' => $analysis->id, 'stop_loss' => 0.9, 'entered_at' => $enteredAt]);
+    };
+
+    $signal(0.5, 'bearish', -1.0, '2026-11-15 13:00:00');   // follower, BTC falling: skipped by both thresholds
+    $signal(0.2, 'sideways', -1.0, '2026-11-15 14:00:00');  // follows only at 0.1: skipped by the 0.1 rule
+    $signal(0.05, 'bearish', 2.0, '2026-11-15 15:00:00');   // moves on its own: kept
+    $signal(0.6, 'bullish', 1.5, '2026-11-15 16:00:00');    // follower, BTC rising: kept, and the only one in B
+    $signal(null, 'bearish', 0.5, '2026-11-15 17:00:00');   // no BTC data: kept by A, outside B
+    $signal(0.9, 'bearish', -1.0, '2026-11-15 10:00:00');   // entered before the shadows started: left out
+
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
+
+    expect($variants['btc_follower_down_30'])->toMatchArray([
+        'label' => 'Lewati token yang ikut BTC (korelasi ≥ 0,3) saat tren 4 jam BTC tidak naik',
+        'signals' => 5, 'affected' => 1, 'actual_r' => 2.0, 'shadow_r' => 3.0,
+    ])
+        ->and($variants['btc_follower_down_10'])->toMatchArray(['affected' => 2, 'shadow_r' => 4.0])
+        ->and($variants['btc_follower_up'])->toMatchArray([
+            'label' => 'Hanya token yang ikut BTC (korelasi ≥ 0,3) saat tren 4 jam BTC naik',
+            'affected' => 4, 'shadow_r' => 1.5,
+        ]);
 });
 
 test('results are also grouped per network, split by recommendation', function () {

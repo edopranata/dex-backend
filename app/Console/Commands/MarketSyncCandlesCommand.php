@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Jobs\SyncTokenCandles;
 use App\Models\Candle;
 use App\Models\Token;
+use App\Services\MarketData\BenchmarkTokens;
 use App\Services\MarketData\GeckoTerminalClient;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -16,11 +17,11 @@ use Throwable;
 #[Description('Ambil candle OHLCV dari GeckoTerminal')]
 class MarketSyncCandlesCommand extends Command
 {
-    public function handle(): int
+    public function handle(BenchmarkTokens $benchmarks): int
     {
         $timeframes = array_values(array_intersect($this->option('timeframe'), array_keys(GeckoTerminalClient::TIMEFRAMES)));
 
-        foreach ($this->tokens() as $token) {
+        foreach ($this->tokens($benchmarks) as $token) {
             if (! $this->option('sync')) {
                 SyncTokenCandles::dispatch($token, $timeframes);
 
@@ -41,14 +42,15 @@ class MarketSyncCandlesCommand extends Command
     }
 
     /**
-     * The Market's tokens, or this hour's turn of the tokens that left it: those whose 15m candles are oldest.
+     * The Market's tokens with the market benchmarks, or this hour's turn of the tokens that left it: those whose
+     * 15m candles are oldest.
      *
      * @return Collection<int, Token>
      */
-    private function tokens(): Collection
+    private function tokens(BenchmarkTokens $benchmarks): Collection
     {
         if (! $this->option('out-of-market')) {
-            return Token::query()->active()->get();
+            return Token::query()->active()->get()->merge($benchmarks->ensure()->values()->all());
         }
 
         return Token::query()
