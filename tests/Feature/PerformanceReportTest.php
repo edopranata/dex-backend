@@ -247,7 +247,7 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'candle_confirmed', 'candle_confirmed_volume'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'candle_confirmed', 'candle_confirmed_volume', 'atr_trail_4h'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
@@ -339,6 +339,38 @@ test('the candle shadows keep only entries after a confirmation candle, with and
             'label' => 'Hanya entry setelah candle 1 jam konfirmasi dengan volume ≥ 1,5x rata-rata 20 jam',
             'affected' => 3, 'shadow_r' => 2.5,
         ]);
+});
+
+test('the chandelier shadow trails 3x the 4h ATR under the highest high since entry, without targets', function () {
+    config(['market.analysis.shadow_atr_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_atr_multiplier' => 3.0]);
+    $fourHour = strtotime('2026-11-10 12:00:00');
+    $candle = fn (Token $token, string $timeframe, int $openTime, float $open, float $high, float $low, float $close) => Candle::query()->create(
+        ['token_id' => $token->id, 'timeframe' => $timeframe, 'open_time' => $openTime, 'open' => $open, 'high' => $high, 'low' => $low, 'close' => $close, 'volume' => 100]);
+
+    // Rises to 1.30, the 4h close at 16:00 lifts the stop to 1.30 - 3 x 0.02 = 1.24, then the 16:00 hour falls through it.
+    $winner = Token::factory()->create();
+    foreach (range(20, 0) as $back) {
+        $candle($winner, '4h', $fourHour - $back * 14400, 1, 1.01, 0.99, 1);
+    }
+    $candle($winner, '1h', $fourHour + 3600, 1.0, 1.30, 0.99, 1.28);
+    $candle($winner, '1h', $fourHour + 7200, 1.28, 1.29, 1.25, 1.27);
+    $candle($winner, '1h', $fourHour + 10800, 1.27, 1.29, 1.25, 1.27);
+    $candle($winner, '1h', $fourHour + 14400, 1.26, 1.27, 1.20, 1.21);
+    reportSignal($winner, 1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+
+    // Falls to the first stop before any 4h close.
+    $loser = Token::factory()->create();
+    $candle($loser, '1h', $fourHour + 3600, 1.0, 1.01, 0.85, 0.86);
+    reportSignal($loser, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+
+    reportSignal(Token::factory()->create(), 0.5, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']); // no candles: kept
+
+    $atr = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'atr_trail_4h');
+
+    expect($atr)->toMatchArray([
+        'label' => 'Tanpa target: trailing stop 3x ATR candle 4 jam sejak entry',
+        'signals' => 3, 'affected' => 2, 'actual_r' => 0.5, 'shadow_r' => 1.7,
+    ]);
 });
 
 test('buy shadows are reported apart, split by the BTC 4h trend when they were analyzed', function () {

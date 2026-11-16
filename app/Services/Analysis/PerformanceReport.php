@@ -153,6 +153,8 @@ class PerformanceReport
 
         $candleSince = Carbon::parse((string) config('market.analysis.shadow_candle_since'), 'UTC');
         $candles = $entered($candleSince)->mapWithKeys(fn (Signal $s): array => [$s->id => $this->entryCandle($s)]);
+        $atrSince = Carbon::parse((string) config('market.analysis.shadow_atr_since'), 'UTC');
+        $atrMultiplier = (float) config('market.analysis.shadow_atr_multiplier');
 
         return [
             $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?float => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
@@ -207,7 +209,65 @@ class PerformanceReport
                 $entered($candleSince),
                 fn (Signal $s): ?float => ($candles[$s->id] ?? null) === null ? null : ($candles[$s->id]['confirmed'] && $candles[$s->id]['volume'] ? null : 0.0),
             ),
+            $this->variant(
+                'atr_trail_4h',
+                'Tanpa target: trailing stop '.str_replace('.', ',', (string) $atrMultiplier).'x ATR candle 4 jam sejak entry',
+                $atrSince,
+                $entered($atrSince),
+                fn (Signal $s): ?float => $this->chandelierR($s, $atrMultiplier),
+            ),
         ];
+    }
+
+    /**
+     * Net R under the chandelier exit: the stop starts at the signal's stop and, at each 4h close, rises to the
+     * highest high since entry minus the multiple of the 4h ATR(14), never lower. Checked on 1h candles from the
+     * first full hour after entry; still open at the last candle means valued at its close. Null without candles.
+     */
+    private function chandelierR(Signal $signal, float $multiplier): ?float
+    {
+        $start = (int) ceil($signal->entered_at->timestamp / 3600) * 3600;
+        $hourly = Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h')
+            ->where('open_time', '>=', $start)->orderBy('open_time')->get(['open_time', 'open', 'high', 'low', 'close']);
+
+        if ($hourly->isEmpty()) {
+            return null;
+        }
+
+        $atr = [];
+        $value = null;
+        $previous = null;
+        $fourHour = Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '4h')
+            ->where('open_time', '>=', $start - 40 * 14400)->orderBy('open_time')->get(['open_time', 'high', 'low', 'close']);
+
+        foreach ($fourHour as $i => $candle) {
+            if ($previous !== null) {
+                $range = max((float) $candle->high - (float) $candle->low, abs((float) $candle->high - $previous), abs((float) $candle->low - $previous));
+                $value = $value === null ? $range : ($value * 13 + $range) / 14;
+                if ($i >= 14) {
+                    $atr[$candle->open_time] = $value;
+                }
+            }
+            $previous = (float) $candle->close;
+        }
+
+        $stop = (float) $signal->stop_loss;
+        $highest = (float) $signal->entry_price;
+
+        foreach ($hourly as $candle) {
+            if ((float) $candle->low <= $stop) {
+                return $this->exitR($signal, min($stop, (float) $candle->open), 0);
+            }
+
+            $highest = max($highest, (float) $candle->high);
+            $closedFourHour = $candle->open_time + 3600 - 14400;
+
+            if (($candle->open_time + 3600) % 14400 === 0 && isset($atr[$closedFourHour])) {
+                $stop = max($stop, $highest - $multiplier * $atr[$closedFourHour]);
+            }
+        }
+
+        return $this->exitR($signal, (float) $hourly->last()->close, 0);
     }
 
     /**

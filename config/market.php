@@ -575,6 +575,11 @@ return [
         // average. Computed at report time, so signals since the date below count even before it was built.
         'shadow_candle_since' => env('SIGNAL_SHADOW_CANDLE_SINCE', '2026-11-07 13:00:00'),
         'shadow_candle_volume' => 1.5,
+        // Owner's chandelier exit (16 Nov 2026): no targets, the stop starts at the signal's stop and rises to
+        // the highest high since entry minus this multiple of the 4h ATR(14) at each 4h close, never down.
+        // Checked on 1h candles; a signal whose stop has not been hit is valued at the last close.
+        'shadow_atr_since' => env('SIGNAL_SHADOW_ATR_SINCE', '2026-11-07 13:00:00'),
+        'shadow_atr_multiplier' => 3.0,
         // v4: Buy (bukan Strong Buy) ditahan bila harga sudah naik lebih dari ini dalam 24 jam, atau entry kurang dari
         // sekian persen di bawah puncak 24 jam; di v3 sinyal seperti itu kebanyakan langsung kena stop. Backtest yang
         // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.
