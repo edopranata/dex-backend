@@ -130,6 +130,12 @@ return [
         // paling lama duluan. Tanpa batas jumlah token; data tetap utuh selama giliran tiap token di bawah
         // backfill_days.
         'out_of_market_per_hour' => (int) env('CANDLES_OUT_OF_MARKET_PER_HOUR', 10),
+        // Token di luar Market yang punya sinyal atau sinyal bayangan dalam sekian hari terakhir mendapat giliran
+        // sendiri: diambil lagi bila 15m-nya lebih lama dari recent_refresh_hours, paling banyak recent_per_hour
+        // token per jam, supaya catatan bayangan (trailing ATR, exit setelah sinyal) tidak tertinggal ±9 jam.
+        'recent_signal_days' => 14,
+        'recent_refresh_hours' => 2,
+        'recent_per_hour' => 40,
     ],
 
     /*

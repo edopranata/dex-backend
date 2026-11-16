@@ -13,7 +13,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Collection;
 use Throwable;
 
-#[Signature('market:candles {--timeframe=* : Ambil langsung timeframe ini (15m, 1h, 4h, 1d). Tanpa opsi: ambil 15m dan rakit 1h, 4h, 1d} {--out-of-market : Giliran token yang sudah keluar Market, yang candle-nya paling lama duluan} {--sync : Jalankan langsung tanpa queue}')]
+#[Signature('market:candles {--timeframe=* : Ambil langsung timeframe ini (15m, 1h, 4h, 1d). Tanpa opsi: ambil 15m dan rakit 1h, 4h, 1d} {--out-of-market : Giliran token yang sudah keluar Market: yang bersinyal baru tiap beberapa jam, lainnya yang candle-nya paling lama duluan} {--sync : Jalankan langsung tanpa queue}')]
 #[Description('Ambil candle OHLCV dari GeckoTerminal')]
 class MarketSyncCandlesCommand extends Command
 {
@@ -42,8 +42,9 @@ class MarketSyncCandlesCommand extends Command
     }
 
     /**
-     * The Market's tokens with the market benchmarks, or this hour's turn of the tokens that left it: those whose
-     * 15m candles are oldest.
+     * The Market's tokens with the market benchmarks, or this hour's turn of the tokens that left it: first those
+     * with a recent signal whose 15m candles are older than recent_refresh_hours, then the others whose 15m
+     * candles are oldest.
      *
      * @return Collection<int, Token>
      */
@@ -53,13 +54,24 @@ class MarketSyncCandlesCommand extends Command
             return Token::query()->active()->get()->merge($benchmarks->ensure()->values()->all());
         }
 
-        return Token::query()
+        $outOfMarket = fn () => Token::query()
             ->everInMarket()
             ->where('is_active', false)
             ->addSelect(['latest_15m' => Candle::query()->selectRaw('max(open_time)')->whereColumn('token_id', 'tokens.id')->where('timeframe', '15m')])
             ->orderByRaw('latest_15m is null desc')
-            ->orderBy('latest_15m')
-            ->limit((int) config('market.candles.out_of_market_per_hour'))
+            ->orderBy('latest_15m');
+
+        $recentIds = $outOfMarket()->withRecentSignal()->pluck('id');
+        $fresh = now()->subHours((int) config('market.candles.recent_refresh_hours'))->getTimestamp();
+        $recent = $outOfMarket()
+            ->whereIn('id', $recentIds)
+            ->whereDoesntHave('candles', fn ($candles) => $candles->where('timeframe', '15m')->where('open_time', '>=', $fresh))
+            ->limit((int) config('market.candles.recent_per_hour'))
             ->get();
+
+        return $recent->merge($outOfMarket()
+            ->whereNotIn('id', $recentIds)
+            ->limit((int) config('market.candles.out_of_market_per_hour'))
+            ->get());
     }
 }

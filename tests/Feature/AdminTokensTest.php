@@ -2,7 +2,10 @@
 
 use App\Enums\WatchlistAction;
 use App\Jobs\SyncTokenCandles;
+use App\Models\Analysis;
 use App\Models\Candle;
+use App\Models\ShadowSignal;
+use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
 use App\Models\WatchlistEvent;
@@ -84,6 +87,41 @@ test('tokens out of the Market get their 15m candles in turns, the oldest first'
         ->and($pushed($fresh))->toBeFalse()
         ->and($pushed($inMarket))->toBeFalse()
         ->and($pushed($candidate))->toBeFalse();
+});
+
+test('tokens out of the Market with a recent signal get their own turn every few hours, before the others', function () {
+    config(['market.candles.out_of_market_per_hour' => 1, 'market.candles.recent_signal_days' => 14, 'market.candles.recent_refresh_hours' => 2, 'market.candles.recent_per_hour' => 40]);
+    Queue::fake();
+    $signal = fn (Token $token, int $daysAgo) => Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['created_at' => now()->subDays($daysAgo)]));
+    $recentStale = everInMarketToken(leftDaysAgo: 3);
+    $recentFresh = everInMarketToken(leftDaysAgo: 3);
+    $shadowOnly = everInMarketToken(leftDaysAgo: 2);
+    $oldSignal = everInMarketToken(leftDaysAgo: 20);
+    $none = everInMarketToken(leftDaysAgo: 8);
+    $signal($recentStale, 2);
+    $signal($recentFresh, 2);
+    $signal($oldSignal, 20);
+    ShadowSignal::query()->create(['token_id' => $shadowOnly->id, 'analysis_id' => Analysis::factory()->for($shadowOnly)->create()->id, 'rule' => 'buy_watch', 'recommendation' => 'BUY', 'strategy_version' => 'v6-test',
+        'entry_low' => 0.99, 'entry_high' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'status' => 'open']);
+    storeQuarterCandles($recentStale, 3);
+    storeQuarterCandles($recentFresh, 1);
+    storeQuarterCandles($shadowOnly, 5);
+    storeQuarterCandles($oldSignal, 30);
+
+    $this->artisan('market:candles', ['--out-of-market' => true])->assertSuccessful();
+
+    $pushed = fn (Token $token): bool => Queue::pushed(SyncTokenCandles::class, fn (SyncTokenCandles $job): bool => $job->token->is($token))->isNotEmpty();
+
+    expect($pushed($recentStale))->toBeTrue()
+        ->and($pushed($shadowOnly))->toBeTrue()
+        ->and($pushed($recentFresh))->toBeFalse()   // fetched within the last 2 hours
+        ->and($pushed($none))->toBeTrue()           // the one rotation slot: no candles goes first
+        ->and($pushed($oldSignal))->toBeFalse();    // signal too old: waits in the rotation
+
+    $rows = collect($this->actingAs($this->admin)->getJson('/api/admin/tokens')->assertOk()->json('tokens'))->keyBy('id');
+
+    expect($rows[$recentStale->id]['fetch'])->toBe('recent')
+        ->and($rows[$oldSignal->id]['fetch'])->toBe('rotation');
 });
 
 test('an admin can fetch 1,000 15m candles for a token whose data is older than the backfill reaches', function () {

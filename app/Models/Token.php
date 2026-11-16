@@ -105,6 +105,19 @@ class Token extends Model
      *
      * @param  Builder<Token>  $query
      */
+    /**
+     * Out-of-Market tokens with a signal or a shadow signal in the last market.candles.recent_signal_days days,
+     * which get their own, shorter candle turn.
+     */
+    public function scopeWithRecentSignal(Builder $query): void
+    {
+        $since = now()->subDays((int) config('market.candles.recent_signal_days'));
+
+        $query->where(fn (Builder $inner) => $inner
+            ->whereIn('id', Signal::query()->select('token_id')->where('created_at', '>=', $since))
+            ->orWhereIn('id', ShadowSignal::query()->select('token_id')->where('created_at', '>=', $since)));
+    }
+
     public function scopeEverInMarket(Builder $query): void
     {
         $query->where(fn (Builder $inner) => $inner->where('is_active', true)

@@ -41,7 +41,9 @@ class TokenController extends Controller
             ->get()
             ->groupBy('token_id');
 
-        $rows = $tokens->map(function (Token $token) use ($events, $candles): array {
+        $recent = Token::query()->whereIn('id', $ids)->where('is_active', false)->withRecentSignal()->pluck('id')->flip();
+
+        $rows = $tokens->map(function (Token $token) use ($events, $candles, $recent): array {
             $history = $events->get($token->id, collect());
             $added = $history->where('action', WatchlistAction::Added);
             $removed = $history->where('action', WatchlistAction::Removed)->last();
@@ -67,8 +69,9 @@ class TokenController extends Controller
                 'latest_15m_at' => $latest === null ? null : date(DATE_ATOM, (int) $latest),
                 // Older than the backfill reaches: the next turn leaves a hole unless filled by hand.
                 'gap' => $latest === null || (int) $latest < now()->subDays((int) config('market.candles.backfill_days'))->getTimestamp(),
-                // In the Market every 15 minutes; out of it in turns (market:candles --out-of-market).
-                'fetch' => $token->is_active ? 'every_15m' : 'rotation',
+                // In the Market every 15 minutes; out of it with a recent signal every few hours, the rest in turns
+                // (market:candles --out-of-market).
+                'fetch' => $token->is_active ? 'every_15m' : ($recent->has($token->id) ? 'recent' : 'rotation'),
                 'signals' => $token->signals_count,
             ];
         })
@@ -98,24 +101,30 @@ class TokenController extends Controller
      */
     private function summary(Collection $rows): array
     {
-        $out = $rows->where('in_market', false);
-        $inMarket = $rows->count() - $out->count();
+        $recent = $rows->where('fetch', 'recent');
+        $out = $rows->where('fetch', 'rotation');
+        $inMarket = $rows->where('in_market', true)->count();
+        $refreshHours = max(1, (int) config('market.candles.recent_refresh_hours'));
         $rotation = (int) config('market.candles.out_of_market_per_hour');
 
         return [
             'tokens' => $rows->count(),
             'in_market' => $rows->where('in_market', true)->count(),
-            'out_of_market' => $out->count(),
+            'out_of_market' => $out->count() + $recent->count(),
+            'recent' => $recent->count(),
+            'recent_refresh_hours' => $refreshHours,
+            'recent_signal_days' => (int) config('market.candles.recent_signal_days'),
             'gaps' => $rows->where('gap', true)->count(),
-            'out_groups' => collect(self::OUT_GROUPS)->map(fn (array $range): int => $out->filter(fn (array $row): bool => $row['out_days'] !== null && $row['out_days'] >= $range[0] && $row['out_days'] < $range[1])->count())->all(),
+            'out_groups' => collect(self::OUT_GROUPS)->map(fn (array $range): int => $rows->where('in_market', false)->filter(fn (array $row): bool => $row['out_days'] !== null && $row['out_days'] >= $range[0] && $row['out_days'] < $range[1])->count())->all(),
             'rotation_per_hour' => $rotation,
             // How often each token out of the Market gets its turn; the data stays whole while under the backfill.
             'rotation_hours' => $out->isEmpty() || $rotation < 1 ? null : round($out->count() / $rotation, 1),
             'rotation_limit_hours' => (int) config('market.candles.backfill_days') * 24,
             'candle_rows' => (int) $rows->sum('candle_rows'),
-            'candle_rows_out_of_market' => (int) $out->sum('candle_rows'),
-            // A 15m and a whale request per Market token every 15 minutes, and the hourly turn of the others.
-            'requests_per_hour' => $inMarket * 2 * 4 + min($rotation, $out->count()),
+            'candle_rows_out_of_market' => (int) $rows->where('in_market', false)->sum('candle_rows'),
+            // A 15m and a whale request per Market token every 15 minutes, the recent-signal tokens every few
+            // hours, and the hourly turn of the others.
+            'requests_per_hour' => $inMarket * 2 * 4 + (int) ceil($recent->count() / $refreshHours) + min($rotation, $out->count()),
             'request_limit_per_hour' => (int) config('market.geckoterminal_requests_per_minute') * 60,
         ];
     }

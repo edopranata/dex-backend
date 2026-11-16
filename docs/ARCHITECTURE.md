@@ -21,7 +21,7 @@ CoinGecko, RSS, AI provider, Telegram
 |---|---|---|
 | `market:prices` | Tiap 15 detik | Harga DEX Screener, pelacakan order dan sinyal |
 | `market:candles`, `market:whales` | Menit 0, 15, 30, 45 | Candle 15 menit (1h, 4h, 1d dibangun darinya) untuk token di Market dan acuan pasar (BTC lewat cbBTC di Base, SOL, WETH; `config/market.php` → `benchmarks`), dan transaksi whale dari GeckoTerminal |
-| `market:candles --out-of-market` | Tiap jam, menit 20 | Candle token yang sudah keluar Market |
+| `market:candles --out-of-market` | Tiap jam, menit 20 | Candle token yang sudah keluar Market: yang punya sinyal atau sinyal bayangan 14 hari terakhir diambil lagi bila datanya lebih lama dari 2 jam (maks 40 per jam); sisanya 10 per jam, yang paling lama duluan |
 | `market:analyze` | Menit 11, 26, 41, 56 | Analisa, rekomendasi, sinyal, dan sinyal bayangan |
 | `market:evaluate` | Menit 7, 22, 37, 52 | Harga 1, 4, dan 24 jam setelah tiap analisa |
 | `market:discover` | Menit 25, 55 | Discovery dan pencatatan sumber |
