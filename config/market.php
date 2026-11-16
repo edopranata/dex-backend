@@ -569,6 +569,12 @@ return [
         'btc_relation_min_hours' => 40,
         'shadow_btc_corr' => [0.3, 0.1],
         'shadow_btc_since' => env('SIGNAL_SHADOW_BTC_SINCE', '2026-11-15 12:00:00'),
+        // Owner's candle confirmation (16 Nov 2026), measured as a shadow from stored 1h candles: the last
+        // closed hour before entry must be a solid green candle (body >= half its range, upper wick <= a
+        // quarter) closing above the previous hour's high, with volume at least this multiple of its 20-hour
+        // average. Computed at report time, so signals since the date below count even before it was built.
+        'shadow_candle_since' => env('SIGNAL_SHADOW_CANDLE_SINCE', '2026-11-07 13:00:00'),
+        'shadow_candle_volume' => 1.5,
         // v4: Buy (bukan Strong Buy) ditahan bila harga sudah naik lebih dari ini dalam 24 jam, atau entry kurang dari
         // sekian persen di bawah puncak 24 jam; di v3 sinyal seperti itu kebanyakan langsung kena stop. Backtest yang
         // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.

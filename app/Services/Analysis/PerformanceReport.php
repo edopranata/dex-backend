@@ -4,6 +4,7 @@ namespace App\Services\Analysis;
 
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
+use App\Models\Candle;
 use App\Models\EquitySnapshot;
 use App\Models\ShadowSignal;
 use App\Models\Signal;
@@ -150,6 +151,9 @@ class PerformanceReport
             fn (Signal $s): ?float => $followsBtc($s, $min) === true && $btcRising($s) === false ? 0.0 : null,
         ))->all();
 
+        $candleSince = Carbon::parse((string) config('market.analysis.shadow_candle_since'), 'UTC');
+        $candles = $entered($candleSince)->mapWithKeys(fn (Signal $s): array => [$s->id => $this->entryCandle($s)]);
+
         return [
             $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?float => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
                 ? $this->exitR($s, (float) $s->downgrade_price, (int) $s->downgrade_tp_hit)
@@ -189,6 +193,49 @@ class PerformanceReport
                 $entered($btcSince),
                 fn (Signal $s): ?float => $followsBtc($s, $btcFollowerCorr) === true && $btcRising($s) === true ? null : 0.0,
             ),
+            $this->variant(
+                'candle_confirmed',
+                'Hanya entry setelah candle 1 jam konfirmasi (body solid, close di atas high sebelumnya)',
+                $candleSince,
+                $entered($candleSince),
+                fn (Signal $s): ?float => ($candles[$s->id]['confirmed'] ?? null) === false ? 0.0 : null,
+            ),
+            $this->variant(
+                'candle_confirmed_volume',
+                'Hanya entry setelah candle 1 jam konfirmasi dengan volume ≥ '.str_replace('.', ',', (string) config('market.analysis.shadow_candle_volume')).'x rata-rata 20 jam',
+                $candleSince,
+                $entered($candleSince),
+                fn (Signal $s): ?float => ($candles[$s->id] ?? null) === null ? null : ($candles[$s->id]['confirmed'] && $candles[$s->id]['volume'] ? null : 0.0),
+            ),
+        ];
+    }
+
+    /**
+     * The owner's confirmation check on the last 1h candle that closed before entry. Null without enough
+     * stored candles (21 hours before entry).
+     *
+     * @return array{confirmed: bool, volume: bool}|null
+     */
+    private function entryCandle(Signal $signal): ?array
+    {
+        $candles = Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h')
+            ->where('open_time', '<=', $signal->entered_at->timestamp - 3600)
+            ->orderByDesc('open_time')->limit(21)->get(['open_time', 'open', 'high', 'low', 'close', 'volume'])->reverse()->values();
+
+        if ($candles->count() < 21) {
+            return null;
+        }
+
+        $last = $candles->last();
+        $previous = $candles[$candles->count() - 2];
+        [$open, $high, $low, $close] = [(float) $last->open, (float) $last->high, (float) $last->low, (float) $last->close];
+        $range = $high - $low;
+        $solid = $range > 0 && $close > $open && ($close - $open) >= 0.5 * $range && ($high - $close) <= 0.25 * $range;
+        $average = $candles->slice(0, 20)->avg(fn (Candle $c): float => (float) $c->volume);
+
+        return [
+            'confirmed' => $solid && $close > (float) $previous->high,
+            'volume' => $average > 0 && (float) $last->volume >= (float) config('market.analysis.shadow_candle_volume') * $average,
         ];
     }
 

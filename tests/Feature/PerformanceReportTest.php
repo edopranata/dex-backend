@@ -3,6 +3,7 @@
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
 use App\Models\Analysis;
+use App\Models\Candle;
 use App\Models\EquitySnapshot;
 use App\Models\Order;
 use App\Models\Position;
@@ -246,7 +247,7 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'candle_confirmed', 'candle_confirmed_volume'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
@@ -302,6 +303,41 @@ test('the BTC shadows skip BTC followers while BTC is not rising, and keep only 
         ->and($variants['btc_follower_up'])->toMatchArray([
             'label' => 'Hanya token yang ikut BTC (korelasi ≥ 0,3) saat tren 4 jam BTC naik',
             'affected' => 4, 'shadow_r' => 1.5,
+        ]);
+});
+
+test('the candle shadows keep only entries after a confirmation candle, with and without the volume rule', function () {
+    config(['market.analysis.shadow_candle_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_candle_volume' => 1.5]);
+    $hour = strtotime('2026-11-10 11:00:00');
+    // 20 quiet hours, then the last closed hour (11:00-12:00) as given.
+    $signal = function (?array $last, float $netR, string $enteredAt = '2026-11-10 12:05:00') use ($hour): void {
+        $token = Token::factory()->create();
+        if ($last !== null) {
+            foreach (range(20, 1) as $back) {
+                Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour - $back * 3600,
+                    'open' => 1, 'high' => 1.01, 'low' => 0.99, 'close' => 1, 'volume' => 100]);
+            }
+            Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour, ...$last]);
+        }
+        reportSignal($token, $netR, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => $enteredAt]);
+    };
+
+    $signal(['open' => 1, 'high' => 1.06, 'low' => 0.995, 'close' => 1.05, 'volume' => 200], 2.0);   // solid, above previous high, volume 2x: kept by both
+    $signal(['open' => 1, 'high' => 1.06, 'low' => 0.995, 'close' => 1.05, 'volume' => 120], -1.0);  // confirmed, volume too low: skipped only with volume
+    $signal(['open' => 1, 'high' => 1.06, 'low' => 0.99, 'close' => 1.005, 'volume' => 300], -1.0); // long upper wick: skipped by both
+    $signal(['open' => 1.0, 'high' => 1.009, 'low' => 0.999, 'close' => 1.008, 'volume' => 300], 1.0); // solid but below previous high: skipped by both
+    $signal(null, 0.5);                                                                                 // no candles: kept by both
+    $signal(['open' => 1, 'high' => 1.06, 'low' => 0.995, 'close' => 1.05, 'volume' => 200], -1.0, '2026-11-05 12:05:00'); // before the shadow: left out
+
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
+
+    expect($variants['candle_confirmed'])->toMatchArray([
+        'label' => 'Hanya entry setelah candle 1 jam konfirmasi (body solid, close di atas high sebelumnya)',
+        'signals' => 5, 'affected' => 2, 'actual_r' => 1.5, 'shadow_r' => 1.5,
+    ])
+        ->and($variants['candle_confirmed_volume'])->toMatchArray([
+            'label' => 'Hanya entry setelah candle 1 jam konfirmasi dengan volume ≥ 1,5x rata-rata 20 jam',
+            'affected' => 3, 'shadow_r' => 2.5,
         ]);
 });
 
