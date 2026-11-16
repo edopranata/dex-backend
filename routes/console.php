@@ -20,18 +20,22 @@ Schedule::command('market:snapshots')->hourly();
 // 1d are built from it (8 Nov), so a cycle is about 20 candle + 20 whale requests instead of 60, plus the
 // separate 4h and 1d runs that are no longer needed.
 Schedule::command('market:candles')->cron('0,15,30,45 * * * *')->withoutOverlapping();
-// Tokens that left the Market keep their 15m data, in turns at a minute the queue is usually empty.
-Schedule::command('market:candles --out-of-market')->hourlyAt(20)->withoutOverlapping();
+// Tokens that left the Market keep their 15m data, in four small turns an hour (16 Nov 2026): each lands in the gap
+// after a Market cycle (about 43 GeckoTerminal requests, done by about 8.5 minutes past the quarter) instead of one
+// turn at :20 that piled onto the :15 and :30 cycles. Keeps :27-:29 and :57-:59 free for deploys.
+Schedule::command('market:candles --out-of-market')->cron('9,24,39,54 * * * *')->withoutOverlapping();
 
 Schedule::command('market:whales')->cron('0,15,30,45 * * * *')->withoutOverlapping();
 
 Schedule::command('market:news')->hourlyAt(10)->withoutOverlapping();
 
 Schedule::command('market:security')->everySixHours(15)->withoutOverlapping();
-// Holder data of tokens that left the Market, once a day away from the Market run and discovery (:25, :55).
+// Holder data of tokens that left the Market, once a day away from the Market run and discovery (:12, :42).
 Schedule::command('market:security --out-of-market')->dailyAt('03:35')->withoutOverlapping();
 
-Schedule::command('market:discover')->cron('25,55 * * * *')->withoutOverlapping();
+// In the gap after the :00 and :30 cycles and the turn above (16 Nov 2026; was :25 and :55, where it waited
+// behind the queue up to 8 minutes).
+Schedule::command('market:discover')->cron('12,42 * * * *')->withoutOverlapping();
 
 // v6 comparison: shadow signals followed on stored 15m candles; no API requests.
 Schedule::command('market:shadow-signals')->hourlyAt(50)->withoutOverlapping();

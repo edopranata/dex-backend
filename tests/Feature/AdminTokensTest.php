@@ -68,7 +68,7 @@ test('the token list shows every token that has been in the Market, with its sto
 });
 
 test('tokens out of the Market get their 15m candles in turns, the oldest first', function () {
-    config(['market.candles.out_of_market_per_hour' => 2]);
+    config(['market.candles.out_of_market_per_hour' => 2, 'market.candles.out_of_market_runs_per_hour' => 1]);
     Queue::fake();
     $fresh = everInMarketToken(leftDaysAgo: 3);
     $stale = everInMarketToken(leftDaysAgo: 5);
@@ -90,7 +90,7 @@ test('tokens out of the Market get their 15m candles in turns, the oldest first'
 });
 
 test('tokens out of the Market with a recent signal get their own turn every few hours, before the others', function () {
-    config(['market.candles.out_of_market_per_hour' => 1, 'market.candles.recent_signal_days' => 14, 'market.candles.recent_refresh_hours' => 2, 'market.candles.recent_per_hour' => 40]);
+    config(['market.candles.out_of_market_per_hour' => 1, 'market.candles.out_of_market_runs_per_hour' => 1, 'market.candles.recent_signal_days' => 14, 'market.candles.recent_refresh_hours' => 2, 'market.candles.recent_per_hour' => 40]);
     Queue::fake();
     $signal = fn (Token $token, int $daysAgo) => Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['created_at' => now()->subDays($daysAgo)]));
     $recentStale = everInMarketToken(leftDaysAgo: 3);
@@ -122,6 +122,18 @@ test('tokens out of the Market with a recent signal get their own turn every few
 
     expect($rows[$recentStale->id]['fetch'])->toBe('recent')
         ->and($rows[$oldSignal->id]['fetch'])->toBe('rotation');
+});
+
+test('each of the four out-of-Market runs takes a quarter of the hourly limits, rounded up', function () {
+    config(['market.candles.out_of_market_per_hour' => 10, 'market.candles.out_of_market_runs_per_hour' => 4]);
+    Queue::fake();
+    foreach (range(1, 6) as $i) {
+        everInMarketToken(leftDaysAgo: 3 + $i);
+    }
+
+    $this->artisan('market:candles', ['--out-of-market' => true])->assertSuccessful();
+
+    Queue::assertPushed(SyncTokenCandles::class, 3);
 });
 
 test('an admin can fetch 1,000 15m candles for a token whose data is older than the backfill reaches', function () {

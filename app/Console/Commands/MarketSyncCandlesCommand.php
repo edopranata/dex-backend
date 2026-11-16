@@ -42,7 +42,8 @@ class MarketSyncCandlesCommand extends Command
     }
 
     /**
-     * The Market's tokens with the market benchmarks, or this hour's turn of the tokens that left it: first those
+     * The Market's tokens with the market benchmarks, or this run's share of the hourly turn of the tokens that left
+     * it (the hourly limits split over out_of_market_runs_per_hour runs): first those
      * with a recent signal whose 15m candles are older than recent_refresh_hours, then the others whose 15m
      * candles are oldest.
      *
@@ -61,17 +62,19 @@ class MarketSyncCandlesCommand extends Command
             ->orderByRaw('latest_15m is null desc')
             ->orderBy('latest_15m');
 
+        $runs = max(1, (int) config('market.candles.out_of_market_runs_per_hour'));
+        $perRun = fn (string $key): int => (int) ceil((int) config("market.candles.{$key}") / $runs);
         $recentIds = $outOfMarket()->withRecentSignal()->pluck('id');
         $fresh = now()->subHours((int) config('market.candles.recent_refresh_hours'))->getTimestamp();
         $recent = $outOfMarket()
             ->whereIn('id', $recentIds)
             ->whereDoesntHave('candles', fn ($candles) => $candles->where('timeframe', '15m')->where('open_time', '>=', $fresh))
-            ->limit((int) config('market.candles.recent_per_hour'))
+            ->limit($perRun('recent_per_hour'))
             ->get();
 
         return $recent->merge($outOfMarket()
             ->whereNotIn('id', $recentIds)
-            ->limit((int) config('market.candles.out_of_market_per_hour'))
+            ->limit($perRun('out_of_market_per_hour'))
             ->get());
     }
 }

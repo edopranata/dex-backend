@@ -21,10 +21,11 @@ CoinGecko, RSS, AI provider, Telegram
 |---|---|---|
 | `market:prices` | Tiap 15 detik | Harga DEX Screener, pelacakan order dan sinyal |
 | `market:candles`, `market:whales` | Menit 0, 15, 30, 45 | Candle 15 menit (1h, 4h, 1d dibangun darinya) untuk token di Market dan acuan pasar (BTC lewat cbBTC di Base, SOL, WETH; `config/market.php` → `benchmarks`), dan transaksi whale dari GeckoTerminal |
-| `market:candles --out-of-market` | Tiap jam, menit 20 | Candle token yang sudah keluar Market: yang punya sinyal atau sinyal bayangan 14 hari terakhir diambil lagi bila datanya lebih lama dari 2 jam (maks 40 per jam); sisanya 10 per jam, yang paling lama duluan |
+| `market:candles --out-of-market` | Menit 9, 24, 39, 54 (seperempat jatah per putaran) | Candle token yang sudah keluar Market: yang punya sinyal atau sinyal bayangan 14 hari terakhir diambil lagi bila datanya lebih lama dari 2 jam (maks 40 per jam); sisanya 10 per jam, yang paling lama duluan |
 | `market:analyze` | Menit 11, 26, 41, 56 | Analisa, rekomendasi, sinyal, dan sinyal bayangan |
 | `market:evaluate` | Menit 7, 22, 37, 52 | Harga 1, 4, dan 24 jam setelah tiap analisa |
-| `market:discover` | Menit 25, 55 | Discovery dan pencatatan sumber |
+| `market:discover` | Menit 12, 42 | Discovery dan pencatatan sumber |
+| `app:deploy-window` | Dipanggil `deploy.sh` sebelum build | Menunggu antrean `market-data` kosong, tidak ada task admin, dan tidak ada jadwal dalam 90 detik (maks 10 menit, lalu deploy tetap lanjut). Jendela yang selalu kosong: menit 27-29 dan 57-59 |
 | `market:watchlist` | Tiap jam, menit 40 | Market otomatis: keluarkan atau ganti token |
 | `market:shadow-signals` | Tiap jam, menit 50 | Hasil sinyal bayangan dari candle tersimpan |
 | `market:news` | Tiap jam, menit 10 | Berita dan sentimen |

@@ -67,6 +67,10 @@ main() {
     fi
 
     cd "$backend"
+    # Wait for a quiet moment first (16 Nov 2026): the market-data queue empty, no admin task running, no schedule
+    # due within 90 s, at most 10 minutes. Runs in the current app container; a deploy that adds the command, or a
+    # stack that is down, skips the wait. Never blocks the deploy.
+    docker compose exec -T app php artisan app:deploy-window --wait=600 </dev/null || echo "Menunggu celah dilewati." >&2
     step "Build image" docker compose build
     step "Database & Redis" docker compose up -d --wait mysql redis
     step "Migrasi" docker compose up --no-deps --exit-code-from migrate migrate
