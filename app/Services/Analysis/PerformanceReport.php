@@ -131,21 +131,26 @@ class PerformanceReport
     }
 
     /**
-     * Whether more than the configured share of the candles of this timeframe between the two times is missing.
+     * Whether the price jumped across a missing candle of this timeframe between the two times. A period without trades
+     * is missing too, but then the next candle opens at the close before it: nothing was hidden.
      */
     private function gappy(int $tokenId, string $timeframe, int $from, int $to): bool
     {
         $seconds = $timeframe === '15m' ? 900 : 3600;
         $first = intdiv($from, $seconds) * $seconds;
-        $expected = intdiv(max(0, $to - $first), $seconds);
+        $jump = (float) config('market.analysis.shadow_gap_jump');
+        $query = fn () => Candle::query()->where('token_id', $tokenId)->where('timeframe', $timeframe);
+        $previous = $query()->where('open_time', '<', $first)->orderByDesc('open_time')->first(['open_time', 'close']);
 
-        if ($expected <= 0) {
-            return false;
+        foreach ($query()->where('open_time', '>=', $first)->where('open_time', '<', $to)->orderBy('open_time')->get(['open_time', 'open', 'close']) as $candle) {
+            if ($previous !== null && $candle->open_time - $previous->open_time > $seconds && (float) $previous->close > 0
+                && abs((float) $candle->open / (float) $previous->close - 1) > $jump) {
+                return true;
+            }
+            $previous = $candle;
         }
 
-        $stored = Candle::query()->where('token_id', $tokenId)->where('timeframe', $timeframe)->where('open_time', '>=', $first)->where('open_time', '<', $to)->count();
-
-        return $stored < $expected * (1 - (float) config('market.analysis.shadow_gap_share'));
+        return false;
     }
 
     /**
@@ -302,31 +307,42 @@ class PerformanceReport
     }
 
     /**
-     * The owner's confirmation check on the last 1h candle that closed before entry. Null without 21 stored candles
-     * in a row before entry: with a gap the previous high and the volume average would come from the wrong hours.
+     * The owner's confirmation check on the last 1h candle that closed before entry, over the 21 hours before entry.
+     * An hour without trades has no stored candle; it counts as a flat candle at the previous close with no volume
+     * (17 Nov 2026), so "the previous hour" and the volume average stay right on thin pools. Null without a stored
+     * candle before those hours.
      *
      * @return array{confirmed: bool, volume: bool}|null
      */
     private function entryCandle(Signal $signal): ?array
     {
-        $candles = Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h')
-            ->where('open_time', '<=', $signal->entered_at->timestamp - 3600)
-            ->orderByDesc('open_time')->limit(21)->get(['open_time', 'open', 'high', 'low', 'close', 'volume'])->reverse()->values();
+        $lastHour = intdiv($signal->entered_at->timestamp - 3600, 3600) * 3600;
+        $firstHour = $lastHour - 20 * 3600;
+        $query = fn () => Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h');
+        $before = $query()->where('open_time', '<', $firstHour)->orderByDesc('open_time')->first(['close']);
+        $stored = $query()->whereBetween('open_time', [$firstHour, $lastHour])->get(['open_time', 'open', 'high', 'low', 'close', 'volume'])->keyBy('open_time');
+        $close = $before !== null ? (float) $before->close : null;
+        $hours = [];
 
-        if ($candles->count() < 21 || $candles->last()->open_time - $candles->first()->open_time !== 20 * 3600) {
-            return null;
+        for ($hour = $firstHour; $hour <= $lastHour; $hour += 3600) {
+            $candle = $stored->get($hour);
+            if ($candle === null && $close === null) {
+                return null;   // no price yet to carry forward
+            }
+            $hours[] = $candle !== null
+                ? [(float) $candle->open, (float) $candle->high, (float) $candle->low, (float) $candle->close, (float) $candle->volume]
+                : [$close, $close, $close, $close, 0.0];
+            $close = $hours[count($hours) - 1][3];
         }
 
-        $last = $candles->last();
-        $previous = $candles[$candles->count() - 2];
-        [$open, $high, $low, $close] = [(float) $last->open, (float) $last->high, (float) $last->low, (float) $last->close];
+        [$open, $high, $low, $close, $volume] = $hours[20];
         $range = $high - $low;
         $solid = $range > 0 && $close > $open && ($close - $open) >= 0.5 * $range && ($high - $close) <= 0.25 * $range;
-        $average = $candles->slice(0, 20)->avg(fn (Candle $c): float => (float) $c->volume);
+        $average = array_sum(array_column(array_slice($hours, 0, 20), 4)) / 20;
 
         return [
-            'confirmed' => $solid && $close > (float) $previous->high,
-            'volume' => $average > 0 && (float) $last->volume >= (float) config('market.analysis.shadow_candle_volume') * $average,
+            'confirmed' => $solid && $close > $hours[19][1],
+            'volume' => $average > 0 && $volume >= (float) config('market.analysis.shadow_candle_volume') * $average,
         ];
     }
 

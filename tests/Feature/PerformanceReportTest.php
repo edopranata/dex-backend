@@ -373,8 +373,8 @@ test('the chandelier shadow trails 3x the 4h ATR under the highest high since en
     ]);
 });
 
-test('the chandelier shadow stops after 30 days and marks signals with missing hours', function () {
-    config(['market.analysis.shadow_atr_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_atr_max_days' => 30]);
+test('the chandelier shadow stops after 30 days and marks signals whose price jumped across missing hours', function () {
+    config(['market.analysis.shadow_atr_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_atr_max_days' => 30, 'market.analysis.shadow_gap_jump' => 0.02]);
     $this->travelTo('2026-12-20 00:00:00');
     $start = strtotime('2026-11-10 13:00:00');
     $token = Token::factory()->create();
@@ -386,52 +386,80 @@ test('the chandelier shadow stops after 30 days and marks signals with missing h
     }
     reportSignal($token, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
 
-    $sparse = Token::factory()->create();   // one candle in 30 days: valued at it, and marked
-    Candle::query()->create(['token_id' => $sparse->id, 'timeframe' => '1h', 'open_time' => $start, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
-    reportSignal($sparse, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+    // Quiet hours without trades (no candles, same price after): not marked.
+    $quiet = Token::factory()->create();
+    foreach ([0, 5 * 24] as $hour) {
+        Candle::query()->create(['token_id' => $quiet->id, 'timeframe' => '1h', 'open_time' => $start + $hour * 3600, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+    }
+    reportSignal($quiet, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+
+    // Ten days missing and the price 30% higher after them: data probably missing, marked.
+    $jump = Token::factory()->create();
+    Candle::query()->create(['token_id' => $jump->id, 'timeframe' => '1h', 'open_time' => $start, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+    Candle::query()->create(['token_id' => $jump->id, 'timeframe' => '1h', 'open_time' => $start + 10 * 86400, 'open' => 1.3, 'high' => 1.3, 'low' => 1.3, 'close' => 1.3, 'volume' => 1]);
+    reportSignal($jump, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
 
     $atr = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'atr_trail_4h');
 
-    // (1.1 - 1) / 0.1 = 1R less 0.1R costs, and (1 - 1) / 0.1 = 0R less 0.1R.
-    expect($atr)->toMatchArray(['signals' => 2, 'affected' => 2, 'shadow_r' => 0.8, 'gaps' => 1]);
+    // 1R less 0.1R costs, 0R less 0.1R, and 3R less 0.1R.
+    expect($atr)->toMatchArray(['signals' => 3, 'affected' => 3, 'shadow_r' => 3.7, 'gaps' => 1]);
 });
 
-test('a confirmation candle after a gap in the hours before entry is not judged', function () {
-    config(['market.analysis.shadow_candle_since' => '2026-11-07 13:00:00']);
+test('an hour without trades before entry counts as a flat candle with no volume', function () {
+    config(['market.analysis.shadow_candle_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_candle_volume' => 1.5]);
     $hour = strtotime('2026-11-10 11:00:00');
-    $token = Token::factory()->create();
-    foreach (range(21, 2) as $back) {   // 20 quiet hours, then 10:00 missing
-        Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour - $back * 3600,
-            'open' => 1, 'high' => 1.01, 'low' => 0.99, 'close' => 1, 'volume' => 100]);
-    }
-    Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour, 'open' => 1, 'high' => 1.06, 'low' => 0.99, 'close' => 1.005, 'volume' => 300]);
-    reportSignal($token, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+    $signal = function (array $missing, ?array $last) use ($hour): void {
+        $token = Token::factory()->create();
+        foreach (range(21, 1) as $back) {
+            if (! in_array($back, $missing, true)) {
+                Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour - $back * 3600,
+                    'open' => 1, 'high' => 1.01, 'low' => 0.99, 'close' => 1, 'volume' => 100]);
+            }
+        }
+        if ($last !== null) {
+            Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour, ...$last]);
+        }
+        reportSignal($token, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+    };
+
+    // 10:00 had no trades: the previous high is the flat 1.00, so 1.005 closes above it; volume 300 against 95.
+    $signal([1], ['open' => 0.999, 'high' => 1.006, 'low' => 0.999, 'close' => 1.005, 'volume' => 300]);
+    // The hour before entry had no trades: no confirmation.
+    $signal([], null);
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants['candle_confirmed'])->toMatchArray(['signals' => 1, 'affected' => 0, 'gaps' => 1])
-        ->and($variants['candle_confirmed_volume'])->toMatchArray(['affected' => 0, 'gaps' => 1]);
+    expect($variants['candle_confirmed'])->toMatchArray(['signals' => 2, 'affected' => 1, 'gaps' => 0])
+        ->and($variants['candle_confirmed_volume'])->toMatchArray(['affected' => 1, 'gaps' => 0]);
 });
 
-test('shadow groups count the trades followed on incomplete candles apart', function () {
+test('shadow groups count apart the trades whose price jumped across missing candles', function () {
+    config(['market.analysis.shadow_gap_jump' => 0.02]);
     $entered = strtotime('2026-11-10 12:00:00');
-    $shadow = function (int $candles, float $netR) use ($entered): void {
+    $shadow = function (array $missing, float $after, float $netR) use ($entered): void {
         $token = Token::factory()->create();
         $analysis = Analysis::factory()->for($token)->create();
-        foreach (range(0, $candles - 1) as $n) {
-            Candle::query()->create(['token_id' => $token->id, 'timeframe' => '15m', 'open_time' => $entered + $n * 900, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+        $price = 1.0;
+        foreach (range(0, 39) as $n) {
+            if (in_array($n, $missing, true)) {
+                $price = $after;
+
+                continue;
+            }
+            Candle::query()->create(['token_id' => $token->id, 'timeframe' => '15m', 'open_time' => $entered + $n * 900, 'open' => $price, 'high' => $price, 'low' => $price, 'close' => $price, 'volume' => 1]);
         }
         ShadowSignal::query()->create(['token_id' => $token->id, 'analysis_id' => $analysis->id, 'rule' => 'accepted', 'recommendation' => 'STRONG_BUY',
             'strategy_version' => 'v6-test', 'metric' => 10, 'entry_low' => 0.99, 'entry_high' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15,
             'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'status' => 'stop_loss', 'net_r' => $netR,
             'entered_at' => date('Y-m-d H:i:s', $entered), 'closed_at' => date('Y-m-d H:i:s', $entered + 10 * 3600)]);
     };
-    $shadow(40, -1.0);   // all 40 quarter hours
-    $shadow(30, -1.2);   // a quarter missing
+    $shadow([], 1.0, -1.0);                    // complete
+    $shadow(range(10, 19), 1.0, -1.1);         // ten quarter hours without trades: same price after
+    $shadow(range(10, 19), 0.85, -1.2);        // price 15% lower after the missing ones
 
     $row = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('holder_filter'))->firstWhere('rule', 'accepted');
 
-    expect($row)->toMatchArray(['trades' => 2, 'total_r' => -2.2, 'gaps' => 1, 'gap_r' => -1.2]);
+    expect($row)->toMatchArray(['trades' => 3, 'total_r' => -3.3, 'gaps' => 1, 'gap_r' => -1.2]);
 });
 
 test('buy shadows are reported apart, split by the BTC 4h trend when they were analyzed', function () {

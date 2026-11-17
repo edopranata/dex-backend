@@ -590,9 +590,11 @@ return [
         'shadow_atr_since' => env('SIGNAL_SHADOW_ATR_SINCE', '2026-11-07 13:00:00'),
         'shadow_atr_multiplier' => 3.0,
         'shadow_atr_max_days' => 30,
-        // A candle-based shadow is marked as gappy when more than this share of its candles is missing (17 Nov 2026
-        // audit: 6 of 81 signals and 6 of 47 entered shadows). Shown beside the result, not left out of it.
-        'shadow_gap_share' => 0.1,
+        // GeckoTerminal leaves out periods without trades, and the price of a pool only moves on a trade, so a missing
+        // candle usually means nothing happened (17 Nov 2026: 236 of 291 gaps around signals open at the close before
+        // them). A candle-based shadow is marked as gappy only when the price jumped across a gap by more than this
+        // share: data that may really be missing. Shown beside the result, not left out of it.
+        'shadow_gap_jump' => 0.02,
         // v4: Buy (bukan Strong Buy) ditahan bila harga sudah naik lebih dari ini dalam 24 jam, atau entry kurang dari
         // sekian persen di bawah puncak 24 jam; di v3 sinyal seperti itu kebanyakan langsung kena stop. Backtest yang
         // hanya memakai masa token di Market (4 Nov): keduanya +0,11R PF 1,26, v3 -0,24R PF 0,62. Null = nonaktif.
