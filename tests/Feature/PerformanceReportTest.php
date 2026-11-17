@@ -368,9 +368,70 @@ test('the chandelier shadow trails 3x the 4h ATR under the highest high since en
     $atr = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'atr_trail_4h');
 
     expect($atr)->toMatchArray([
-        'label' => 'Tanpa target: trailing stop 3x ATR candle 4 jam sejak entry',
+        'label' => 'Tanpa target: trailing stop 3x ATR candle 4 jam sejak entry, paling lama 30 hari',
         'signals' => 3, 'affected' => 2, 'actual_r' => 0.5, 'shadow_r' => 1.7,
     ]);
+});
+
+test('the chandelier shadow stops after 30 days and marks signals with missing hours', function () {
+    config(['market.analysis.shadow_atr_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_atr_max_days' => 30]);
+    $this->travelTo('2026-12-20 00:00:00');
+    $start = strtotime('2026-11-10 13:00:00');
+    $token = Token::factory()->create();
+    // Every hour for 31 days at 1.10, then a crash on day 31 that a 30-day limit no longer sees.
+    foreach (range(0, 31 * 24) as $hour) {
+        $crash = $hour === 31 * 24;
+        Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $start + $hour * 3600,
+            'open' => 1.1, 'high' => 1.1, 'low' => $crash ? 0.5 : 1.1, 'close' => $crash ? 0.5 : 1.1, 'volume' => 1]);
+    }
+    reportSignal($token, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+
+    $sparse = Token::factory()->create();   // one candle in 30 days: valued at it, and marked
+    Candle::query()->create(['token_id' => $sparse->id, 'timeframe' => '1h', 'open_time' => $start, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+    reportSignal($sparse, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+
+    $atr = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'atr_trail_4h');
+
+    // (1.1 - 1) / 0.1 = 1R less 0.1R costs, and (1 - 1) / 0.1 = 0R less 0.1R.
+    expect($atr)->toMatchArray(['signals' => 2, 'affected' => 2, 'shadow_r' => 0.8, 'gaps' => 1]);
+});
+
+test('a confirmation candle after a gap in the hours before entry is not judged', function () {
+    config(['market.analysis.shadow_candle_since' => '2026-11-07 13:00:00']);
+    $hour = strtotime('2026-11-10 11:00:00');
+    $token = Token::factory()->create();
+    foreach (range(21, 2) as $back) {   // 20 quiet hours, then 10:00 missing
+        Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour - $back * 3600,
+            'open' => 1, 'high' => 1.01, 'low' => 0.99, 'close' => 1, 'volume' => 100]);
+    }
+    Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $hour, 'open' => 1, 'high' => 1.06, 'low' => 0.99, 'close' => 1.005, 'volume' => 300]);
+    reportSignal($token, -1.0, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
+
+    expect($variants['candle_confirmed'])->toMatchArray(['signals' => 1, 'affected' => 0, 'gaps' => 1])
+        ->and($variants['candle_confirmed_volume'])->toMatchArray(['affected' => 0, 'gaps' => 1]);
+});
+
+test('shadow groups count the trades followed on incomplete candles apart', function () {
+    $entered = strtotime('2026-11-10 12:00:00');
+    $shadow = function (int $candles, float $netR) use ($entered): void {
+        $token = Token::factory()->create();
+        $analysis = Analysis::factory()->for($token)->create();
+        foreach (range(0, $candles - 1) as $n) {
+            Candle::query()->create(['token_id' => $token->id, 'timeframe' => '15m', 'open_time' => $entered + $n * 900, 'open' => 1, 'high' => 1, 'low' => 1, 'close' => 1, 'volume' => 1]);
+        }
+        ShadowSignal::query()->create(['token_id' => $token->id, 'analysis_id' => $analysis->id, 'rule' => 'accepted', 'recommendation' => 'STRONG_BUY',
+            'strategy_version' => 'v6-test', 'metric' => 10, 'entry_low' => 0.99, 'entry_high' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15,
+            'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'status' => 'stop_loss', 'net_r' => $netR,
+            'entered_at' => date('Y-m-d H:i:s', $entered), 'closed_at' => date('Y-m-d H:i:s', $entered + 10 * 3600)]);
+    };
+    $shadow(40, -1.0);   // all 40 quarter hours
+    $shadow(30, -1.2);   // a quarter missing
+
+    $row = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('holder_filter'))->firstWhere('rule', 'accepted');
+
+    expect($row)->toMatchArray(['trades' => 2, 'total_r' => -2.2, 'gaps' => 1, 'gap_r' => -1.2]);
 });
 
 test('buy shadows are reported apart, split by the BTC 4h trend when they were analyzed', function () {

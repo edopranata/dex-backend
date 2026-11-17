@@ -1,6 +1,6 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 15 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 17 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
@@ -26,7 +26,7 @@ Terakhir diperbarui: 15 November 2026. Perbarui file ini di commit yang sama set
 | Strong Buy yang ditahan aturan holder, dibanding sinyal asli (`shadow_signals`) | 12 Nov sekitar 14.00 WIB | Bersama review v6 | Laporan → Uji aturan holder v6 |
 | Exit first_check, dua kali tidak Buy, entry terkonfirmasi | 7 Nov | Bersama review v6 | Laporan → Catatan bayangan |
 | Konfirmasi candle 1 jam (body solid, close di atas high sebelumnya), dengan dan tanpa volume ≥ 1,5x rata-rata 20 jam | 16 Nov (dihitung sejak 7 Nov dari candle tersimpan) | Bersama review v6, lalu diuji ulang saat pasar naik | Laporan → Catatan bayangan |
-| Exit trailing ATR 3x candle 4 jam sejak entry, tanpa target | 16 Nov (dihitung sejak 7 Nov dari candle tersimpan) | Bersama review v6 | Laporan → Catatan bayangan |
+| Exit trailing ATR 3x candle 4 jam sejak entry, tanpa target, paling lama 30 hari (batas sejak 17 Nov) | 16 Nov (dihitung sejak 7 Nov dari candle tersimpan) | Bersama review v6 | Laporan → Catatan bayangan |
 | Candle token bersinyal di luar Market tiap 2 jam (sebelumnya ±9 jam), supaya bayangan setelah sinyal tidak tertinggal | 16 Nov | Pantau beban di Admin → Token | Admin → Token |
 | Jadwal antrean diratakan (token keluar :09/:24/:39/:54, discover :12/:42) dan deploy menunggu celah sepi | 16 Nov | Diukur 16 Nov 12.09-13.02 WIB: puncak 43 job (hanya siklus utama, sebelumnya 63), tunggu candle median 76 dtk maks 4,2 mnt (sebelumnya 4,2 / 12,4 mnt), discover menunggu 2 dtk (sebelumnya 7,6 mnt); menit 27-29 dan 57-59 kosong | Horizon, `app:deploy-window` |
 | Lewati pair berumur di bawah 14 hari (dari studi dump Sue, `dex/review/hasil-13nov-dump.md`) | 13 Nov 23.00 WIB | Bersama review v6 | Laporan → Catatan bayangan |
@@ -43,7 +43,8 @@ Terakhir diperbarui: 15 November 2026. Perbarui file ini di commit yang sama set
 
 ## Langkah berikutnya
 
-1. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan.
+1. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan. Kolom "Data bercelah" di Laporan (sejak 17 Nov) menandai baris berbasis candle yang datanya kurang lengkap; nilai bersama atau tanpa baris itu.
+2. Setelah review v6 (disetujui pemilik 17 Nov): ukuran posisi auto-follow memasukkan biaya pulang-pergi. Audit 17 Nov: rugi nyata saat kena stop median 1,10x risiko rencana 0,5%, terburuk 2,95x.
 
 ## Menunggu
 

@@ -135,6 +135,7 @@ Tujuan: server siap memegang private key wallet trading.
 - [ ] **Log audit**: login, perubahan pengaturan, setiap order (siapa, kapan, apa), serta keputusan sistem (kenapa sinyal ditolak, kenapa token diganti). Mencakup semua pengguna dan akun sistem auto-follow, tidak bisa diubah atau dihapus, dan **hanya admin yang bisa melihat**. Bukti harga tiap order terisi sudah berjalan sejak 1 Nov 2026 (`order_fill_evidence`)
 - [ ] Batasi sesi: logout otomatis, satu perangkat admin
 - [ ] Review keamanan kode (endpoint admin, validasi, rahasia di log)
+- [ ] Setelah review v6: ukuran posisi auto-follow dihitung dari jarak stop ditambah biaya pulang-pergi (fee dan price impact), supaya rugi saat stop sama dengan risiko rencana (audit 17 Nov 2026: median 1,10x, terburuk 2,95x; disetujui pemilik)
 
 **Kriteria lolos:** semua item tercentang; akses hanya lewat HTTPS; restore backup berhasil diuji.
 

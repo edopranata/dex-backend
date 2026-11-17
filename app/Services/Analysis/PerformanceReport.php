@@ -86,13 +86,13 @@ class PerformanceReport
      * Shadow signals followed on 15m candles by one method: the v6 holder rule against the real signals, and the Buys
      * that no longer trade, split by the BTC 4h trend when they were analyzed.
      *
-     * @return list<array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null}>
+     * @return list<array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null, gaps: int, gap_r: float}>
      */
     private function holderFilter(): array
     {
         $rows = collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS])
-            ->map(fn (string $rule): array => $this->shadowRow($rule, ShadowSignal::query()->where('rule', $rule)->get(['status', 'net_r'])));
-        $buys = ShadowSignal::query()->where('rule', ShadowSignal::BUY_WATCH)->with('analysis:id,market_context')->get(['id', 'analysis_id', 'status', 'net_r']);
+            ->map(fn (string $rule): array => $this->shadowRow($rule, ShadowSignal::query()->where('rule', $rule)->get(['token_id', 'status', 'net_r', 'entered_at', 'closed_at'])));
+        $buys = ShadowSignal::query()->where('rule', ShadowSignal::BUY_WATCH)->with('analysis:id,market_context')->get(['id', 'token_id', 'analysis_id', 'status', 'net_r', 'entered_at', 'closed_at']);
 
         if ($buys->isEmpty()) {
             return $rows->all();
@@ -104,12 +104,16 @@ class PerformanceReport
     }
 
     /**
+     * Gappy trades (too many missing 15m candles while followed) are counted apart, so their share can be judged.
+     *
      * @param  Collection<int, ShadowSignal>  $shadows
-     * @return array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null}
+     * @return array{rule: string, recorded: int, open: int, overlap: int, not_entered: int, trades: int, wins: int, total_r: float, avg_r: float|null, gaps: int, gap_r: float}
      */
     private function shadowRow(string $rule, Collection $shadows): array
     {
         $traded = $shadows->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r !== null);
+        $gappy = $traded->filter(fn (ShadowSignal $shadow): bool => $shadow->entered_at !== null && $shadow->closed_at !== null
+            && $this->gappy($shadow->token_id, '15m', $shadow->entered_at->timestamp, $shadow->closed_at->timestamp));
 
         return [
             'rule' => $rule,
@@ -121,7 +125,27 @@ class PerformanceReport
             'wins' => $traded->filter(fn (ShadowSignal $shadow): bool => $shadow->net_r > 0)->count(),
             'total_r' => round((float) $traded->sum('net_r'), 2),
             'avg_r' => $traded->isEmpty() ? null : round((float) $traded->avg('net_r'), 2),
+            'gaps' => $gappy->count(),
+            'gap_r' => round((float) $gappy->sum('net_r'), 2),
         ];
+    }
+
+    /**
+     * Whether more than the configured share of the candles of this timeframe between the two times is missing.
+     */
+    private function gappy(int $tokenId, string $timeframe, int $from, int $to): bool
+    {
+        $seconds = $timeframe === '15m' ? 900 : 3600;
+        $first = intdiv($from, $seconds) * $seconds;
+        $expected = intdiv(max(0, $to - $first), $seconds);
+
+        if ($expected <= 0) {
+            return false;
+        }
+
+        $stored = Candle::query()->where('token_id', $tokenId)->where('timeframe', $timeframe)->where('open_time', '>=', $first)->where('open_time', '<', $to)->count();
+
+        return $stored < $expected * (1 - (float) config('market.analysis.shadow_gap_share'));
     }
 
     /**
@@ -130,7 +154,7 @@ class PerformanceReport
      * takes the real costs; a signal a rule would not have opened counts as 0R.
      *
      * @param  Collection<int, Signal>  $signals
-     * @return list<array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float}>
+     * @return list<array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int}>
      */
     private function shadowExit(Collection $signals): array
     {
@@ -155,6 +179,7 @@ class PerformanceReport
         $candles = $entered($candleSince)->mapWithKeys(fn (Signal $s): array => [$s->id => $this->entryCandle($s)]);
         $atrSince = Carbon::parse((string) config('market.analysis.shadow_atr_since'), 'UTC');
         $atrMultiplier = (float) config('market.analysis.shadow_atr_multiplier');
+        $atrDays = (int) config('market.analysis.shadow_atr_max_days');
 
         return [
             $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?float => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
@@ -201,6 +226,7 @@ class PerformanceReport
                 $candleSince,
                 $entered($candleSince),
                 fn (Signal $s): ?float => ($candles[$s->id]['confirmed'] ?? null) === false ? 0.0 : null,
+                fn (Signal $s): bool => $candles[$s->id] === null,
             ),
             $this->variant(
                 'candle_confirmed_volume',
@@ -208,13 +234,16 @@ class PerformanceReport
                 $candleSince,
                 $entered($candleSince),
                 fn (Signal $s): ?float => ($candles[$s->id] ?? null) === null ? null : ($candles[$s->id]['confirmed'] && $candles[$s->id]['volume'] ? null : 0.0),
+                fn (Signal $s): bool => $candles[$s->id] === null,
             ),
             $this->variant(
                 'atr_trail_4h',
-                'Tanpa target: trailing stop '.str_replace('.', ',', (string) $atrMultiplier).'x ATR candle 4 jam sejak entry',
+                'Tanpa target: trailing stop '.str_replace('.', ',', (string) $atrMultiplier).'x ATR candle 4 jam sejak entry, paling lama '.$atrDays.' hari',
                 $atrSince,
                 $entered($atrSince),
-                fn (Signal $s): ?float => $this->chandelierR($s, $atrMultiplier),
+                fn (Signal $s): ?float => $this->chandelierR($s, $atrMultiplier, $atrDays),
+                fn (Signal $s): bool => $this->gappy($s->token_id, '1h', (int) ceil($s->entered_at->timestamp / 3600) * 3600,
+                    min(now()->timestamp, $s->entered_at->timestamp + $atrDays * 86400)),
             ),
         ];
     }
@@ -222,13 +251,15 @@ class PerformanceReport
     /**
      * Net R under the chandelier exit: the stop starts at the signal's stop and, at each 4h close, rises to the
      * highest high since entry minus the multiple of the 4h ATR(14), never lower. Checked on 1h candles from the
-     * first full hour after entry; still open at the last candle means valued at its close. Null without candles.
+     * first full hour after entry for at most `days`; still open at the last candle means valued at its close.
+     * Null without candles.
      */
-    private function chandelierR(Signal $signal, float $multiplier): ?float
+    private function chandelierR(Signal $signal, float $multiplier, int $days): ?float
     {
         $start = (int) ceil($signal->entered_at->timestamp / 3600) * 3600;
         $hourly = Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h')
-            ->where('open_time', '>=', $start)->orderBy('open_time')->get(['open_time', 'open', 'high', 'low', 'close']);
+            ->where('open_time', '>=', $start)->where('open_time', '<', $signal->entered_at->timestamp + $days * 86400)
+            ->orderBy('open_time')->get(['open_time', 'open', 'high', 'low', 'close']);
 
         if ($hourly->isEmpty()) {
             return null;
@@ -271,8 +302,8 @@ class PerformanceReport
     }
 
     /**
-     * The owner's confirmation check on the last 1h candle that closed before entry. Null without enough
-     * stored candles (21 hours before entry).
+     * The owner's confirmation check on the last 1h candle that closed before entry. Null without 21 stored candles
+     * in a row before entry: with a gap the previous high and the volume average would come from the wrong hours.
      *
      * @return array{confirmed: bool, volume: bool}|null
      */
@@ -282,7 +313,7 @@ class PerformanceReport
             ->where('open_time', '<=', $signal->entered_at->timestamp - 3600)
             ->orderByDesc('open_time')->limit(21)->get(['open_time', 'open', 'high', 'low', 'close', 'volume'])->reverse()->values();
 
-        if ($candles->count() < 21) {
+        if ($candles->count() < 21 || $candles->last()->open_time - $candles->first()->open_time !== 20 * 3600) {
             return null;
         }
 
@@ -302,17 +333,20 @@ class PerformanceReport
     /**
      * @param  Collection<int, Signal>  $observed
      * @param  Closure(Signal): (float|null)  $rule  The R under the rule, or null where the rule changes nothing.
-     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float}
+     * @param  (Closure(Signal): bool)|null  $gappy  Whether the candles the rule reads for this signal are incomplete.
+     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int}
      */
-    private function variant(string $key, string $label, Carbon $since, Collection $observed, Closure $rule): array
+    private function variant(string $key, string $label, Carbon $since, Collection $observed, Closure $rule, ?Closure $gappy = null): array
     {
         $affected = 0;
         $shadow = 0.0;
+        $gaps = 0;
 
         foreach ($observed as $signal) {
             $r = $signal->entry_price > $signal->stop_loss ? $rule($signal) : null;
             $affected += $r === null ? 0 : 1;
             $shadow += $r ?? (float) $signal->net_r;
+            $gaps += $gappy !== null && $gappy($signal) ? 1 : 0;
         }
 
         return [
@@ -323,6 +357,7 @@ class PerformanceReport
             'affected' => $affected,
             'actual_r' => round((float) $observed->sum('net_r'), 2),
             'shadow_r' => round($shadow, 2),
+            'gaps' => $gaps,
         ];
     }
 
