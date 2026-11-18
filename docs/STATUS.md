@@ -6,7 +6,7 @@ Terakhir diperbarui: 18 November 2026. Perbarui file ini di commit yang sama set
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
 - Server: VPSMurah kanaka-vps (3 vCPU, 6 GB) dengan IP dedicated sejak 13 Nov, Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1-2 bulan sekaligus. Detail di `docs/INFRASTRUKTUR.md` repo bersama.
-- Produksi per 15 Nov 16.13 WIB: backend 9697051, frontend 55a34e8 (bayangan Buy dengan Fear & Greed; sebelumnya 16.00 WIB: tanda bot wallet seimbang, whale disimpan 180 hari; 110 dari 3.914 wallet ditandai bot: 101 seimbang, 9 laju). Acuan BTC dan bayangan A/B sejak 14.58 WIB. Diperiksa 15.13 WIB: token cbBTC (id 116) dan candle BTC, SOL, WETH terisi sampai putaran terakhir; konteks pasar dan analisa menyimpan BTC; tanpa failed job dan error.
+- Produksi per 18 Nov 11.59 WIB: backend 11e872a, frontend 26239ac (rincian per sinyal di catatan dan sinyal bayangan dengan BTC dan Fear & Greed saat entry; BTC sebelum 15 Nov dihitung ulang dari candle; bayangan jeda setelah stop 12/24/48 jam). Diperiksa 12.00 WIB: container sehat, laporan v6 1,7 detik, tanpa error log. Sebelumnya 15 Nov: bayangan Buy dengan Fear & Greed dan acuan BTC.
 
 ### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
 
