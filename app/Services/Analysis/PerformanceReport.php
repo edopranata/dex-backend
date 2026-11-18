@@ -4,6 +4,7 @@ namespace App\Services\Analysis;
 
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
+use App\Models\Analysis;
 use App\Models\Candle;
 use App\Models\EquitySnapshot;
 use App\Models\ShadowSignal;
@@ -22,6 +23,15 @@ use Illuminate\Support\Collection;
 class PerformanceReport
 {
     private const MAX_CURVE_POINTS = 300;
+
+    /** Shadow signals per page in the detail list. */
+    public const SHADOW_PAGE = 50;
+
+    /** The groups of the shadow signal table: the v6 holder rule pair, and the Buys split by the BTC 4h trend. */
+    public const SHADOW_GROUPS = [ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, 'buy_btc_rising', 'buy_btc_not_rising'];
+
+    /** @var array<int, array<string, mixed>> The market at entry per signal id, read once per report. */
+    private array $signalMarket = [];
 
     public const MIN_SIGNALS = 30;
 
@@ -159,7 +169,7 @@ class PerformanceReport
      * takes the real costs; a signal a rule would not have opened counts as 0R.
      *
      * @param  Collection<int, Signal>  $signals
-     * @return list<array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int}>
+     * @return list<array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int, rows: list<array<string, mixed>>}>
      */
     private function shadowExit(Collection $signals): array
     {
@@ -187,10 +197,10 @@ class PerformanceReport
         $atrDays = (int) config('market.analysis.shadow_atr_max_days');
 
         return [
-            $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?float => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
-                ? $this->exitR($s, (float) $s->downgrade_price, (int) $s->downgrade_tp_hit)
+            $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?array => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
+                ? $this->exitAt($s, (float) $s->downgrade_price, (int) $s->downgrade_tp_hit, $s->downgraded_at)
                 : null),
-            $this->variant('first_check', 'Keluar bila analisa pertama setelah entry tidak lagi Buy', $since, $entered($since), function (Signal $s): ?float {
+            $this->variant('first_check', 'Keluar bila analisa pertama setelah entry tidak lagi Buy', $since, $entered($since), function (Signal $s): ?array {
                 $first = $s->token->analyses()->where('created_at', '>', $s->entered_at)->where('created_at', '<=', $s->closed_at)->oldest()->first(['recommendation', 'price', 'created_at']);
 
                 if ($first === null || $first->recommendation->isBullish()) {
@@ -199,10 +209,10 @@ class PerformanceReport
 
                 $taken = $s->downgraded_at?->equalTo($first->created_at) ? (int) $s->downgrade_tp_hit : 0;
 
-                return $this->exitR($s, (float) $first->price, $taken);
+                return $this->exitAt($s, (float) $first->price, $taken, $first->created_at);
             }),
-            $this->variant('second_downgrade', 'Keluar setelah dua analisa berturut-turut tidak Buy', $secondSince, $entered($secondSince), fn (Signal $s): ?float => $s->second_downgraded_at !== null && $s->second_downgraded_at->lte($s->closed_at)
-                ? $this->exitR($s, (float) $s->second_downgrade_price, (int) $s->second_downgrade_tp_hit)
+            $this->variant('second_downgrade', 'Keluar setelah dua analisa berturut-turut tidak Buy', $secondSince, $entered($secondSince), fn (Signal $s): ?array => $s->second_downgraded_at !== null && $s->second_downgraded_at->lte($s->closed_at)
+                ? $this->exitAt($s, (float) $s->second_downgrade_price, (int) $s->second_downgrade_tp_hit, $s->second_downgraded_at)
                 : null),
             $this->variant('confirmed_entry', 'Hanya entry yang analisa sebelumnya juga Buy', $since, $entered($since), function (Signal $s): ?float {
                 $previous = $s->token->analyses()->where('id', '<', $s->analysis_id)->latest('id')->first(['recommendation', 'created_at']);
@@ -246,7 +256,7 @@ class PerformanceReport
                 'Tanpa target: trailing stop '.str_replace('.', ',', (string) $atrMultiplier).'x ATR candle 4 jam sejak entry, paling lama '.$atrDays.' hari',
                 $atrSince,
                 $entered($atrSince),
-                fn (Signal $s): ?float => $this->chandelierR($s, $atrMultiplier, $atrDays),
+                fn (Signal $s): ?array => $this->chandelierR($s, $atrMultiplier, $atrDays),
                 fn (Signal $s): bool => $this->gappy($s->token_id, '1h', (int) ceil($s->entered_at->timestamp / 3600) * 3600,
                     min(now()->timestamp, $s->entered_at->timestamp + $atrDays * 86400)),
             ),
@@ -256,10 +266,12 @@ class PerformanceReport
     /**
      * Net R under the chandelier exit: the stop starts at the signal's stop and, at each 4h close, rises to the
      * highest high since entry minus the multiple of the 4h ATR(14), never lower. Checked on 1h candles from the
-     * first full hour after entry for at most `days`; still open at the last candle means valued at its close.
-     * Null without candles.
+     * first full hour after entry for at most `days`; still open at the last candle means valued at its close
+     * (`held`). Null without candles.
+     *
+     * @return array{r: float, at: Carbon, price: float, taken: int, held?: bool}|null
      */
-    private function chandelierR(Signal $signal, float $multiplier, int $days): ?float
+    private function chandelierR(Signal $signal, float $multiplier, int $days): ?array
     {
         $start = (int) ceil($signal->entered_at->timestamp / 3600) * 3600;
         $hourly = Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h')
@@ -292,7 +304,7 @@ class PerformanceReport
 
         foreach ($hourly as $candle) {
             if ((float) $candle->low <= $stop) {
-                return $this->exitR($signal, min($stop, (float) $candle->open), 0);
+                return $this->exitAt($signal, min($stop, (float) $candle->open), 0, Carbon::createFromTimestamp($candle->open_time));
             }
 
             $highest = max($highest, (float) $candle->high);
@@ -303,7 +315,7 @@ class PerformanceReport
             }
         }
 
-        return $this->exitR($signal, (float) $hourly->last()->close, 0);
+        return [...$this->exitAt($signal, (float) $hourly->last()->close, 0, Carbon::createFromTimestamp($hourly->last()->open_time + 3600)), 'held' => true];
     }
 
     /**
@@ -348,21 +360,40 @@ class PerformanceReport
 
     /**
      * @param  Collection<int, Signal>  $observed
-     * @param  Closure(Signal): (float|null)  $rule  The R under the rule, or null where the rule changes nothing.
+     * @param  Closure(Signal): (float|array{r: float, at: Carbon, price: float, taken: int, held?: bool}|null)  $rule  The R under the
+     *                                                                                                                  rule (a bare 0.0 = not opened; an array = closed earlier, with when and where), or null where it changes nothing.
      * @param  (Closure(Signal): bool)|null  $gappy  Whether the candles the rule reads for this signal are incomplete.
-     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int}
+     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int, rows: list<array<string, mixed>>}
      */
     private function variant(string $key, string $label, Carbon $since, Collection $observed, Closure $rule, ?Closure $gappy = null): array
     {
         $affected = 0;
         $shadow = 0.0;
         $gaps = 0;
+        $rows = [];
 
-        foreach ($observed as $signal) {
-            $r = $signal->entry_price > $signal->stop_loss ? $rule($signal) : null;
-            $affected += $r === null ? 0 : 1;
-            $shadow += $r ?? (float) $signal->net_r;
-            $gaps += $gappy !== null && $gappy($signal) ? 1 : 0;
+        foreach ($observed->sortByDesc('entered_at') as $signal) {
+            $outcome = $signal->entry_price > $signal->stop_loss ? $rule($signal) : null;
+            $outcome = is_float($outcome) ? ['r' => $outcome] : $outcome;
+            $isGappy = $gappy !== null && $gappy($signal);
+            $affected += $outcome === null ? 0 : 1;
+            $shadow += $outcome['r'] ?? (float) $signal->net_r;
+            $gaps += $isGappy ? 1 : 0;
+            $rows[] = [
+                'id' => $signal->id,
+                'symbol' => $signal->token->symbol,
+                'slug' => $signal->token->slug,
+                'entered_at' => $signal->entered_at->toIso8601String(),
+                'actual_r' => round((float) $signal->net_r, 2),
+                'shadow_r' => round($outcome['r'] ?? (float) $signal->net_r, 2),
+                'action' => $outcome === null ? 'unchanged' : (isset($outcome['at']) ? 'exit' : 'skipped'),
+                'exit_at' => isset($outcome['at']) ? $outcome['at']->toIso8601String() : null,
+                'exit_price' => $outcome['price'] ?? null,
+                'taken' => $outcome['taken'] ?? null,
+                'held' => $outcome['held'] ?? false,
+                'gappy' => $isGappy,
+                'market' => $this->signalMarket[$signal->id] ??= $this->marketAt($signal->token_id, $signal->entered_at, $signal->analysis_id),
+            ];
         }
 
         return [
@@ -374,7 +405,89 @@ class PerformanceReport
             'actual_r' => round((float) $observed->sum('net_r'), 2),
             'shadow_r' => round($shadow, 2),
             'gaps' => $gaps,
+            'rows' => $rows,
         ];
+    }
+
+    /**
+     * The market when a trade entered: BTC price, BTC 4h trend and Fear & Greed from the token's last analysis at or
+     * before that time, since every analysis stores the market snapshot it was made in (refreshed at most every 5
+     * minutes). Without entry, or without an analysis before it, the given analysis is used: the one that recorded it.
+     *
+     * @return array{at: string|null, btc_price: float|null, btc_trend: string|null, fear_greed: int|null, fear_greed_label: string|null}
+     */
+    private function marketAt(int $tokenId, ?Carbon $at, ?int $analysisId): array
+    {
+        $columns = ['id', 'market_context', 'created_at'];
+        $analysis = $at === null ? null : Analysis::query()->where('token_id', $tokenId)->where('created_at', '<=', $at)->orderByDesc('created_at')->first($columns);
+        $analysis ??= $analysisId === null ? null : Analysis::query()->find($analysisId, $columns);
+        $context = $analysis?->market_context ?? [];
+        $btc = $context['benchmarks']['BTC'] ?? [];
+
+        return [
+            'at' => $analysis?->created_at?->toIso8601String(),
+            'btc_price' => isset($btc['price']) ? (float) $btc['price'] : null,
+            'btc_trend' => $btc['trend_4h'] ?? null,
+            'fear_greed' => isset($context['fear_greed']['value']) ? (int) $context['fear_greed']['value'] : null,
+            'fear_greed_label' => $context['fear_greed']['classification'] ?? null,
+        ];
+    }
+
+    /**
+     * One page of a shadow signal group, newest first, each with its levels, result and the market at entry. Overlaps
+     * (another one of the group still open on the token) are left out, as in the table.
+     *
+     * @return array{group: string, total: int, page: int, last_page: int, rows: list<array<string, mixed>>}
+     */
+    public function shadowSignals(string $group, int $page): array
+    {
+        $rising = fn ($query) => $query->where('market_context->benchmarks->BTC->trend_4h', 'bullish');
+        $paginator = ShadowSignal::query()->with('token:id,symbol,slug')
+            ->where('status', '!=', ShadowSignal::OVERLAP)
+            ->when(str_starts_with($group, 'buy_btc_'), fn ($query) => $query->where('rule', ShadowSignal::BUY_WATCH), fn ($query) => $query->where('rule', $group))
+            ->when($group === 'buy_btc_rising', fn ($query) => $query->whereHas('analysis', $rising))
+            ->when($group === 'buy_btc_not_rising', fn ($query) => $query->whereDoesntHave('analysis', $rising))
+            ->orderByDesc('id')
+            ->paginate(self::SHADOW_PAGE, ['*'], 'page', $page);
+
+        return [
+            'group' => $group,
+            'total' => $paginator->total(),
+            'page' => $paginator->currentPage(),
+            'last_page' => $paginator->lastPage(),
+            'rows' => collect($paginator->items())->map(fn (ShadowSignal $shadow): array => [
+                'id' => $shadow->id,
+                'symbol' => $shadow->token?->symbol,
+                'slug' => $shadow->token?->slug,
+                'signal_id' => $shadow->signal_id,
+                'recorded_at' => $shadow->created_at?->toIso8601String(),
+                'status' => $shadow->status,
+                'metric' => $shadow->metric,
+                'entry_low' => $shadow->entry_low,
+                'entry_high' => $shadow->entry_high,
+                'stop_loss' => $shadow->stop_loss,
+                'take_profits' => [$shadow->take_profit_1, $shadow->take_profit_2, $shadow->take_profit_3],
+                'entry_price' => $shadow->entry_price,
+                'exit_price' => $shadow->exit_price,
+                'max_tp_hit' => $shadow->max_tp_hit,
+                'net_r' => $shadow->net_r === null ? null : round($shadow->net_r, 2),
+                'entered_at' => $shadow->entered_at?->toIso8601String(),
+                'closed_at' => $shadow->closed_at?->toIso8601String(),
+                'gappy' => $shadow->net_r !== null && $shadow->entered_at !== null && $shadow->closed_at !== null
+                    && $this->gappy($shadow->token_id, '15m', $shadow->entered_at->timestamp, $shadow->closed_at->timestamp),
+                'market' => $this->marketAt($shadow->token_id, $shadow->entered_at, $shadow->analysis_id),
+            ])->all(),
+        ];
+    }
+
+    /**
+     * A rule's earlier exit: the net R and when, where and after how many targets it closed.
+     *
+     * @return array{r: float, at: Carbon, price: float, taken: int}
+     */
+    private function exitAt(Signal $signal, float $price, int $taken, Carbon $at): array
+    {
+        return ['r' => $this->exitR($signal, $price, $taken), 'at' => $at, 'price' => $price, 'taken' => $taken];
     }
 
     /**

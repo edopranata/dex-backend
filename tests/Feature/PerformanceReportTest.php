@@ -495,3 +495,65 @@ test('results are also grouped per network, split by recommendation', function (
         ->and($chains['solana']['by_recommendation']['BUY']['total_r'])->toEqual(-1.0)
         ->and($chains['bsc'])->label->toBe('BNB Chain')->trades->toBe(1);
 });
+
+test('each shadow variant lists its signals with what the rule did and the market at entry', function () {
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00']);
+    $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'cost_r' => 0.1];
+    $market = fn (float $btc, string $trend, int $fearGreed): array => ['benchmarks' => ['BTC' => ['price' => $btc, 'trend_4h' => $trend]], 'fear_greed' => ['value' => $fearGreed, 'classification' => 'Fear']];
+
+    // Recorded at 13:45; the last analysis before entry (13:55) holds the market at entry; the one after does not.
+    $one = Token::factory()->create(['symbol' => 'ONE']);
+    $created = Analysis::factory()->for($one)->create(['recommendation' => 'BUY', 'created_at' => '2026-11-07 13:45:00', 'market_context' => $market(60000, 'bearish', 10)]);
+    Analysis::factory()->for($one)->create(['recommendation' => 'BUY', 'created_at' => '2026-11-07 13:55:00', 'market_context' => $market(61000, 'bullish', 30)]);
+    Analysis::factory()->for($one)->create(['recommendation' => 'HOLD', 'price' => 1.05, 'created_at' => '2026-11-07 14:15:00', 'market_context' => $market(62000, 'bullish', 40)]);
+    reportSignal($one, -1.1, '2026-11-08 05:00:00', [...$levels, 'analysis_id' => $created->id, 'created_at' => '2026-11-07 13:45:00', 'entered_at' => '2026-11-07 14:00:00',
+        'downgraded_at' => '2026-11-07 14:15:00', 'downgrade_price' => 1.05, 'downgrade_tp_hit' => 1]);
+
+    // Never downgraded, and nothing before entry but its own analysis.
+    $two = Token::factory()->create(['symbol' => 'TWO']);
+    $created = Analysis::factory()->for($two)->create(['recommendation' => 'BUY', 'created_at' => '2026-11-07 15:00:00', 'market_context' => $market(59000, 'sideways', 12)]);
+    reportSignal($two, 0.5, '2026-11-08 06:00:00', [...$levels, 'analysis_id' => $created->id, 'created_at' => '2026-11-07 15:00:00', 'entered_at' => '2026-11-07 15:00:30']);
+
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
+    $rows = collect($variants['first_downgrade']['rows'])->keyBy('symbol');
+
+    expect($rows->keys()->all())->toBe(['TWO', 'ONE'])
+        ->and($rows['ONE'])->toMatchArray(['action' => 'exit', 'actual_r' => -1.1, 'exit_price' => 1.05, 'taken' => 1, 'gappy' => false])
+        ->and($rows['ONE']['exit_at'])->toStartWith('2026-11-07T14:15:00')
+        ->and($rows['ONE']['market'])->toMatchArray(['btc_price' => 61000.0, 'btc_trend' => 'bullish', 'fear_greed' => 30, 'fear_greed_label' => 'Fear'])
+        ->and($rows['TWO'])->toMatchArray(['action' => 'unchanged', 'shadow_r' => 0.5, 'exit_at' => null])
+        ->and($rows['TWO']['market'])->toMatchArray(['btc_price' => 59000.0, 'btc_trend' => 'sideways', 'fear_greed' => 12])
+        ->and(collect($variants['confirmed_entry']['rows'])->firstWhere('symbol', 'ONE'))->toMatchArray(['action' => 'skipped', 'shadow_r' => 0.0]);
+});
+
+test('a shadow group lists its signals newest first, without overlaps, with the market at entry', function () {
+    $context = fn (?string $trend, int $fearGreed, float $btc = 60000): array => ['benchmarks' => ['BTC' => ['price' => $btc, 'trend_4h' => $trend]], 'fear_greed' => ['value' => $fearGreed, 'classification' => 'Fear']];
+    $shadow = function (string $rule, string $status, array $context, ?string $enteredAt = null) {
+        $token = Token::factory()->create();
+        $analysis = Analysis::factory()->for($token)->create(['created_at' => '2026-11-16 10:00:00', 'market_context' => $context]);
+
+        return ShadowSignal::query()->create(['token_id' => $token->id, 'analysis_id' => $analysis->id, 'rule' => $rule, 'recommendation' => 'BUY',
+            'strategy_version' => 'v6-test', 'metric' => 45, 'entry_low' => 0.99, 'entry_high' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15,
+            'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'status' => $status, 'net_r' => $status === 'stop_loss' ? -1.0 : null,
+            'entry_price' => $enteredAt ? 1.0 : null, 'entered_at' => $enteredAt, 'closed_at' => $status === 'stop_loss' ? '2026-11-16 15:00:00' : null]);
+    };
+    $first = $shadow('buy_watch', 'stop_loss', $context('bullish', 20), '2026-11-16 12:00:00');
+    Analysis::factory()->for($first->token)->create(['created_at' => '2026-11-16 11:45:00', 'market_context' => $context('bullish', 25, 61000)]);
+    $second = $shadow('buy_watch', 'not_entered', $context('bullish', 21));
+    $shadow('buy_watch', 'overlap', $context('bullish', 22));
+    $shadow('buy_watch', 'pending', $context('bearish', 23));
+    $shadow('buy_watch', 'pending', []);
+    $shadow('top10_holders', 'pending', $context('bullish', 24));
+
+    $rising = $this->actingAs($this->user)->getJson('/api/reports/shadow-signals?group=buy_btc_rising')->assertOk()->json();
+
+    expect($rising)->toMatchArray(['group' => 'buy_btc_rising', 'total' => 2, 'page' => 1, 'last_page' => 1])
+        ->and(collect($rising['rows'])->pluck('id')->all())->toBe([$second->id, $first->id])
+        ->and($rising['rows'][1])->toMatchArray(['status' => 'stop_loss', 'net_r' => -1.0, 'metric' => 45.0, 'take_profits' => [1.15, 1.25, 1.4], 'gappy' => false])
+        ->and($rising['rows'][1]['market'])->toMatchArray(['btc_price' => 61000.0, 'fear_greed' => 25])
+        ->and($rising['rows'][0]['market'])->toMatchArray(['btc_price' => 60000.0, 'btc_trend' => 'bullish', 'fear_greed' => 21])
+        ->and($this->getJson('/api/reports/shadow-signals?group=buy_btc_not_rising')->json('total'))->toBe(2)
+        ->and($this->getJson('/api/reports/shadow-signals?group=top10_holders')->json('total'))->toBe(1);
+
+    $this->getJson('/api/reports/shadow-signals?group=other')->assertUnprocessable();
+});

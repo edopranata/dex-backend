@@ -15,6 +15,7 @@ use App\Services\Analysis\StrategyVersion;
 use App\Services\Trading\PositionCards;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ReportController extends Controller
 {
@@ -28,6 +29,19 @@ class ReportController extends Controller
         $version = $request->validate(['version' => ['sometimes', 'string', 'max:40']])['version'] ?? StrategyVersion::current();
 
         return response()->json($report->build($version === 'all' ? null : $version));
+    }
+
+    /**
+     * One page of a shadow signal group from the performance report, with each signal's levels, result and market.
+     */
+    public function shadowSignals(Request $request, PerformanceReport $report): JsonResponse
+    {
+        $data = $request->validate([
+            'group' => ['required', 'string', Rule::in(PerformanceReport::SHADOW_GROUPS)],
+            'page' => ['sometimes', 'integer', 'min:1'],
+        ]);
+
+        return response()->json($report->shadowSignals($data['group'], (int) ($data['page'] ?? 1)));
     }
 
     /**

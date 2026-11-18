@@ -1,6 +1,6 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 17 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 18 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
@@ -43,7 +43,7 @@ Terakhir diperbarui: 17 November 2026. Perbarui file ini di commit yang sama set
 
 ## Langkah berikutnya
 
-1. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan. Kolom "Data bercelah" di Laporan (sejak 17 Nov) menandai baris berbasis candle yang datanya kurang lengkap; nilai bersama atau tanpa baris itu.
+1. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan. Kolom "Data bercelah" di Laporan (sejak 17 Nov) menandai baris berbasis candle yang datanya kurang lengkap; nilai bersama atau tanpa baris itu. Sejak 18 Nov setiap baris catatan bayangan dan sinyal bayangan bisa diklik untuk melihat sinyalnya satu per satu (apa yang dilakukan aturan, R aktual dan R aturan), dengan harga BTC, tren 4 jam BTC, dan Fear & Greed saat entry dari snapshot analisa terakhir sebelum entry.
 2. Setelah review v6 (disetujui pemilik 17 Nov): ukuran posisi auto-follow memasukkan biaya pulang-pergi. Audit 17 Nov: rugi nyata saat kena stop median 1,10x risiko rencana 0,5%, terburuk 2,95x.
 
 ## Menunggu
