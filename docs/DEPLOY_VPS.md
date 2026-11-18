@@ -140,6 +140,8 @@ Deploy menarik **kedua** repo, membangun ulang image, menjalankan migrasi, mengg
 | Restore | `gunzip -c /var/backups/dex/FILE.sql.gz \| docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'` |
 | Pemakaian disk | `df -h` dan `docker system df` |
 
+Binary log MySQL disimpan 1 hari, bukan bawaan 30 hari (18 Nov 2026; sempat 3,9 GB). Tidak ada replika, dan backup memakai dump harian. Di server baru jalankan sekali: `docker compose exec mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SET PERSIST binlog_expire_logs_seconds = 86400"'` (tersimpan di volume data MySQL).
+
 Aktifkan AI: isi `AI_PROVIDER=gemini` dan `GEMINI_API_KEY=...` di `.env`, lalu `docker compose up -d`.
 
 ## 6a. Salinan backup di Cloudflare R2
