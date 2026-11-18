@@ -9,7 +9,9 @@ use App\Models\Candle;
 use App\Models\EquitySnapshot;
 use App\Models\ShadowSignal;
 use App\Models\Signal;
+use App\Models\Token;
 use App\Models\User;
+use App\Services\MarketData\BenchmarkTokens;
 use App\Services\Trading\AutoFollowRisk;
 use App\Services\Trading\PortfolioSummary;
 use Closure;
@@ -41,7 +43,13 @@ class PerformanceReport
 
     public const MAX_DRAWDOWN_PCT = 15.0;
 
-    public function __construct(private PortfolioSummary $portfolio, private AutoFollowRisk $risk) {}
+    /** The BTC benchmark token, looked up once (false = not looked up yet). */
+    private Token|false|null $btc = false;
+
+    /** @var array<int, array{btc_price: float|null, btc_trend: string|null}> BTC rebuilt from candles, per hour. */
+    private array $btcAt = [];
+
+    public function __construct(private PortfolioSummary $portfolio, private AutoFollowRisk $risk, private BenchmarkTokens $benchmarks, private TechnicalAnalyzer $technical) {}
 
     /**
      * @param  string|null  $version  One strategy version, or null for all of them.
@@ -413,8 +421,9 @@ class PerformanceReport
      * The market when a trade entered: BTC price, BTC 4h trend and Fear & Greed from the token's last analysis at or
      * before that time, since every analysis stores the market snapshot it was made in (refreshed at most every 5
      * minutes). Without entry, or without an analysis before it, the given analysis is used: the one that recorded it.
+     * Snapshots before 15 Nov 2026 have no BTC; then BTC is rebuilt from its stored candles (`btc_derived`).
      *
-     * @return array{at: string|null, btc_price: float|null, btc_trend: string|null, fear_greed: int|null, fear_greed_label: string|null}
+     * @return array{at: string|null, btc_price: float|null, btc_trend: string|null, btc_derived: bool, fear_greed: int|null, fear_greed_label: string|null}
      */
     private function marketAt(int $tokenId, ?Carbon $at, ?int $analysisId): array
     {
@@ -423,13 +432,57 @@ class PerformanceReport
         $analysis ??= $analysisId === null ? null : Analysis::query()->find($analysisId, $columns);
         $context = $analysis?->market_context ?? [];
         $btc = $context['benchmarks']['BTC'] ?? [];
+        $derived = ! isset($btc['price']) && ($moment = $at ?? $analysis?->created_at) !== null;
+
+        if ($derived) {
+            $rebuilt = $this->btcFromCandles($moment->getTimestamp());
+            $btc = ['price' => $rebuilt['btc_price'], 'trend_4h' => $rebuilt['btc_trend']];
+            $derived = $btc['price'] !== null || $btc['trend_4h'] !== null;
+        }
 
         return [
             'at' => $analysis?->created_at?->toIso8601String(),
             'btc_price' => isset($btc['price']) ? (float) $btc['price'] : null,
             'btc_trend' => $btc['trend_4h'] ?? null,
+            'btc_derived' => $derived,
             'fear_greed' => isset($context['fear_greed']['value']) ? (int) $context['fear_greed']['value'] : null,
             'fear_greed_label' => $context['fear_greed']['classification'] ?? null,
+        ];
+    }
+
+    /**
+     * BTC at a moment from its stored candles, the way the market snapshot computes it but only from candles that had
+     * closed by then: the close of the last 1h candle (null if that is more than 3 hours old), and the 4h trend of the
+     * last 120 closed 4h candles. Live snapshots also read the candle still forming, so this can differ slightly.
+     *
+     * @return array{btc_price: float|null, btc_trend: string|null}
+     */
+    private function btcFromCandles(int $at): array
+    {
+        $hour = intdiv($at, 3600) * 3600;
+
+        if (isset($this->btcAt[$hour])) {
+            return $this->btcAt[$hour];
+        }
+
+        if ($this->btc === false) {
+            $this->btc = $this->benchmarks->find('BTC');
+        }
+
+        if ($this->btc === null) {
+            return $this->btcAt[$hour] = ['btc_price' => null, 'btc_trend' => null];
+        }
+
+        $candles = fn (string $timeframe) => Candle::query()->where('token_id', $this->btc->id)->where('timeframe', $timeframe);
+        $hourly = $candles('1h')->where('open_time', '<=', $hour - 3600)->orderByDesc('open_time')->first(['open_time', 'close']);
+        $timeframe = (string) config('market.analysis.trend_timeframe');
+        $trendSeconds = ['1h' => 3600, '4h' => 14400, '1d' => 86400][$timeframe] ?? 14400;
+        $trend = $candles($timeframe)->where('open_time', '<=', $at - $trendSeconds)
+            ->orderByDesc('open_time')->limit(120)->get(['open_time', 'close'])->reverse()->values();
+
+        return $this->btcAt[$hour] = [
+            'btc_price' => $hourly !== null && $at - ($hourly->open_time + 3600) <= 3 * 3600 ? (float) $hourly->close : null,
+            'btc_trend' => $this->technical->higherTimeframeTrend($trend),
         ];
     }
 

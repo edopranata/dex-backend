@@ -557,3 +557,24 @@ test('a shadow group lists its signals newest first, without overlaps, with the 
 
     $this->getJson('/api/reports/shadow-signals?group=other')->assertUnprocessable();
 });
+
+test('a snapshot without BTC gets BTC rebuilt from the candles that had closed before entry', function () {
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00']);
+    $btc = Token::factory()->create(['chain_id' => 'base', 'symbol' => 'cbBTC', 'pair_address' => config('market.benchmarks.BTC.pair_address')]);
+    $entry = strtotime('2026-11-10 10:30:00 UTC');
+    // Rising 4h closes up to the one that closed at 08:00, then a crash in the 4h candle still forming at entry.
+    foreach (range(60, 1) as $i) {
+        Candle::factory()->for($btc)->create(['timeframe' => '4h', 'open_time' => intdiv($entry, 14400) * 14400 - $i * 14400, 'close' => 70000 - $i * 100]);
+    }
+    Candle::factory()->for($btc)->create(['timeframe' => '4h', 'open_time' => intdiv($entry, 14400) * 14400, 'close' => 10000]);
+    Candle::factory()->for($btc)->create(['timeframe' => '1h', 'open_time' => strtotime('2026-11-10 09:00:00 UTC'), 'close' => 69500]);
+    Candle::factory()->for($btc)->create(['timeframe' => '1h', 'open_time' => strtotime('2026-11-10 10:00:00 UTC'), 'close' => 50000]);
+
+    $token = Token::factory()->create(['symbol' => 'OLD']);
+    $created = Analysis::factory()->for($token)->create(['created_at' => '2026-11-10 10:29:00', 'market_context' => ['fear_greed' => ['value' => 15, 'classification' => 'Extreme Fear']]]);
+    reportSignal($token, -1.0, '2026-11-11 05:00:00', ['entry_price' => 1.0, 'stop_loss' => 0.9, 'analysis_id' => $created->id, 'created_at' => '2026-11-10 10:29:00', 'entered_at' => '2026-11-10 10:30:00']);
+
+    $row = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit.0.rows'))->firstWhere('symbol', 'OLD');
+
+    expect($row['market'])->toMatchArray(['btc_price' => 69500.0, 'btc_trend' => 'bullish', 'btc_derived' => true, 'fear_greed' => 15]);
+});
