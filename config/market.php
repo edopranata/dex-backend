@@ -592,6 +592,10 @@ return [
         // last signal hit its stop within this many hours. Computed from stored signals at report time.
         'shadow_stop_cooldown_hours' => [12, 24, 48],
         'shadow_stop_cooldown_since' => env('SIGNAL_SHADOW_STOP_COOLDOWN_SINCE', '2026-11-07 13:00:00'),
+        // Owner, 18 Nov 2026 (AIA and ARIA losers entered after a 1h pop without a 15m confirmation): the same
+        // candle check on 15m candles, as a filter on the last 15m candle before entry and as a later entry at the
+        // close of the first confirmed 15m candle within the entry window. Computed from stored 15m candles.
+        'shadow_candle_15m_since' => env('SIGNAL_SHADOW_CANDLE_15M_SINCE', '2026-11-07 13:00:00'),
         'shadow_atr_multiplier' => 3.0,
         'shadow_atr_max_days' => 30,
         // GeckoTerminal leaves out periods without trades, and the price of a pool only moves on a trade, so a missing

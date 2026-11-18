@@ -210,7 +210,7 @@ test('order history reads by the time it shows, not by when the order was placed
 });
 
 test('each shadow variant counts signals entered since it started, and only changes what its rule touches', function () {
-    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_young_pair_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_btc_since' => '2026-11-07 13:00:00']);
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_second_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_young_pair_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_btc_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_candle_15m_since' => '2026-11-07 13:00:00']);
     $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9, 'take_profit_1' => 1.15, 'take_profit_2' => 1.25, 'take_profit_3' => 1.4, 'cost_r' => 0.1];
     $analysis = fn (Token $token, string $at, string $recommendation, float $price = 1.0) => Analysis::factory()->for($token)->create(['recommendation' => $recommendation, 'price' => $price, 'created_at' => $at]);
 
@@ -247,7 +247,7 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'stop_cooldown_12', 'stop_cooldown_24', 'stop_cooldown_48', 'candle_confirmed', 'candle_confirmed_volume', 'atr_trail_4h'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'stop_cooldown_12', 'stop_cooldown_24', 'stop_cooldown_48', 'candle_confirmed', 'candle_confirmed_volume', 'candle_15m_confirmed', 'candle_15m_wait', 'atr_trail_4h'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
@@ -403,6 +403,61 @@ test('the chandelier shadow stops after 30 days and marks signals whose price ju
 
     // 1R less 0.1R costs, 0R less 0.1R, and 3R less 0.1R.
     expect($atr)->toMatchArray(['signals' => 3, 'affected' => 3, 'shadow_r' => 3.7, 'gaps' => 1]);
+});
+
+test('the 15m shadows keep entries after a 15m confirmation, or wait for one within the entry window', function () {
+    config(['market.analysis.shadow_candle_15m_since' => '2026-11-07 13:00:00', 'market.analysis.signal_entry_expiry_hours' => 12, 'market.analysis.signal_max_hours' => 72]);
+    $quarter = strtotime('2026-11-10 11:45:00');
+    $flat = ['open' => 1, 'high' => 1.01, 'low' => 0.99, 'close' => 1, 'volume' => 100];
+    // 20 quiet 15m candles, then the given ones from 11:45 (the last closed before entry at 12:05), 15 minutes apart; null = no trades.
+    $signal = function (array $candles, float $netR) use ($quarter, $flat): Signal {
+        $token = Token::factory()->create();
+        foreach (range(20, 1) as $back) {
+            Candle::query()->create(['token_id' => $token->id, 'timeframe' => '15m', 'open_time' => $quarter - $back * 900, ...$flat]);
+        }
+        foreach ($candles as $i => $candle) {
+            if ($candle !== null) {
+                Candle::query()->create(['token_id' => $token->id, 'timeframe' => '15m', 'open_time' => $quarter + $i * 900, 'volume' => 100, ...$candle]);
+            }
+        }
+
+        return reportSignal($token, $netR, '2026-11-12 00:00:00', ['stop_loss' => 0.9, 'take_profit_1' => 1.1, 'take_profit_2' => 1.2, 'take_profit_3' => 1.3,
+            'created_at' => '2026-11-10 12:00:00', 'entered_at' => '2026-11-10 12:05:00']);
+    };
+
+    // 11:45 confirms; waiting, 12:00 is no confirmation, 12:15 is (entry 1.04 at 12:30), target 1 at 12:30, back to entry at 12:45.
+    $confirmed = $signal([
+        ['open' => 1, 'high' => 1.03, 'low' => 0.995, 'close' => 1.025],
+        ['open' => 1, 'high' => 1.01, 'low' => 0.98, 'close' => 1],
+        ['open' => 1, 'high' => 1.042, 'low' => 0.999, 'close' => 1.04],
+        ['open' => 1.04, 'high' => 1.1, 'low' => 1.05, 'close' => 1.08],
+        ['open' => 1.05, 'high' => 1.06, 'low' => 1.0, 'close' => 1.01],
+    ], -1.0);
+    $signal([$flat, ['open' => 1, 'high' => 1.0, 'low' => 0.89, 'close' => 0.9]], -1.0);   // stop before any confirmation
+    $signal([$flat, $flat, $flat], 1.0);                                                    // no confirmation before the candles end
+    // Confirmed at 12:00 (entry 1.04 at 12:15), 12:15 without trades, still open at the last candle.
+    $held = $signal([$flat, ['open' => 1, 'high' => 1.045, 'low' => 0.999, 'close' => 1.04], null, ['open' => 1.04, 'high' => 1.05, 'low' => 1.02, 'close' => 1.03]], 0.5);
+
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
+
+    expect($variants['candle_15m_confirmed'])->toMatchArray([
+        'label' => 'Hanya entry kalau candle 15 menit terakhir sebelum entry konfirmasi (body solid, close di atas high sebelumnya)',
+        'signals' => 4, 'affected' => 3, 'actual_r' => -0.5, 'shadow_r' => -1.0, 'gaps' => 0,
+    ])
+        ->and($variants['candle_15m_wait'])->toMatchArray([
+            'label' => 'Tunggu candle 15 menit konfirmasi, paling lama sampai batas entry 12 jam; entry di close candle itu',
+            'signals' => 4, 'affected' => 4, 'shadow_r' => -0.08,
+        ]);
+
+    // Target 1 against the later entry's risk (0.14): +0.14R, less the signal's cost kept as a share of price (0.07R).
+    $rows = collect($variants['candle_15m_wait']['rows'])->keyBy('id');
+    expect($rows[$confirmed->id])->toMatchArray([
+        'action' => 'later_entry', 'rule_entry_price' => 1.04, 'exit_price' => 1.04, 'taken' => 1, 'shadow_r' => 0.07, 'held' => false,
+    ])
+        ->and($rows[$confirmed->id]['rule_entry_at'])->toBe('2026-11-10T12:30:00+00:00')
+        ->and($rows[$confirmed->id]['exit_at'])->toBe('2026-11-10T13:00:00+00:00')
+        ->and($rows[$held->id])->toMatchArray(['action' => 'later_entry', 'exit_price' => 1.03, 'taken' => 0, 'shadow_r' => -0.15, 'held' => true])
+        ->and($rows->where('action', 'skipped')->count())->toBe(2);
 });
 
 test('an hour without trades before entry counts as a flat candle with no volume', function () {

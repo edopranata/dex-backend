@@ -201,6 +201,8 @@ class PerformanceReport
 
         $candleSince = Carbon::parse((string) config('market.analysis.shadow_candle_since'), 'UTC');
         $candles = $entered($candleSince)->mapWithKeys(fn (Signal $s): array => [$s->id => $this->entryCandle($s)]);
+        $candleQuarterSince = Carbon::parse((string) config('market.analysis.shadow_candle_15m_since'), 'UTC');
+        $quarters = $entered($candleQuarterSince)->mapWithKeys(fn (Signal $s): array => [$s->id => $this->entryCandle($s, '15m')]);
         $atrSince = Carbon::parse((string) config('market.analysis.shadow_atr_since'), 'UTC');
         $atrMultiplier = (float) config('market.analysis.shadow_atr_multiplier');
         $atrDays = (int) config('market.analysis.shadow_atr_max_days');
@@ -273,6 +275,22 @@ class PerformanceReport
                 $entered($candleSince),
                 fn (Signal $s): ?float => ($candles[$s->id] ?? null) === null ? null : ($candles[$s->id]['confirmed'] && $candles[$s->id]['volume'] ? null : 0.0),
                 fn (Signal $s): bool => $candles[$s->id] === null,
+            ),
+            $this->variant(
+                'candle_15m_confirmed',
+                'Hanya entry kalau candle 15 menit terakhir sebelum entry konfirmasi (body solid, close di atas high sebelumnya)',
+                $candleQuarterSince,
+                $entered($candleQuarterSince),
+                fn (Signal $s): ?float => ($quarters[$s->id]['confirmed'] ?? null) === false ? 0.0 : null,
+                fn (Signal $s): bool => $quarters[$s->id] === null,
+            ),
+            $this->variant(
+                'candle_15m_wait',
+                'Tunggu candle 15 menit konfirmasi, paling lama sampai batas entry '.(int) config('market.analysis.signal_entry_expiry_hours').' jam; entry di close candle itu',
+                $candleQuarterSince,
+                $entered($candleQuarterSince),
+                fn (Signal $s): array|float|null => $this->confirmedLaterEntry($s),
+                fn (Signal $s): bool => $this->gappy($s->token_id, '15m', intdiv($s->entered_at->timestamp, 900) * 900, $s->closed_at->timestamp),
             ),
             $this->variant(
                 'atr_trail_4h',
@@ -374,24 +392,25 @@ class PerformanceReport
     }
 
     /**
-     * The owner's confirmation check on the last 1h candle that closed before entry, over the 21 hours before entry.
-     * An hour without trades has no stored candle; it counts as a flat candle at the previous close with no volume
-     * (17 Nov 2026), so "the previous hour" and the volume average stay right on thin pools. Null without a stored
-     * candle before those hours.
+     * The owner's confirmation check on the last candle of the timeframe (1h or 15m) that closed before entry, over
+     * the 21 candles before entry. A period without trades has no stored candle; it counts as a flat candle at the
+     * previous close with no volume (17 Nov 2026), so "the previous candle" and the volume average stay right on
+     * thin pools. Null without a stored candle before those periods.
      *
      * @return array{confirmed: bool, volume: bool}|null
      */
-    private function entryCandle(Signal $signal): ?array
+    private function entryCandle(Signal $signal, string $timeframe = '1h'): ?array
     {
-        $lastHour = intdiv($signal->entered_at->timestamp - 3600, 3600) * 3600;
-        $firstHour = $lastHour - 20 * 3600;
-        $query = fn () => Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '1h');
+        $step = $timeframe === '15m' ? 900 : 3600;
+        $lastHour = intdiv($signal->entered_at->timestamp - $step, $step) * $step;
+        $firstHour = $lastHour - 20 * $step;
+        $query = fn () => Candle::query()->where('token_id', $signal->token_id)->where('timeframe', $timeframe);
         $before = $query()->where('open_time', '<', $firstHour)->orderByDesc('open_time')->first(['close']);
         $stored = $query()->whereBetween('open_time', [$firstHour, $lastHour])->get(['open_time', 'open', 'high', 'low', 'close', 'volume'])->keyBy('open_time');
         $close = $before !== null ? (float) $before->close : null;
         $hours = [];
 
-        for ($hour = $firstHour; $hour <= $lastHour; $hour += 3600) {
+        for ($hour = $firstHour; $hour <= $lastHour; $hour += $step) {
             $candle = $stored->get($hour);
             if ($candle === null && $close === null) {
                 return null;   // no price yet to carry forward
@@ -414,9 +433,108 @@ class PerformanceReport
     }
 
     /**
+     * The signal entered later, at the close of the first confirmed 15m candle (solid green, closing above the
+     * previous candle's high, as entryCandle) from the candle the signal entered in until its entry window ends,
+     * then followed on 15m candles as the shadow signals are: the stop first in each candle, the stop at entry after
+     * target 1, a third sold at each target, at most signal_max_hours. Not opened (0R) when a candle reaches the stop
+     * before any confirmation, when none comes, or when the confirmation closes at or above target 1. A period
+     * without trades counts as a flat candle at the previous close. Still open at the last stored candle means
+     * valued at its close (`held`). Null without candles.
+     *
+     * @return array{r: float, at: Carbon, price: float, taken: int, entry_at: Carbon, entry_price: float, held?: bool}|float|null
+     */
+    private function confirmedLaterEntry(Signal $signal): array|float|null
+    {
+        $step = 900;
+        $config = config('market.analysis');
+        $first = intdiv($signal->entered_at->timestamp, $step) * $step;
+        $entryUntil = $signal->created_at->timestamp + (int) $config['signal_entry_expiry_hours'] * 3600;
+        $query = fn () => Candle::query()->where('token_id', $signal->token_id)->where('timeframe', '15m');
+        $before = $query()->where('open_time', '<', $first)->orderByDesc('open_time')->first(['open_time', 'high', 'close']);
+        $stored = $query()->where('open_time', '>=', $first)
+            ->where('open_time', '<', $entryUntil + (int) $config['signal_max_hours'] * 3600 + $step)
+            ->get(['open_time', 'open', 'high', 'low', 'close'])->keyBy('open_time');
+
+        if ($before === null || $stored->isEmpty()) {
+            return null;
+        }
+
+        $close = (float) $before->close;
+        $previousHigh = $before->open_time === $first - $step ? (float) $before->high : $close;
+        $stop = (float) $signal->stop_loss;
+        $targets = $signal->takeProfits();
+        $entry = null;
+        $enteredAt = 0;
+        $tpHit = 0;
+        $last = (int) $stored->keys()->max();
+
+        for ($time = $first; $time <= $last; $time += $step) {
+            $candle = $stored->get($time);
+            [$open, $high, $low, $close] = $candle !== null
+                ? [(float) $candle->open, (float) $candle->high, (float) $candle->low, (float) $candle->close]
+                : [$close, $close, $close, $close];
+
+            if ($entry === null) {
+                if ($time >= $entryUntil || $low <= $stop) {
+                    return 0.0;
+                }
+
+                $range = $high - $low;
+                $solid = $range > 0 && $close > $open && ($close - $open) >= 0.5 * $range && ($high - $close) <= 0.25 * $range;
+
+                if ($solid && $close > $previousHigh) {
+                    if ($close >= $targets[0]) {
+                        return 0.0;
+                    }
+                    $entry = $close;
+                    $enteredAt = $time + $step;
+                }
+                $previousHigh = $high;
+
+                continue;
+            }
+
+            $level = $tpHit > 0 ? $entry : $stop;
+
+            if ($low <= $level) {
+                return $this->laterExit($signal, $entry, $enteredAt, min($open, $level), $tpHit, $time + $step);
+            }
+
+            while ($tpHit < 3 && $high >= $targets[$tpHit]) {
+                $tpHit++;
+            }
+
+            if ($tpHit === 3) {
+                return $this->laterExit($signal, $entry, $enteredAt, $targets[2], 3, $time + $step);
+            }
+
+            if ($time + $step >= $enteredAt + (int) $config['signal_max_hours'] * 3600) {
+                return $this->laterExit($signal, $entry, $enteredAt, $close, $tpHit, $time + $step);
+            }
+        }
+
+        return $entry === null ? 0.0 : [...$this->laterExit($signal, $entry, $enteredAt, $close, $tpHit, $last + $step), 'held' => true];
+    }
+
+    /**
+     * @return array{r: float, at: Carbon, price: float, taken: int, entry_at: Carbon, entry_price: float}
+     */
+    private function laterExit(Signal $signal, float $entry, int $enteredAt, float $price, int $taken, int $at): array
+    {
+        return [
+            'r' => $this->exitR($signal, $price, $taken, $entry),
+            'at' => Carbon::createFromTimestamp($at),
+            'price' => $price,
+            'taken' => $taken,
+            'entry_at' => Carbon::createFromTimestamp($enteredAt),
+            'entry_price' => $entry,
+        ];
+    }
+
+    /**
      * @param  Collection<int, Signal>  $observed
-     * @param  Closure(Signal): (float|array{r: float, at: Carbon, price: float, taken: int, held?: bool}|null)  $rule  The R under the
-     *                                                                                                                  rule (a bare 0.0 = not opened; an array = closed earlier, with when and where), or null where it changes nothing.
+     * @param  Closure(Signal): (float|array{r: float, at: Carbon, price: float, taken: int, entry_at?: Carbon, entry_price?: float, held?: bool}|null)  $rule  The R under the
+     *                                                                                                                                                          rule (a bare 0.0 = not opened; an array = closed earlier, with when and where), or null where it changes nothing.
      * @param  (Closure(Signal): bool)|null  $gappy  Whether the candles the rule reads for this signal are incomplete.
      * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int, rows: list<array<string, mixed>>}
      */
@@ -441,7 +559,9 @@ class PerformanceReport
                 'entered_at' => $signal->entered_at->toIso8601String(),
                 'actual_r' => round((float) $signal->net_r, 2),
                 'shadow_r' => round($outcome['r'] ?? (float) $signal->net_r, 2),
-                'action' => $outcome === null ? 'unchanged' : (isset($outcome['at']) ? 'exit' : 'skipped'),
+                'action' => $outcome === null ? 'unchanged' : (isset($outcome['entry_at']) ? 'later_entry' : (isset($outcome['at']) ? 'exit' : 'skipped')),
+                'rule_entry_at' => isset($outcome['entry_at']) ? $outcome['entry_at']->toIso8601String() : null,
+                'rule_entry_price' => $outcome['entry_price'] ?? null,
                 'exit_at' => isset($outcome['at']) ? $outcome['at']->toIso8601String() : null,
                 'exit_price' => $outcome['price'] ?? null,
                 'taken' => $outcome['taken'] ?? null,
@@ -591,18 +711,23 @@ class PerformanceReport
     }
 
     /**
-     * Net R of a signal closed at a price, with the thirds already sold at the targets reached before it.
+     * Net R of a signal closed at a price, with the thirds already sold at the targets reached before it. With
+     * another entry price, R is against that entry's risk and the signal's costs keep their share of the price.
      */
-    private function exitR(Signal $signal, float $price, int $taken): float
+    private function exitR(Signal $signal, float $price, int $taken, ?float $entry = null): float
     {
-        $risk = $signal->entry_price - $signal->stop_loss;
-        $gross = (1 - $taken / 3) * ($price - $signal->entry_price) / $risk;
+        $at = $entry ?? (float) $signal->entry_price;
+        $risk = $at - $signal->stop_loss;
+        $gross = (1 - $taken / 3) * ($price - $at) / $risk;
 
         foreach (array_slice($signal->takeProfits(), 0, $taken) as $target) {
-            $gross += ($target - $signal->entry_price) / $risk / 3;
+            $gross += ($target - $at) / $risk / 3;
         }
 
-        return $gross - (float) $signal->cost_r;
+        $cost = $entry === null ? (float) $signal->cost_r
+            : (float) $signal->cost_r * ($signal->entry_price - $signal->stop_loss) / $signal->entry_price * $entry / $risk;
+
+        return $gross - $cost;
     }
 
     /**
