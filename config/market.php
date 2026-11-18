@@ -588,6 +588,10 @@ return [
         // Checked on 1h candles for at most shadow_atr_max_days after entry (17 Nov 2026, as SpotSim's ATR account);
         // a signal whose stop has not been hit by then, or by the last stored candle, is valued at that close.
         'shadow_atr_since' => env('SIGNAL_SHADOW_ATR_SINCE', '2026-11-07 13:00:00'),
+        // Owner, 18 Nov 2026 (AIA and ARIA re-entered 1.5-2 hours after a stop): skip a new signal on a token whose
+        // last signal hit its stop within this many hours. Computed from stored signals at report time.
+        'shadow_stop_cooldown_hours' => [12, 24, 48],
+        'shadow_stop_cooldown_since' => env('SIGNAL_SHADOW_STOP_COOLDOWN_SINCE', '2026-11-07 13:00:00'),
         'shadow_atr_multiplier' => 3.0,
         'shadow_atr_max_days' => 30,
         // GeckoTerminal leaves out periods without trades, and the price of a pool only moves on a trade, so a missing

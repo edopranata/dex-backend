@@ -4,6 +4,7 @@ namespace App\Services\Analysis;
 
 use App\Enums\OrderSide;
 use App\Enums\OrderStatus;
+use App\Enums\SignalStatus;
 use App\Models\Analysis;
 use App\Models\Candle;
 use App\Models\EquitySnapshot;
@@ -204,6 +205,19 @@ class PerformanceReport
         $atrMultiplier = (float) config('market.analysis.shadow_atr_multiplier');
         $atrDays = (int) config('market.analysis.shadow_atr_max_days');
 
+        $cooldownSince = Carbon::parse((string) config('market.analysis.shadow_stop_cooldown_since'), 'UTC');
+        $cooldowns = collect(config('market.analysis.shadow_stop_cooldown_hours'))->map(function (int $hours) use ($cooldownSince, $entered): array {
+            $skipped = $this->skippedAfterStop($hours);
+
+            return $this->variant(
+                'stop_cooldown_'.$hours,
+                "Lewati sinyal baru pada token yang kena stop dalam {$hours} jam terakhir",
+                $cooldownSince,
+                $entered($cooldownSince),
+                fn (Signal $s): ?float => isset($skipped[$s->id]) ? 0.0 : null,
+            );
+        })->all();
+
         return [
             $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?array => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
                 ? $this->exitAt($s, (float) $s->downgrade_price, (int) $s->downgrade_tp_hit, $s->downgraded_at)
@@ -243,6 +257,7 @@ class PerformanceReport
                 $entered($btcSince),
                 fn (Signal $s): ?float => $followsBtc($s, $btcFollowerCorr) === true && $btcRising($s) === true ? null : 0.0,
             ),
+            ...$cooldowns,
             $this->variant(
                 'candle_confirmed',
                 'Hanya entry setelah candle 1 jam konfirmasi (body solid, close di atas high sebelumnya)',
@@ -269,6 +284,38 @@ class PerformanceReport
                     min(now()->timestamp, $s->entered_at->timestamp + $atrDays * 86400)),
             ),
         ];
+    }
+
+    /**
+     * The signals a stop cooldown would have skipped: created within the hours after the token's last stop loss.
+     * Followed in order per token, so a skipped signal's own stop never happened and does not extend the cooldown.
+     * Signals that could have been created while a skipped one was open are not known, so they are not added.
+     *
+     * @return array<int, true>
+     */
+    private function skippedAfterStop(int $hours): array
+    {
+        $skipped = [];
+
+        Signal::query()->whereNotNull('entered_at')->orderBy('created_at')->orderBy('id')->get(['id', 'token_id', 'status', 'created_at', 'closed_at'])
+            ->groupBy('token_id')
+            ->each(function (Collection $signals) use ($hours, &$skipped): void {
+                $lastStop = null;
+
+                foreach ($signals as $signal) {
+                    if ($lastStop !== null && $signal->created_at->lt($lastStop->copy()->addHours($hours))) {
+                        $skipped[$signal->id] = true;
+
+                        continue;
+                    }
+
+                    if ($signal->status === SignalStatus::StopLoss && $signal->closed_at !== null) {
+                        $lastStop = $signal->closed_at;
+                    }
+                }
+            });
+
+        return $skipped;
     }
 
     /**

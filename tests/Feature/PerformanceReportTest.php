@@ -247,7 +247,7 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'candle_confirmed', 'candle_confirmed_volume', 'atr_trail_4h'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'stop_cooldown_12', 'stop_cooldown_24', 'stop_cooldown_48', 'candle_confirmed', 'candle_confirmed_volume', 'atr_trail_4h'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
@@ -577,4 +577,30 @@ test('a snapshot without BTC gets BTC rebuilt from the candles that had closed b
     $row = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit.0.rows'))->firstWhere('symbol', 'OLD');
 
     expect($row['market'])->toMatchArray(['btc_price' => 69500.0, 'btc_trend' => 'bullish', 'btc_derived' => true, 'fear_greed' => 15]);
+});
+
+test('the stop cooldown shadows skip new signals soon after a stop, counting only the stops of signals they kept', function () {
+    config(['market.analysis.shadow_stop_cooldown_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_stop_cooldown_hours' => [12, 24, 48]]);
+    $levels = ['entry_price' => 1.0, 'stop_loss' => 0.9];
+    $signal = fn (Token $token, float $netR, string $created, string $closed, string $status) => reportSignal($token, $netR, $closed, [...$levels,
+        'status' => $status, 'created_at' => $created, 'entered_at' => $created]);
+
+    // Stop at 03:00; again 2 hours later (stop at 07:00), then 6 hours after the first stop, then 30 hours after it.
+    $token = Token::factory()->create();
+    $signal($token, -1.0, '2026-11-15 00:00:00', '2026-11-15 03:00:00', 'stop_loss');
+    $signal($token, -1.1, '2026-11-15 05:00:00', '2026-11-15 07:00:00', 'stop_loss');
+    $signal($token, 1.3, '2026-11-15 09:00:00', '2026-11-16 09:00:00', 'expired');
+    $signal($token, -1.0, '2026-11-16 10:00:00', '2026-11-16 12:00:00', 'stop_loss');
+    // After an expiry (not a stop): never skipped.
+    $other = Token::factory()->create();
+    $signal($other, 0.5, '2026-11-15 00:00:00', '2026-11-15 03:00:00', 'expired');
+    $signal($other, 0.4, '2026-11-15 04:00:00', '2026-11-15 06:00:00', 'take_profit');
+
+    $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
+
+    // 12h: the 05:00 and 09:00 ones fall within 12h of the 03:00 stop; the 16 Nov one is 31h later.
+    expect($variants['stop_cooldown_12'])->toMatchArray(['label' => 'Lewati sinyal baru pada token yang kena stop dalam 12 jam terakhir', 'signals' => 6, 'affected' => 2, 'actual_r' => -0.9, 'shadow_r' => -1.1])
+        ->and($variants['stop_cooldown_24'])->toMatchArray(['affected' => 2, 'shadow_r' => -1.1])
+        // 48h: the 16 Nov one too, 31 hours after the 03:00 stop, since the skipped 07:00 stop does not count.
+        ->and($variants['stop_cooldown_48'])->toMatchArray(['affected' => 3, 'shadow_r' => -0.1]);
 });
