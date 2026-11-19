@@ -95,12 +95,30 @@ test('the position is sized from the risk, and capped by equity and pool liquidi
     $deep = Token::factory()->create(['liquidity_usd' => 50_000_000, 'price_usd' => 2.0]);
     $thin = Token::factory()->create(['liquidity_usd' => 100_000, 'price_usd' => 2.0]);
 
-    // 1% of $10,000 at a 10% stop is $1,000.
-    expect($risk->amountFor($bot, $signal($deep, 1.8)))->toEqual(1000.0)
+    // 1% of $10,000 is $100 at the stop: a 10% stop plus the 0.3% fee each way, so a little under $1,000.
+    $sized = $risk->amountFor($bot, $signal($deep, 1.8));
+    expect($sized)->toBeGreaterThan(940.0)->toBeLessThan(950.0)
+        ->and($risk->lossAtStop($sized, 2.0, 1.8, 50_000_000, 0.0))->toEqualWithDelta(100.0, 0.01)
         // A 2% stop would be $5,000: capped at 25% of equity.
         ->and($risk->amountFor($bot, $signal($deep, 1.96)))->toEqual(2500.0)
         // 0.25% of a $100,000 pool.
         ->and($risk->amountFor($bot, $signal($thin, 1.8)))->toEqual(250.0);
+});
+
+test('a full stop loses the planned risk including fee, gas and price impact, as the simulator fills it', function () {
+    app(SettingsStore::class)->set(['market.autofollow.risk_pct' => 0.5, 'market.simulator.starting_balance' => 10_000]);
+    $account = User::autoFollower('bsc');   // pays gas on BNB Chain
+    $token = Token::factory()->create(['chain_id' => 'bsc', 'liquidity_usd' => 400_000, 'price_usd' => 2.0]);
+    $signal = Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['entry_low' => 1.9, 'entry_high' => 2.0, 'stop_loss' => 1.84]));
+    $trading = app(TradingService::class);
+
+    $amount = app(AutoFollowRisk::class)->amountFor($account, $signal);
+    $buy = $trading->execute(Order::factory()->for($account, 'user')->for($token)->create(['side' => 'buy', 'type' => 'market', 'status' => 'pending', 'amount_usd' => $amount]), 2.0);
+    $trading->execute(Order::factory()->for($account, 'user')->for($token)->create(['side' => 'sell', 'type' => 'market', 'status' => 'pending', 'quantity' => $buy->filled_quantity]), 1.84);
+
+    // $50 is 0.5% of $10,000; without the costs the same stop would have lost about 8% more.
+    expect(10_000 - (float) $account->refresh()->balance_usd)->toEqualWithDelta(50.0, 0.05)
+        ->and($amount)->toBeLessThan(50 / 0.08);
 });
 
 test('the daily loss limit stops new buys until the next local day, and only realized losses count', function () {
@@ -171,7 +189,7 @@ test('a retried job does not buy twice in any account', function () {
 test('the accounts wait for the signal to enter its zone, and buy at the moment it does', function () {
     // Entry and fills are compared to the second; a slow run must not cross one in between (CI, 10 Nov).
     $this->freezeSecond();
-    $signal =Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
+    $signal = Signal::factory()->for($this->token)->create(['recommendation' => 'STRONG_BUY', 'entry_low' => 1.95, 'entry_high' => 2.05, 'stop_loss' => 1.8, 'take_profit_1' => 2.3, 'take_profit_2' => 2.5, 'take_profit_3' => 2.8]);
     $tracker = app(SignalTracker::class);
 
     // In the zone, but a single price does not enter the signal yet: nothing is bought.
