@@ -1,6 +1,6 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 18 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 19 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
@@ -42,6 +42,8 @@ Terakhir diperbarui: 18 November 2026. Perbarui file ini di commit yang sama set
 - Urutan provider: Gemini → Gemini model kedua (Gemma 4) → Groq (gpt-oss-120b) → Groq model kedua (gpt-oss-20b), diatur pemilik di panel.
 - Ringkasan AI untuk Buy, Strong Buy, dan token yang sedang dipegang atau punya order menunggu. 20% kuota harian tiap provider disisakan untuk sentimen berita.
 - Pemakaian 24 jam sampai 12 Nov 15.15 WIB: sekitar 210 permintaan (186 ringkasan unik, sekitar 22 batch sentimen), jauh di bawah kapasitas rantai sekitar 1.700 per hari.
+
+- **Koin kena TP (19 Nov 2026, permintaan pemilik, di `dev`):** halaman `/tp-coins` dan `GET /api/reports/tp-coins` (`TpCoins`). Token yang sinyalnya pernah mencapai TP1 (semua versi), per sinyal pola, entry, jarak, kondisi BTC, dan volume dari analisa saat sinyal dibuat, waktu ke TP1 dan turun terdalam dari candle 15 menit, plus median kena TP1 vs tidak kena. Hanya membaca; trading v6 tidak berubah. Cek 196 sinyal selesai: sinyal berikutnya setelah TP -0,23R (70), setelah meleset -0,47R (42), sinyal pertama -0,37R (84), jadi bukan filter.
 
 ## Langkah berikutnya
 

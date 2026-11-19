@@ -43,7 +43,7 @@ Tugas penting bisa dijalankan manual dari Admin → Tugas terjadwal; daftar yang
 | Bagian | Isi |
 |---|---|
 | `app/Services/MarketData` | Klien penyedia data, sinkron candle, token acuan pasar (`BenchmarkTokens`), whale, berita, cek keamanan, harga dengan cek silang |
-| `app/Services/Analysis` | Lima analyzer, `SignalEngine`, `MarketContext` dan `BtcRelation` (konteks pasar dan hubungan token dengan BTC per analisa), `SignalTracker`, `TradeLevels`, `TokenDiscoveryService`, `WatchlistManager`, laporan, backtest, sinyal bayangan, daftar trader |
+| `app/Services/Analysis` | Lima analyzer, `SignalEngine`, `MarketContext` dan `BtcRelation` (konteks pasar dan hubungan token dengan BTC per analisa), `SignalTracker`, `TradeLevels`, `TokenDiscoveryService`, `WatchlistManager`, laporan (termasuk `TpCoins`: token yang kena TP1 dengan kondisi saat entry, baris sinyal selesai di-cache permanen `tp-coins:v{versi}:{id}`), backtest, sinyal bayangan, daftar trader |
 | `app/Services/Ai` | `AiClient` (rantai empat provider, kuota per menit dan per hari) dan sentimen berita |
 | `app/Services/Notifications` | Bot Telegram per pengguna, alur beli lewat tombol, email |
 | `app/Services/Admin` | Pengaturan panel (`SettingsRegistry`, nilai di tabel `settings` menimpa `.env`), backup, log, sistem, container |

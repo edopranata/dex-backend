@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SignalController;
 use App\Http\Controllers\Api\TelegramWebhookController;
 use App\Http\Controllers\Api\TokenController;
+use App\Http\Controllers\Api\TpCoinController;
 use App\Http\Controllers\Api\TwoFactorController;
 use App\Http\Controllers\Api\WalletController;
 use App\Http\Controllers\Api\WhaleController;
@@ -75,6 +76,7 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
 
     Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
     Route::get('reports/performance', [ReportController::class, 'performance'])->name('reports.performance');
+    Route::get('reports/tp-coins', TpCoinController::class)->name('reports.tp-coins');
     Route::get('reports/shadow-signals', [ReportController::class, 'shadowSignals'])->name('reports.shadow-signals');
     Route::get('reports/accounts/{key}/report', [ReportController::class, 'accountReport'])->whereIn('key', array_keys(User::AUTO_FOLLOW_ACCOUNTS))->name('reports.account-report');
     Route::get('reports/lots/{order}', [ReportController::class, 'lot'])->name('reports.lot');
