@@ -79,6 +79,30 @@ test('each refresh keeps the check before it, so two refreshes confirm', functio
         ->and($this->takeProfit->refresh()->status)->toBe(OrderStatus::Filled);
 });
 
+test('the same DEX Screener snapshot read again confirms nothing; the next snapshot does', function () {
+    $pair = fn (string $price, int $buys): array => ['pairs' => [[
+        'chainId' => 'base', 'pairAddress' => '0xpair', 'priceUsd' => $price, 'priceNative' => $price, 'txns' => ['m5' => ['buys' => $buys, 'sells' => 3]],
+        'baseToken' => ['symbol' => 'X', 'name' => 'X', 'address' => '0x1'], 'quoteToken' => ['symbol' => 'USDC'],
+    ]]];
+    // A stray snapshot at the take profit, served twice from DEX Screener's cache, then a new one that still holds.
+    Http::fake(['api.dexscreener.com/*' => Http::sequence()->push($pair('0.0089', 10))->push($pair('0.0089', 10))->push($pair('0.0089', 11))]);
+    $this->token->update(['price_updated_at' => now()->subSeconds(15)]);
+
+    $this->artisan('market:prices')->assertSuccessful();
+    $this->travel(15)->seconds();
+    $this->artisan('market:prices')->assertSuccessful();
+
+    expect($this->token->refresh()->previous_price_usd)->toEqual(0.0085)
+        ->and($this->takeProfit->refresh()->status)->toBe(OrderStatus::Pending);
+
+    $this->travel(15)->seconds();
+    $this->artisan('market:prices')->assertSuccessful();
+
+    expect($this->token->refresh()->previous_price_usd)->toEqual(0.0089)
+        ->and($this->token->previous_price_at->diffInSeconds(now()))->toEqualWithDelta(15, 1)
+        ->and($this->takeProfit->refresh()->status)->toBe(OrderStatus::Filled);
+});
+
 test('a signal is not settled by one stray price either', function () {
     $signal = Signal::withoutEvents(fn () => Signal::factory()->for($this->token)->create([
         'status' => 'active', 'entry_price' => 1, 'entered_at' => now(), 'stop_loss' => 0.95, 'take_profit_1' => 1.05, 'take_profit_2' => 1.1, 'take_profit_3' => 1.2, 'max_tp_hit' => 0,

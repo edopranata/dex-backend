@@ -34,7 +34,7 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
 - Level: zona entry, stop di bawah swing low dengan jarak 1-3 ATR, target 1,5R, 2,5R, dan 4R.
 - Menunggu entry paling lama 12 jam. Kalau harga menyentuh stop sebelum masuk zona, sinyal batal.
 - Setelah entry: sepertiga posisi dijual di tiap target, stop pindah ke harga entry setelah TP1, dan sinyal ditutup paling lama 72 jam setelah entry.
-- Level hanya dianggap tercapai bila dua pengecekan harga berurutan setuju. Bila harga DEX Screener berbeda lebih dari batas toleransi dengan pool yang sama di GeckoTerminal, harga GeckoTerminal yang dipakai (sejak 10 Nov 2026).
+- Level hanya dianggap tercapai bila dua pengecekan harga berurutan setuju. Sejak 20 Nov 2026 pengecekan pertama harus berasal dari snapshot DEX Screener yang berbeda (sidik harga, harga native, volume, transaksi, dan perubahan 5 menit, serta likuiditas); snapshot yang sama dibaca ulang tidak mengonfirmasi apa pun. Bila harga DEX Screener berbeda lebih dari batas toleransi dengan pool yang sama di GeckoTerminal, harga GeckoTerminal yang dipakai (sejak 10 Nov 2026).
 - Hasil dicatat dalam R bersih: harga keluar sebenarnya, fee 0,3% per swap, dan price impact.
 
 ## Simulator dan auto-follow (berlaku)

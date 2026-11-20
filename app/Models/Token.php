@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 
 #[Fillable([
     'chain_id', 'pair_address', 'token_address', 'symbol', 'name', 'quote_symbol', 'dex_id',
-    'image_url', 'url', 'price_usd', 'previous_price_usd', 'previous_price_at', 'price_change_m5', 'price_change_h1', 'price_change_h6',
+    'image_url', 'url', 'price_usd', 'previous_price_usd', 'previous_price_at', 'price_snapshot', 'price_change_m5', 'price_change_h1', 'price_change_h6',
     'price_change_h24', 'volume_h24', 'liquidity_usd', 'fdv', 'market_cap', 'txns_h24_buys',
     'txns_h24_sells', 'pair_created_at', 'price_updated_at', 'is_active', 'is_pinned', 'source', 'discovered_at',
 ])]

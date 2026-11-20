@@ -36,6 +36,8 @@ return [
         // Harga lebih tua dari ini dianggap basi dan diambil ulang sebelum order dieksekusi.
         'max_price_age_seconds' => 30,
         // Dua pengecekan harga berurutan harus setuju sebelum order terisi; jeda lebih lama berarti menunggu lagi.
+        // Sejak 20 Nov 2026 pengecekan kedua harus berasal dari snapshot DEX Screener yang berbeda (data tiap pair
+        // diperbarui sekitar tiap 30 detik, jadi tarikan 15 detik sering membaca snapshot yang sama).
         'confirmation_max_gap_seconds' => 120,
         // Saat harga DEX Screener membuat order atau sinyal terisi, harganya dicek ke pool yang sama di
         // GeckoTerminal (sumber grafik). Beda lebih dari tolerance_pct: yang dipakai harga GeckoTerminal.

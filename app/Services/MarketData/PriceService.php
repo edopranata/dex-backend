@@ -8,7 +8,8 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Keeps token prices fresh from DEX Screener, batching pairs per chain.
+ * Keeps token prices fresh from DEX Screener, batching pairs per chain. The previous price (the second check that
+ * confirms an order or a signal level) moves on only when DEX Screener serves a new snapshot of the pair.
  */
 class PriceService
 {
@@ -45,10 +46,17 @@ class PriceService
 
                 if ($pair !== null && isset($pair['priceUsd'])) {
                     $attributes = DexScreenerClient::toTokenAttributes($pair);
+                    $snapshot = DexScreenerClient::snapshotKey($pair);
+
+                    // The confirming price is the last one read from an earlier DEX Screener snapshot: the same
+                    // snapshot read again (it renews about every 30 seconds) confirms nothing.
                     $token->update([
                         ...array_intersect_key($attributes, array_flip(self::LIVE_ATTRIBUTES)),
-                        'previous_price_usd' => $token->price_usd,
-                        'previous_price_at' => $token->price_updated_at,
+                        ...($snapshot === $token->price_snapshot ? [] : [
+                            'previous_price_usd' => $token->price_usd,
+                            'previous_price_at' => $token->price_updated_at,
+                            'price_snapshot' => $snapshot,
+                        ]),
                     ]);
                 }
             }

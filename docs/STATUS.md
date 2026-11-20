@@ -1,12 +1,14 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 19 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
 - Server: VPSMurah kanaka-vps (3 vCPU, 6 GB) dengan IP dedicated sejak 13 Nov, Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1-2 bulan sekaligus. Detail di `docs/INFRASTRUKTUR.md` repo bersama.
 - Produksi per 18 Nov 14.28 WIB: backend 71ce2ec, frontend e956a73 (bayangan konfirmasi candle 15 menit: filter dan entry tertunda; diperiksa 14.30 WIB, container sehat, tanpa error log). Sebelumnya 18 Nov 11.59 WIB: backend 11e872a, frontend 26239ac (rincian per sinyal di catatan dan sinyal bayangan dengan BTC dan Fear & Greed saat entry; BTC sebelum 15 Nov dihitung ulang dari candle; bayangan jeda setelah stop 12/24/48 jam). Diperiksa 12.00 WIB: container sehat, laporan v6 1,7 detik, tanpa error log. Sebelumnya 15 Nov: bayangan Buy dengan Fear & Greed dan acuan BTC.
+
+- 20 Nov 2026: konfirmasi harga kini butuh dua snapshot DEX Screener yang berbeda (data DEX Screener diperbarui sekitar tiap 30 detik per pair, diukur 19 Nov). Pengecekan yang membaca snapshot sama tidak menggeser harga sebelumnya. 452 tes lolos.
 
 ### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
 

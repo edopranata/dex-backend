@@ -84,6 +84,22 @@ class DexScreenerClient
     }
 
     /**
+     * Fingerprint of one DEX Screener snapshot of a pair. DEX Screener renews a pair's data about every 30 seconds
+     * (19 Nov 2026), and the price has only 4 significant digits, so the fingerprint also takes the native price,
+     * the last 5 minutes' volume, trades and change, and the liquidity: any new trade changes it.
+     *
+     * @param  array<string, mixed>  $pair
+     */
+    public static function snapshotKey(array $pair): string
+    {
+        return md5(json_encode([
+            $pair['priceUsd'] ?? null, $pair['priceNative'] ?? null, $pair['volume']['m5'] ?? null,
+            $pair['txns']['m5']['buys'] ?? null, $pair['txns']['m5']['sells'] ?? null,
+            $pair['priceChange']['m5'] ?? null, $pair['liquidity']['usd'] ?? null,
+        ]));
+    }
+
+    /**
      * Map a DEX Screener pair payload to Token model attributes.
      *
      * @param  array<string, mixed>  $pair
