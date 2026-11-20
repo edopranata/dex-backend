@@ -60,6 +60,7 @@ Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama set
 | 26 Nov | Pemilik menaikkan RAM VPS ke 8 GB dan memperpanjang 1-3 bulan (masa aktif sekarang sampai 29 Nov); cek layanan DEX setelah reboot |
 | Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
 | Sekitar 30 sinyal v6 | Review v6, termasuk tabel uji aturan holder |
+| Sekitar Feb 2027, atau saat riwayat candle 4 jam >= 6 bulan untuk >= 100 token | Uji ulang strategi swing Fibonacci 4 jam (aturan akun FutureSim `swing_fib_4h`, hanya long) di token DEX. Uji 20 Nov: 30 trade dari 140 token (riwayat 4 jam median 55 hari), tanpa biaya +0,03R, dengan biaya DEX -0,10R; terlalu sedikit untuk disimpulkan (pemilik: simpan untuk nanti). Bisa dipercepat dengan mengunduh riwayat GeckoTerminal dari laptop (sekitar 280 permintaan). Bahan: `dex/review/hasil-20nov-swing-fib.md`, `swing-fib-dex.py` |
 | 28 Des | Data whale sendiri mencapai 60 hari; uji wallet diulang tanpa wallet yang ditandai bot (`dex/review/whale-btc.py`), termasuk perbandingan saat tren BTC naik dan turun |
 
 ## Menunggu pemilik
