@@ -53,7 +53,7 @@ Terakhir diperbarui: 21 November 2026. Perbarui file ini di commit yang sama set
 ## Langkah berikutnya
 
 1. Pantau sinyal v7 pertama: penutupan saat analisa turun, pesan Telegram, dan lot auto-follow yang ikut ditutup. Cek rugi saat stop pada lot dengan ukuran baru (target 1,0x risiko, kecuali gap).
-2. S8 (beli setelah turun > 15% dalam 1 jam): uji ulang 21 Nov negatif pada data baru (ROADMAP Fase 2B); pemasangan sebagai catatan bayangan menunggu keputusan pemilik.
+2. S8 (beli setelah turun > 15% dalam 1 jam): uji ulang 21 Nov negatif pada data baru (ROADMAP Fase 2B); ditunda pemilik 21 Nov sampai sekitar 200 kejadian sejak token ditemukan (21 Nov: 37).
 
 ## Menunggu
 
