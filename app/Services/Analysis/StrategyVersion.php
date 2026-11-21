@@ -15,6 +15,7 @@ class StrategyVersion
             'timeframe', 'trend_timeframe', 'weights', 'thresholds', 'min_onchain_score', 'tp_r_multiples', 'min_stop_pct',
             'sl_atr_min', 'sl_atr_max', 'signal_entry_expiry_hours', 'signal_max_hours',
             'buy_max_rise_24h_pct', 'buy_min_below_high_24h_pct', 'signal_recommendations', 'max_top10_holder_pct',
+            'exit_on_downgrade', 'strong_buy_max_score',
         ]));
         ksort($parameters);
 

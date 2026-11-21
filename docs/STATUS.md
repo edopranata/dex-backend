@@ -1,6 +1,6 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 21 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
@@ -10,13 +10,15 @@ Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama set
 
 - 20 Nov 2026: konfirmasi harga kini butuh dua snapshot DEX Screener yang berbeda (data DEX Screener diperbarui sekitar tiap 30 detik per pair, diukur 19 Nov). Pengecekan yang membaca snapshot sama tidak menggeser harga sebelumnya. 452 tes lolos.
 
-### Strategi: v6 (`v6-2b1128`, sejak 12 Nov 10.27 WIB)
+### Strategi: v7 (sejak 21 Nov 2026; versi lengkap di Laporan)
 
 - Hanya Strong Buy yang membuat sinyal. Buy tetap dianalisa dan tampil sebagai pantauan (v5).
 - Buy dan Strong Buy menjadi Hold bila 10 holder teratas memegang 20% supply atau lebih (v6).
-- Auto-follow: maksimal 4 posisi, risiko 0,5% per posisi, batas rugi harian 3%.
-- Semua akun menjual posisinya otomatis saat analisa token menjadi Sell, Strong Sell, atau Hindari. Sinyal v6 tetap diukur dengan aturan aslinya, jadi selisih hasil akun dan hasil sinyal menunjukkan dampak aturan ini.
-- Aturan lengkapnya di [DOMAIN_RULES.md](DOMAIN_RULES.md); alasan v5 dan v6 di [DECISIONS.md](DECISIONS.md).
+- **v7:** sinyal yang sudah entry ditutup di analisa pertama yang tidak lagi Buy atau Strong Buy, dan Strong Buy dengan skor 77 atau lebih tidak membuat sinyal (diikuti sebagai sinyal bayangan `high_score`). Sinyal v6 yang masih terbuka (EVAA #208, UP #211, VVV #213) selesai dengan exit v6.
+- Auto-follow: maksimal 4 posisi, risiko 0,5% per posisi termasuk fee, gas, dan price impact beli dan jual (sejak 21 Nov), batas rugi harian 3%.
+- Semua akun menjual posisinya otomatis saat analisa token menjadi Sell, Strong Sell, atau Hindari.
+- Aturan lengkapnya di [DOMAIN_RULES.md](DOMAIN_RULES.md); alasan v5, v6, dan v7 di [DECISIONS.md](DECISIONS.md).
+- Review v6 (21 Nov, 32 sinyal, `dex/review/hasil-21nov-v6-final.md`): -16,44R, PF 0,34, gagal kriteria rata-rata, total, dan PF. Dengan kedua aturan v7 -4,31R: masih negatif. Semua sinyal v6 masuk saat BTC 4 jam turun dan Fear & Greed 10-28.
 - Bukti yang mendasarinya belum memenuhi kriteria Fase 2. Strong Buy historis +0,07R per sinyal (PF 1,14); dengan top 10 di bawah 20%, sinyal live +0,50R (n=25) dan putar ulang +0,09R (n=44). Ambang 20% dipilih dari data yang sama.
 - Seluruh data sejak 31 Okt berasal dari pasar turun: BTC dari sekitar US$81 ribu ke US$64 ribu (29 Okt - 15 Nov). Label tren SOL dan ETH di konteks pasar tidak bisa dipakai untuk periode setelah 1 Nov (SOL) dan 3 Nov (ETH): candle acuan berhenti diperbarui karena keduanya tidak pernah di Market. Diperbaiki 15 Nov; sejak itu SOL, ETH, dan BTC ikut setiap putaran candle.
 
@@ -24,7 +26,8 @@ Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama set
 
 | Apa | Sejak | Dinilai | Di mana |
 |---|---|---|---|
-| Sinyal v6 sungguhan | 12 Nov 10.27 WIB | Setelah sekitar 30 sinyal, perkiraan 2-3 minggu | Laporan, versi `v6-…` |
+| Sinyal v7 sungguhan, dibanding exit v6 pada salinan bayangannya | 21 Nov 2026 | Setelah sekitar 30 sinyal, dan saat pasar berbalik (`docs/UJI_ULANG_PASAR_NAIK.md`) | Laporan, versi `v7-…`; Catatan bayangan → Tahan sampai target, stop, atau 72 jam seperti v6 |
+| Strong Buy skor 77+ yang tidak jadi sinyal (`high_score`) | 21 Nov 2026 | Bersama review v7 | Laporan → Sinyal bayangan |
 | Strong Buy yang ditahan aturan holder, dibanding sinyal asli (`shadow_signals`) | 12 Nov sekitar 14.00 WIB | Bersama review v6 | Laporan → Uji aturan holder v6 |
 | Exit first_check, dua kali tidak Buy, entry terkonfirmasi | 7 Nov | Bersama review v6 | Laporan → Catatan bayangan |
 | Konfirmasi candle 1 jam (body solid, close di atas high sebelumnya), dengan dan tanpa volume ≥ 1,5x rata-rata 20 jam | 16 Nov (dihitung sejak 7 Nov dari candle tersimpan) | Bersama review v6, lalu diuji ulang saat pasar naik | Laporan → Catatan bayangan |
@@ -49,8 +52,8 @@ Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama set
 
 ## Langkah berikutnya
 
-1. Review v6 setelah sekitar 30 sinyal, bersama hasil sinyal bayangan. Bahan disiapkan 19 Nov (`dex/review/v6-review.php` untuk ekspor, `v6-review.py` untuk draf; pratinjau 23 sinyal di `hasil-19nov-v6-pratinjau.md`, folder di luar git). Draf membandingkan setiap baris bayangan dengan melewati sinyal sebanyak itu secara acak, karena selama sinyal rata-rata rugi aturan yang banyak melewati sinyal selalu terlihat bagus. Kolom "Data bercelah" di Laporan (sejak 17 Nov) menandai baris berbasis candle yang datanya kurang lengkap; nilai bersama atau tanpa baris itu. Sejak 18 Nov setiap baris catatan bayangan dan sinyal bayangan bisa diklik untuk melihat sinyalnya satu per satu (apa yang dilakukan aturan, R aktual dan R aturan), dengan harga BTC, tren 4 jam BTC, dan Fear & Greed saat entry dari snapshot analisa terakhir sebelum entry. Snapshot sebelum 15 Nov belum menyimpan BTC; untuk sinyal itu harga dan tren BTC dihitung ulang dari candle BTC yang sudah tutup sebelum entry (ditandai ≈ dan * di Laporan).
-2. Setelah review v6 (disetujui pemilik 17 Nov): ukuran posisi auto-follow memasukkan biaya pulang-pergi. Audit 17 Nov: rugi nyata saat kena stop median 1,10x risiko rencana 0,5%, terburuk 2,95x. Kode siap 19 Nov di cabang `sizing-with-costs` (belum di `dev`, commit `93fa229`): ukuran dicari supaya rugi saat stop, termasuk fee, gas, dan price impact beli dan jual seperti diisi simulator, sama dengan `risk_pct` x ekuitas; tes ujung-ke-ujung rugi $50,00 ± 0,05 pada 0,5% dari $10.000. Saat dipasang, ganti metrik audit "rugi/rencana" (`audit/dex.php`, `dex/review/v6-review.py`) menjadi rugi dibanding `risk_pct` x ekuitas, karena ukuran x jarak stop tidak lagi memuat biaya.
+1. Pantau sinyal v7 pertama: penutupan saat analisa turun, pesan Telegram, dan lot auto-follow yang ikut ditutup. Cek rugi saat stop pada lot dengan ukuran baru (target 1,0x risiko, kecuali gap).
+2. S8 (beli setelah turun > 15% dalam 1 jam): uji ulang 21 Nov negatif pada data baru (ROADMAP Fase 2B); pemasangan sebagai catatan bayangan menunggu keputusan pemilik.
 
 ## Menunggu
 
@@ -59,7 +62,7 @@ Terakhir diperbarui: 20 November 2026. Perbarui file ini di commit yang sama set
 | 13 Nov pagi | Sentimen berita tidak lagi jatuh ke kamus kata (24 berita pada 11-12 Nov, sebelum perbaikan penghitung Gemini); hasil Birdeye hari kedua |
 | 26 Nov | Pemilik menaikkan RAM VPS ke 8 GB dan memperpanjang 1-3 bulan (masa aktif sekarang sampai 29 Nov); cek layanan DEX setelah reboot |
 | Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
-| Sekitar 30 sinyal v6 | Review v6, termasuk tabel uji aturan holder |
+| Sekitar 30 sinyal v7 | Review v7: sinyal dibanding exit v6 di salinan bayangan, `high_score`, rugi saat stop dengan ukuran baru |
 | Sekitar Feb 2027, atau saat riwayat candle 4 jam >= 6 bulan untuk >= 100 token | Uji ulang strategi swing Fibonacci 4 jam (aturan akun FutureSim `swing_fib_4h`, hanya long) di token DEX. Uji 20 Nov: 30 trade dari 140 token (riwayat 4 jam median 55 hari), tanpa biaya +0,03R, dengan biaya DEX -0,10R; terlalu sedikit untuk disimpulkan (pemilik: simpan untuk nanti). Bisa dipercepat dengan mengunduh riwayat GeckoTerminal dari laptop (sekitar 280 permintaan). Bahan: `dex/review/hasil-20nov-swing-fib.md`, `swing-fib-dex.py` |
 | 28 Des | Data whale sendiri mencapai 60 hari; uji wallet diulang tanpa wallet yang ditandai bot (`dex/review/whale-btc.py`), termasuk perbandingan saat tren BTC naik dan turun |
 

@@ -247,7 +247,7 @@ test('each shadow variant counts signals entered since it started, and only chan
 
     $variants = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->keyBy('key');
 
-    expect($variants->keys()->all())->toBe(['first_downgrade', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'stop_cooldown_12', 'stop_cooldown_24', 'stop_cooldown_48', 'candle_confirmed', 'candle_confirmed_volume', 'candle_15m_confirmed', 'candle_15m_wait', 'atr_trail_4h'])
+    expect($variants->keys()->all())->toBe(['first_downgrade', 'hold_v6_exits', 'first_check', 'second_downgrade', 'confirmed_entry', 'young_pair', 'btc_follower_down_30', 'btc_follower_down_10', 'btc_follower_up', 'stop_cooldown_12', 'stop_cooldown_24', 'stop_cooldown_48', 'candle_confirmed', 'candle_confirmed_volume', 'candle_15m_confirmed', 'candle_15m_wait', 'atr_trail_4h'])
         ->and($variants->pluck('signals')->unique()->all())->toBe([3])
         ->and($variants->pluck('actual_r')->unique()->all())->toEqual([-1.7])
         ->and($variants['first_downgrade'])->toMatchArray(['affected' => 2, 'shadow_r' => -0.2])
@@ -658,4 +658,24 @@ test('the stop cooldown shadows skip new signals soon after a stop, counting onl
         ->and($variants['stop_cooldown_24'])->toMatchArray(['affected' => 2, 'shadow_r' => -1.1])
         // 48h: the 16 Nov one too, 31 hours after the 03:00 stop, since the skipped 07:00 stop does not count.
         ->and($variants['stop_cooldown_48'])->toMatchArray(['affected' => 3, 'shadow_r' => -0.1]);
+});
+
+test('a v7 signal closed at the downgrade is compared with its shadow copy held to the v6 exits', function () {
+    config(['market.analysis.shadow_exit_since' => '2026-11-07 13:00:00']);
+    $downgraded = reportSignal($this->token, -0.3, '2026-11-21 05:00:00', ['status' => 'downgraded', 'entered_at' => '2026-11-21 02:00:00', 'stop_loss' => 0.9]);
+    $open = reportSignal(Token::factory()->create(), -0.2, '2026-11-21 06:00:00', ['status' => 'downgraded', 'entered_at' => '2026-11-21 03:00:00', 'stop_loss' => 0.9]);
+    reportSignal($this->token, -1.0, '2026-11-20 05:00:00', ['entered_at' => '2026-11-20 02:00:00', 'stop_loss' => 0.9]);
+    $copy = fn (Signal $signal, array $result) => ShadowSignal::query()->create([
+        'token_id' => $signal->token_id, 'analysis_id' => $signal->analysis_id, 'signal_id' => $signal->id, 'rule' => ShadowSignal::ACCEPTED,
+        'recommendation' => 'STRONG_BUY', 'strategy_version' => 'v7-test', 'entry_low' => 0.98, 'entry_high' => 1.0, 'stop_loss' => 0.9,
+        'take_profit_1' => 1.1, 'take_profit_2' => 1.2, 'take_profit_3' => 1.3, ...$result,
+    ]);
+    $copy($downgraded, ['status' => 'stop_loss', 'net_r' => -1.05, 'exit_price' => 0.9, 'max_tp_hit' => 0, 'entered_at' => '2026-11-21 02:00:00', 'closed_at' => '2026-11-21 09:00:00']);
+    $copy($open, ['status' => 'pending', 'entered_at' => '2026-11-21 03:00:00']);
+
+    $hold = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'hold_v6_exits');
+    $row = collect($hold['rows'])->firstWhere('id', $downgraded->id);
+
+    expect($hold)->toMatchArray(['signals' => 3, 'affected' => 1, 'actual_r' => -1.5, 'shadow_r' => -2.25])
+        ->and($row)->toMatchArray(['action' => 'exit', 'actual_r' => -0.3, 'shadow_r' => -1.05, 'exit_price' => 0.9]);
 });

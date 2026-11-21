@@ -31,7 +31,7 @@ class PerformanceReport
     public const SHADOW_PAGE = 50;
 
     /** The groups of the shadow signal table: the v6 holder rule pair, and the Buys split by the BTC 4h trend. */
-    public const SHADOW_GROUPS = [ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, 'buy_btc_rising', 'buy_btc_not_rising'];
+    public const SHADOW_GROUPS = [ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, ShadowSignal::HIGH_SCORE, 'buy_btc_rising', 'buy_btc_not_rising'];
 
     /** @var array<int, array<string, mixed>> The market at entry per signal id, read once per report. */
     private array $signalMarket = [];
@@ -109,7 +109,7 @@ class PerformanceReport
      */
     private function holderFilter(): array
     {
-        $rows = collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS])
+        $rows = collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, ShadowSignal::HIGH_SCORE])
             ->map(fn (string $rule): array => $this->shadowRow($rule, ShadowSignal::query()->where('rule', $rule)->get(['token_id', 'status', 'net_r', 'entered_at', 'closed_at'])));
         $buys = ShadowSignal::query()->where('rule', ShadowSignal::BUY_WATCH)->with('analysis:id,market_context')->get(['id', 'token_id', 'analysis_id', 'status', 'net_r', 'entered_at', 'closed_at']);
 
@@ -224,6 +224,18 @@ class PerformanceReport
             $this->variant('first_downgrade', 'Keluar saat pertama kali tidak lagi Buy', $since, $entered($since), fn (Signal $s): ?array => $s->downgraded_at !== null && $s->downgraded_at->lte($s->closed_at)
                 ? $this->exitAt($s, (float) $s->downgrade_price, (int) $s->downgrade_tp_hit, $s->downgraded_at)
                 : null),
+            // v7 closes at the first downgrade; what holding on to the v6 exits (targets, stop, 72 hours) would have
+            // given is read from the signal's shadow copy, followed on 15m candles. Its entry can differ slightly from
+            // the signal's, and a copy still open leaves the signal unchanged.
+            $this->variant('hold_v6_exits', 'Tahan sampai target, stop, atau 72 jam seperti v6 (dari salinan bayangan sinyal di candle 15 menit)', $since, $entered($since), function (Signal $s): ?array {
+                if ($s->status !== SignalStatus::Downgraded) {
+                    return null;
+                }
+
+                $copy = ShadowSignal::query()->where('signal_id', $s->id)->where('rule', ShadowSignal::ACCEPTED)->whereNotNull('net_r')->first(['net_r', 'exit_price', 'max_tp_hit', 'closed_at']);
+
+                return $copy === null || $copy->closed_at === null ? null : ['r' => (float) $copy->net_r, 'at' => $copy->closed_at, 'price' => (float) $copy->exit_price, 'taken' => (int) $copy->max_tp_hit];
+            }),
             $this->variant('first_check', 'Keluar bila analisa pertama setelah entry tidak lagi Buy', $since, $entered($since), function (Signal $s): ?array {
                 $first = $s->token->analyses()->where('created_at', '>', $s->entered_at)->where('created_at', '<=', $s->closed_at)->oldest()->first(['recommendation', 'price', 'created_at']);
 

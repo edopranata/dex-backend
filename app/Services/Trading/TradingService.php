@@ -302,6 +302,7 @@ class TradingService
             SignalStatus::StopLoss => 'kena stop loss',
             SignalStatus::TakeProfit => 'take profit',
             SignalStatus::Invalidated => 'batal sebelum entry',
+            SignalStatus::Downgraded => 'analisa tidak lagi Buy',
             default => $signal->status->value,
         };
 

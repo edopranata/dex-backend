@@ -342,6 +342,7 @@ class TelegramNotifier
                 ? "⏱ {$symbol} ditutup karena melewati ".config('market.analysis.signal_max_hours').' jam, di '.self::price($signal->exit_price).". {$result}"
                 : "⚪ Sinyal {$symbol} kedaluwarsa: zona entry tidak tercapai dalam ".config('market.analysis.signal_entry_expiry_hours').' jam.',
             SignalStatus::Invalidated => "⚪ Sinyal {$symbol} batal: harga menyentuh stop loss sebelum masuk zona entry. Jangan entry.",
+            SignalStatus::Downgraded => "↘️ {$symbol} ditutup di ".self::price($signal->exit_price).': analisa terbaru tidak lagi Buy.'.($signal->max_tp_hit ? " Sudah TP{$signal->max_tp_hit}." : '')." {$result}",
             default => null,
         };
     }

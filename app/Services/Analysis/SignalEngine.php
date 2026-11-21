@@ -97,8 +97,13 @@ class SignalEngine
             $levels = [];
         }
 
+        // v7: a Strong Buy scored this high stays a Strong Buy on the page but makes no signal; it is followed as a
+        // shadow instead, so the rule keeps being measured.
+        $tooHighScore = $levels !== [] && $this->scoreTooHigh($recommendation, $finalScore, $config);
+
         $reasons = array_values(array_filter([
             $overrideReason,
+            $tooHighScore ? sprintf('Skor %d di atas batas sinyal %d: Strong Buy dengan skor setinggi ini rata-rata rugi di v3, v4, dan v6, jadi tidak dijadikan sinyal (v7).', $finalScore, (int) $config['strong_buy_max_score'] - 1) : null,
             ...array_map(fn (string $r): string => "[Teknikal] {$r}", $technical['reasons']),
             ...array_map(fn (string $r): string => "[On-chain] {$r}", $onchain['reasons']),
             ...array_map(fn (string $r): string => "[Whale] {$r}", $whale['reasons']),
@@ -151,7 +156,11 @@ class SignalEngine
             $this->notifier->riskAlert($token, $onchain['reasons']);
         }
 
-        if ($levels !== [] && in_array($recommendation->value, config('market.analysis.signal_recommendations'), true)) {
+        if ($tooHighScore) {
+            $this->recordShadow($token, $analysis, ShadowSignal::HIGH_SCORE, $recommendation, $levels, (float) $finalScore);
+        }
+
+        if ($levels !== [] && ! $tooHighScore && in_array($recommendation->value, config('market.analysis.signal_recommendations'), true)) {
             $signal = $token->withMembershipLock(function () use ($token, $analysis, $recommendation, $strategyVersion, $levels): ?Signal {
                 if (! $token->isInMarket() || $token->signals()->open()->exists()) {
                     return null;
@@ -258,7 +267,34 @@ class SignalEngine
                 if ($changes !== []) {
                     $signal->update($changes);
                 }
+
+                if ($this->exitsOnDowngrade($signal)) {
+                    app(SignalTracker::class)->closeOnDowngrade($signal, (float) $analysis->price);
+                }
             });
+    }
+
+    /**
+     * v7: the first analysis after entry that is no longer bullish closes the signal. Only for signals of the current
+     * strategy, so v6 signals still open at the switch finish with the exits they were measured by.
+     */
+    private function exitsOnDowngrade(Signal $signal): bool
+    {
+        return (bool) config('market.analysis.exit_on_downgrade')
+            && str_starts_with((string) $signal->strategy_version, config('market.analysis.strategy_version').'-');
+    }
+
+    /**
+     * v7: a Strong Buy at or above the score limit (review 21 Nov 2026: score 77+ -0.63R per signal over v3, v4 and v6,
+     * n=27; 72-76 -0.01R, n=56). 0 switches the rule off.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function scoreTooHigh(Recommendation $recommendation, int $finalScore, array $config): bool
+    {
+        $limit = (int) ($config['strong_buy_max_score'] ?? 0);
+
+        return $limit > 0 && $recommendation === Recommendation::StrongBuy && $finalScore >= $limit;
     }
 
     /**

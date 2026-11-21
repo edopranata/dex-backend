@@ -123,6 +123,20 @@ class SignalTracker
         }
     }
 
+    /**
+     * v7 (21 Nov 2026): an entered signal closes at the price of the first analysis that is no longer Buy or Strong
+     * Buy, keeping the targets it already took. The v6 review measured this exit as a shadow on 32 signals (-16.44R to
+     * -6.90R); the original exits stay measured on the signal's shadow copy (ShadowSignal::ACCEPTED).
+     */
+    public function closeOnDowngrade(Signal $signal, float $price): void
+    {
+        if ($signal->status !== SignalStatus::Active) {
+            return;
+        }
+
+        $this->close($signal, SignalStatus::Downgraded, $price, (int) $signal->max_tp_hit);
+    }
+
     private function close(Signal $signal, SignalStatus $status, float $price, int $maxTpHit): void
     {
         $result = $this->results->calculate($signal, $price, $maxTpHit, $signal->token?->liquidity_usd);

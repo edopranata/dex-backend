@@ -13,6 +13,8 @@ enum SignalStatus: string
     /** Price fell to the stop loss before entering. */
     case Invalidated = 'invalidated';
     case Expired = 'expired';
+    /** v7 (21 Nov 2026): closed at the first analysis after entry that is no longer Buy or Strong Buy. */
+    case Downgraded = 'downgraded';
 
     public function isOpen(): bool
     {

@@ -533,7 +533,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v6',
+        'strategy_version' => 'v7',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [
@@ -617,6 +617,12 @@ return [
         // terakhir). Strong Buy sejak 29 Okt: sinyal live < 20% +0,50R (n=25) lawan >= 20% -0,55R (n=19); putar ulang
         // 89 analisa +0,09R lawan -0,54R, di kedua paruh waktu. Tanpa data holder, aturan ini dilewati. 0 = nonaktif.
         'max_top10_holder_pct' => (float) env('SIGNAL_MAX_TOP10_HOLDER_PCT', 20.0),
+        // v7 (review 21 Nov 2026, 32 v6 signals, all in a falling BTC and extreme fear): an entered signal closes at the
+        // first analysis that is no longer Buy or Strong Buy (-16.44R to -6.90R; winners +8.40R to +1.91R), and a
+        // Strong Buy scoring this much or more makes no signal (v3, v4, v6: -0.63R per signal, n=27). With both:
+        // -4.31R. Retest when the market turns (docs/UJI_ULANG_PASAR_NAIK.md). 0 = no score limit.
+        'exit_on_downgrade' => (bool) env('SIGNAL_EXIT_ON_DOWNGRADE', true),
+        'strong_buy_max_score' => (int) env('SIGNAL_STRONG_BUY_MAX_SCORE', 77),
     ],
 
 ];

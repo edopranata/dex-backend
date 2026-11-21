@@ -23,8 +23,9 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     Http::fake(['api.alternative.me/*' => Http::response(['data' => [['value' => '60', 'value_classification' => 'Greed', 'timestamp' => '0']]])]);
     Http::preventStrayRequests();
-    // Most tests use a tight fake stop; the minimum stop rule has its own test.
-    config(['market.analysis.min_stop_pct' => 0.0]);
+    // Most tests use a tight fake stop and a fake technical score high enough to pass v7's Strong Buy score limit;
+    // both rules have their own tests.
+    config(['market.analysis.min_stop_pct' => 0.0, 'market.analysis.strong_buy_max_score' => 0]);
 });
 
 function fakeTechnical(int $score, bool $available = true): void
@@ -107,7 +108,7 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v6-');
+    expect($version)->toStartWith('v7-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);
@@ -224,7 +225,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 
     expect(config('market.analysis.buy_min_below_high_24h_pct'))->toEqual(0.0)
         ->and(config('market.analysis.buy_max_rise_24h_pct'))->toEqual(15.0)
-        ->and(StrategyVersion::current())->toStartWith('v6-')->not->toBe($before);
+        ->and(StrategyVersion::current())->toStartWith('v7-')->not->toBe($before);
 
     $this->actingAs($admin)->putJson('/api/admin/settings', ['values' => ['market.analysis.buy_max_rise_24h_pct' => -1]])->assertUnprocessable();
 });
@@ -232,7 +233,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 test('the v4 limits are part of the strategy version', function () {
     $version = StrategyVersion::current();
 
-    expect($version)->toStartWith('v6-');
+    expect($version)->toStartWith('v7-');
 
     config(['market.analysis.buy_max_rise_24h_pct' => 20.0]);
 
@@ -294,6 +295,67 @@ test('a lone Hold between Buys is not a second downgrade, and a Hold from before
         ->and($active->second_downgraded_at)->toBeNull();
 });
 
+test('v7 closes an entered signal of the current strategy at the first analysis that is no longer bullish', function () {
+    fakeTechnical(10);
+    $token = Token::factory()->create(['price_usd' => 1.07]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+    $signal = Signal::withoutEvents(fn () => Signal::factory()->for($token)->create([
+        'status' => 'active', 'max_tp_hit' => 1, 'entry_price' => 1.0, 'entered_at' => now()->subHour(), 'strategy_version' => StrategyVersion::current(),
+    ]));
+
+    $analysis = app(SignalEngine::class)->analyze($token);
+    $signal->refresh();
+
+    expect($analysis->recommendation->isBullish())->toBeFalse()
+        ->and($signal->status)->toBe(SignalStatus::Downgraded)
+        ->and($signal->exit_price)->toEqual(1.07)
+        ->and($signal->max_tp_hit)->toBe(1)
+        ->and($signal->net_r)->not->toBeNull()
+        ->and($signal->closed_at)->not->toBeNull()
+        ->and($signal->downgrade_price)->toEqual(1.07);
+});
+
+test('v7 leaves a v6 signal on its own exits, and the exit can be switched off', function () {
+    fakeTechnical(10);
+    $old = Token::factory()->create(['price_usd' => 1.07]);
+    TokenSecurityCheck::factory()->for($old)->create(['risk_score' => 100]);
+    $v6 = Signal::withoutEvents(fn () => Signal::factory()->for($old)->create(['status' => 'active', 'entry_price' => 1.0, 'entered_at' => now()->subHour(), 'strategy_version' => 'v6-2b1128']));
+
+    app(SignalEngine::class)->analyze($old);
+
+    config(['market.analysis.exit_on_downgrade' => false]);
+    $current = Token::factory()->create(['price_usd' => 1.07]);
+    TokenSecurityCheck::factory()->for($current)->create(['risk_score' => 100]);
+    $v7 = Signal::withoutEvents(fn () => Signal::factory()->for($current)->create(['status' => 'active', 'entry_price' => 1.0, 'entered_at' => now()->subHour(), 'strategy_version' => StrategyVersion::current()]));
+
+    app(SignalEngine::class)->analyze($current);
+
+    expect($v6->refresh()->status)->toBe(SignalStatus::Active)
+        ->and($v6->downgraded_at)->not->toBeNull()
+        ->and($v7->refresh()->status)->toBe(SignalStatus::Active);
+});
+
+test('v7 makes no signal from a Strong Buy at the score limit and follows it as a shadow with its score', function () {
+    fakeTechnical(95);
+    $tokens = Token::factory()->count(3)->create(['price_usd' => 1.0]);
+    $tokens->each(fn (Token $token) => TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]));
+    $score = app(SignalEngine::class)->analyze($tokens[0])->final_score;
+
+    config(['market.analysis.strong_buy_max_score' => $score]);
+    $held = app(SignalEngine::class)->analyze($tokens[1]);
+    config(['market.analysis.strong_buy_max_score' => $score + 1]);
+    app(SignalEngine::class)->analyze($tokens[2]);
+
+    $shadow = ShadowSignal::query()->where('rule', ShadowSignal::HIGH_SCORE)->sole();
+
+    expect($held->recommendation)->toBe(Recommendation::StrongBuy)
+        ->and($held->reasons[0])->toContain("Skor {$score} di atas batas sinyal")
+        ->and($tokens[1]->signals()->count())->toBe(0)
+        ->and($shadow->token_id)->toBe($tokens[1]->id)
+        ->and($shadow->metric)->toEqual((float) $score)
+        ->and($tokens[2]->signals()->count())->toBe(1);
+});
+
 test('v5 opens signals only for Strong Buy, and a Buy stays a watch-only analysis with its levels', function () {
     config(['market.analysis.thresholds.STRONG_BUY' => 101]);
     fakeTechnicalMove(10.0, 8.0);
@@ -345,7 +407,7 @@ test('v6 holds a buy when the top ten holders own at least the limit, and skips 
 
 test('the v6 holder limit can be switched off and is part of the strategy version', function () {
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v6-');
+    expect($version)->toStartWith('v7-');
 
     config(['market.analysis.max_top10_holder_pct' => 0.0]);
     fakeTechnical(95);
