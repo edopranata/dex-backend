@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Backup database MySQL dari container ke folder backup host (dijalankan cron harian sebagai root).
 # File ini juga terlihat & bisa diunduh di Admin > Backup (folder di-mount ke container app).
-# Jika /etc/dex/offsite.env ada, salinannya juga di-upload ke Cloudflare R2 (lihat docs/DEPLOY_VPS.md).
+# Salinannya juga di-upload ke Google Drive dan/atau Cloudflare R2 bila diatur (lihat deploy/offsite.sh).
 # Restore: gunzip -c FILE.sql.gz | docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'
 set -euo pipefail
 
@@ -43,19 +43,33 @@ chmod 600 "$BACKUP_DIR"/*.sql.gz
 
 echo "$(date '+%F %T') backup: $FILE ($(du -h "$FILE" | cut -f1))"
 
-# Off-site copy, once /etc/dex/offsite.env exists. The local backup above is kept either way.
-if [ -f "$OFFSITE_ENV" ]; then
+# Off-site copies to every configured target (Google Drive, R2). The local backup above is kept either way.
+TARGETS=$(offsite_targets)
+if [ -n "$TARGETS" ]; then
     NAME=$(basename "$FILE")
     STATUS="$BACKUP_DIR/offsite-status.json"
-    if output=$(offsite "$BACKUP_DIR:ro" copyto "/data/$NAME" "offsite:$NAME" --stats 0 2>&1); then
-        offsite_json "$STATUS" ok=true file="$NAME" size="$(stat -c %s "$FILE")" at="$(date -Iseconds)" bucket="$(sed -n 's/^R2_BUCKET=//p' "$OFFSITE_ENV")"
-        echo "$(date '+%F %T') offsite: R2 $NAME"
+    DONE=""
+    FAILED=""
+    for target in $TARGETS; do
+        label=$(offsite_label "$target")
+        if output=$(offsite "$target" "$BACKUP_DIR:ro" copyto "/data/$NAME" "offsite:$NAME" --stats 0 2>&1); then
+            DONE="${DONE:+$DONE + }$label"
+            echo "$(date '+%F %T') offsite: $label $NAME"
+            # Drive has no lifecycle rule like the R2 buckets: old copies are removed here. A failure only logs.
+            if [ "$target" = gdrive ] && ! output=$(offsite gdrive "$BACKUP_DIR:ro" delete offsite: --include 'dex-*.sql.gz' --min-age "${OFFSITE_KEEP_DAYS}d" 2>&1); then
+                echo "$(date '+%F %T') offsite: pembersihan $label gagal: $output"
+            fi
+        else
+            FAILED="${FAILED:+$FAILED; }$label: $(printf '%s\n' "$output" | tail -n 1)"
+            echo "$(date '+%F %T') offsite gagal ($label): $output"
+        fi
+    done
+    if [ -z "$FAILED" ]; then
+        offsite_json "$STATUS" ok=true file="$NAME" size="$(stat -c %s "$FILE")" at="$(date -Iseconds)" bucket="$DONE"
     else
-        ERROR=$(printf '%s\n' "$output" | tail -n 1)
-        offsite_json "$STATUS" ok=false file="$NAME" size="$(stat -c %s "$FILE")" at="$(date -Iseconds)" error="$ERROR"
-        echo "$(date '+%F %T') offsite gagal: $output"
+        offsite_json "$STATUS" ok=false file="$NAME" size="$(stat -c %s "$FILE")" at="$(date -Iseconds)" bucket="$DONE" error="$FAILED"
         trap - ERR
-        notify "Salinan backup ke R2 gagal" "Backup lokal $NAME aman, tetapi upload ke R2 gagal: $ERROR"
+        notify "Salinan backup ke luar VPS gagal" "Backup lokal $NAME aman, tetapi upload gagal: $FAILED"
         ping_backup /fail
         exit 1
     fi

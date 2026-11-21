@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Uji restore tanpa menyentuh database live: ambil backup terbaru dari R2 (atau file lokal yang diberikan),
+# Uji restore tanpa menyentuh database live: ambil backup terbaru dari luar VPS (Google Drive bila diatur, lalu R2;
+# OFFSITE_TARGET=r2 memaksa R2) atau file lokal yang diberikan,
 # import ke database sementara dex_restore_check di container MySQL, bandingkan dengan database live,
 # lalu hapus lagi. Hasilnya tampil di Admin > Backup. Jalankan sebagai root di folder backend:
-#   bash deploy/restore-check.sh                         # backup terbaru di R2
+#   bash deploy/restore-check.sh                         # backup terbaru di luar VPS
 #   bash deploy/restore-check.sh /var/backups/dex/FILE   # file lokal
 set -euo pipefail
 umask 077
@@ -34,10 +35,12 @@ if [ $# -ge 1 ]; then
     NAME=$(basename "$1")
     cp "$1" "$WORK/$NAME"
 else
-    SOURCE=R2
-    NAME=$(offsite "$WORK" lsf offsite: --include 'dex-*.sql.gz' 2>/dev/null | sort | tail -1)
-    [ -n "$NAME" ] || { echo "Tidak ada backup di R2."; exit 1; }
-    offsite "$WORK" copyto "offsite:$NAME" "/data/$NAME" --stats 0
+    TARGET="${OFFSITE_TARGET:-$(offsite_targets | head -n 1)}"
+    [ -n "$TARGET" ] || { echo "Belum ada tujuan backup di luar VPS (Google Drive atau R2)."; exit 1; }
+    SOURCE=$(offsite_label "$TARGET")
+    NAME=$(offsite "$TARGET" "$WORK" lsf offsite: --include 'dex-*.sql.gz' 2>/dev/null | sort | tail -1)
+    [ -n "$NAME" ] || { echo "Tidak ada backup di $SOURCE."; exit 1; }
+    offsite "$TARGET" "$WORK" copyto "offsite:$NAME" "/data/$NAME" --stats 0
 fi
 echo "Menguji $NAME ($SOURCE, $(du -h "$WORK/$NAME" | cut -f1))"
 

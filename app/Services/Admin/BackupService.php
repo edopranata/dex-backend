@@ -50,7 +50,7 @@ class BackupService
     }
 
     /**
-     * Result of the last upload to R2 by deploy/backup.sh, or null before off-site copies were set up.
+     * Result of the last off-site upload (Google Drive, R2) by deploy/backup.sh, or null before off-site copies were set up.
      *
      * @return array{ok: bool, file: string, size: int, at: string, error?: string}|null
      */

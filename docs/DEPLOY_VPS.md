@@ -135,7 +135,7 @@ Deploy menarik **kedua** repo, membangun ulang image, menjalankan migrasi, mengg
 | Log | `docker compose logs -f app horizon scheduler` · dashboard queue: `/horizon` (admin) |
 | Artisan | `docker compose exec app php artisan <perintah>` |
 | Ubah konfigurasi | Edit `.env`, lalu `docker compose up -d` |
-| Backup manual | `sudo bash deploy/backup.sh` (otomatis tiap 02:30 ke `/var/backups/dex`, lalu ke R2 jika diatur) |
+| Backup manual | `sudo bash deploy/backup.sh` (otomatis tiap 02:30 ke `/var/backups/dex`, lalu ke Google Drive dan/atau R2 jika diatur) |
 | Uji restore | `sudo bash deploy/restore-check.sh` (ke database sementara; database live tidak disentuh) |
 | Restore | `gunzip -c /var/backups/dex/FILE.sql.gz \| docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE"'` |
 | Pemakaian disk | `df -h` dan `docker system df` |
@@ -144,7 +144,11 @@ Binary log MySQL disimpan 1 hari, bukan bawaan 30 hari (18 Nov 2026; sempat 3,9 
 
 Aktifkan AI: isi `AI_PROVIDER=gemini` dan `GEMINI_API_KEY=...` di `.env`, lalu `docker compose up -d`.
 
-## 6a. Salinan backup di Cloudflare R2
+## 6a. Salinan backup di luar VPS
+
+Sejak 22 Nov 2026 tujuannya bisa Google Drive, R2, atau keduanya. Google Drive dipasang sekali untuk semua aplikasi dengan `sudo bash deploy/gdrive-setup.sh`; langkah lengkap di `docs/INFRASTRUKTUR.md` repo bersama. Bagian di bawah ini untuk R2.
+
+### Cloudflare R2
 
 Backup harian juga di-upload ke bucket R2 (production: `dex-bucket`, diatur lewat `R2_BUCKET`) memakai container `rclone` (tidak ada yang dipasang di host). Key R2 disimpan di `/etc/dex/offsite.env` (root, 600), **bukan** di `.env`, karena `.env` ikut masuk ke semua container aplikasi.
 
