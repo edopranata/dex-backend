@@ -35,7 +35,7 @@ if [ $# -ge 1 ]; then
     NAME=$(basename "$1")
     cp "$1" "$WORK/$NAME"
 else
-    TARGET="${OFFSITE_TARGET:-$(offsite_targets | head -n 1)}"
+    TARGET="${OFFSITE_TARGET:-$(offsite_targets | sed -n 1p)}"
     [ -n "$TARGET" ] || { echo "Belum ada tujuan backup di luar VPS (Google Drive atau R2)."; exit 1; }
     SOURCE=$(offsite_label "$TARGET")
     NAME=$(offsite "$TARGET" "$WORK" lsf offsite: --include 'dex-*.sql.gz' 2>/dev/null | sort | tail -1)

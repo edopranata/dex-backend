@@ -166,7 +166,7 @@ read -rp  "R2 endpoint (https://<account-id>.r2.cloudflarestorage.com): " endpoi
 printf "R2_ACCESS_KEY_ID=%s\nR2_SECRET_ACCESS_KEY=%s\nR2_ENDPOINT=%s\nR2_BUCKET=dex-bucket\n" "$id" "$secret" "$endpoint" > /etc/dex/offsite.env'
 cd /opt/dex/backend
 sudo bash deploy/backup.sh          # backup + upload pertama
-sudo bash deploy/restore-check.sh   # ambil dari R2, restore ke database sementara, bandingkan, hapus
+sudo bash deploy/restore-check.sh   # ambil dari Google Drive (atau R2), restore ke database sementara, bandingkan, hapus
 ```
 
 Hasil upload terakhir dan uji restore terakhir tampil di **Admin → Backup**. Upload yang gagal mengirim notifikasi Telegram; backup lokal tetap tersimpan.
