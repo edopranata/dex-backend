@@ -61,7 +61,7 @@ Tugas penting bisa dijalankan manual dari Admin → Tugas terjadwal; daftar yang
 - Backup harian 02.30 WIB (14 hari) dan salinan ke Cloudflare R2.
 - Pemantauan: UptimeRobot ke `/health`, Healthchecks.io (`dex-heartbeat`, `dex-backup`), dan status container di Admin.
 
-## Login lewat Akun tune-in.trade (di `dev` sejak 23 Nov 2026, belum di produksi)
+## Login lewat Akun tune-in.trade (di produksi sejak 23 Nov 2026, cara masuk masih `local`)
 
 Klien OAuth2 untuk akun pusat ([rancangan](../../../docs/RANCANGAN_AKUN_PUSAT.md)). Kodenya sama di keenam aplikasi; yang berbeda hanya `app_key` di `config/central_account.php`; DEX juga tidak pernah mengikat akun sistem (`is_system`) dan memberi user baru saldo virtual awal seperti `app:create-user`.
 
