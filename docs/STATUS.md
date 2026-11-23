@@ -1,6 +1,6 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 21 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
@@ -50,6 +50,8 @@ Terakhir diperbarui: 21 November 2026. Perbarui file ini di commit yang sama set
 - Pemakaian 24 jam sampai 12 Nov 15.15 WIB: sekitar 210 permintaan (186 ringkasan unik, sekitar 22 batch sentimen), jauh di bawah kapasitas rantai sekitar 1.700 per hari.
 
 - **Koin kena TP (19 Nov 2026, permintaan pemilik, di `dev`):** halaman `/tp-coins` dan `GET /api/reports/tp-coins` (`TpCoins`). Token yang sinyalnya pernah mencapai TP1 (semua versi), per sinyal pola, entry, jarak, kondisi BTC, dan volume dari analisa saat sinyal dibuat, waktu ke TP1 dan turun terdalam dari candle 15 menit, plus median kena TP1 vs tidak kena. Hanya membaca; trading v6 tidak berubah. Cek 196 sinyal selesai: sinyal berikutnya setelah TP -0,23R (70), setelah meleset -0,47R (42), sinyal pertama -0,37R (84), jadi bukan filter.
+
+**Login lewat Akun tune-in.trade (tahap 2) dibangun di `dev` 23 Nov 2026**, belum di produksi. Lihat [ARCHITECTURE.md](ARCHITECTURE.md). Setelah deploy, cara masuk tetap `local` sampai pemilik menyambungkan aplikasi ini di tahap 4 (`account:connect-app dex`, isi `.env`, lalu pilih `both`). Diuji dengan 17 tes Pest baru, dan migrasi `account_id` dicoba di MySQL 8.4.
 
 ## Langkah berikutnya
 

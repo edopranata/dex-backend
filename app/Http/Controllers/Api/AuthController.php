@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\Auth\CentralAccount\CentralAccount;
+use App\Services\Auth\CentralAccount\CentralAccountSessions;
 use App\Services\Auth\TwoFactorAuthenticator;
 use App\Services\Auth\TwoFactorReset;
 use App\Services\Notifications\MailSettings;
@@ -23,9 +25,13 @@ class AuthController extends Controller
     /**
      * Public auth settings for the login screen.
      */
-    public function options(): JsonResponse
+    public function options(CentralAccount $account): JsonResponse
     {
-        return response()->json(['password_reset_enabled' => app(MailSettings::class)->isEnabled()]);
+        return response()->json([
+            'password_reset_enabled' => app(MailSettings::class)->isEnabled(),
+            // local, both (old login and tune-in.trade), or central (tune-in.trade only).
+            'auth_mode' => $account->mode(),
+        ]);
     }
 
     /**
@@ -136,8 +142,9 @@ class AuthController extends Controller
         return mb_substr($name, 0, 1).'***@'.$domain;
     }
 
-    public function logout(Request $request): Response
+    public function logout(Request $request, CentralAccountSessions $centralSessions): Response
     {
+        $centralSessions->forget($request->session());
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

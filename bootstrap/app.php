@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\CentralAccountGuard;
 use App\Http\Middleware\EnsurePasswordChanged;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -15,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->api(append: [CentralAccountGuard::class]);
         $middleware->trustProxies(at: '*');
         $middleware->redirectGuestsTo(fn (Request $request): ?string => $request->is('api/*') ? null : '/login');
         $middleware->alias(['password.changed' => EnsurePasswordChanged::class]);

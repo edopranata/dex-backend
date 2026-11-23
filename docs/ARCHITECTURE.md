@@ -60,3 +60,18 @@ Tugas penting bisa dijalankan manual dari Admin → Tugas terjadwal; daftar yang
 - Auto-start saat boot (`dex.service`), watchdog `/up` tiap 2 menit, restart container otomatis, reboot keamanan 04.00 WIB.
 - Backup harian 02.30 WIB (14 hari) dan salinan ke Cloudflare R2.
 - Pemantauan: UptimeRobot ke `/health`, Healthchecks.io (`dex-heartbeat`, `dex-backup`), dan status container di Admin.
+
+## Login lewat Akun tune-in.trade (di `dev` sejak 23 Nov 2026, belum di produksi)
+
+Klien OAuth2 untuk akun pusat ([rancangan](../../../docs/RANCANGAN_AKUN_PUSAT.md)). Kodenya sama di keenam aplikasi; yang berbeda hanya `app_key` di `config/central_account.php`; DEX juga tidak pernah mengikat akun sistem (`is_system`) dan memberi user baru saldo virtual awal seperti `app:create-user`.
+
+- `GET /auth/redirect` membuat `state` dan PKCE (S256), lalu mengarahkan browser ke `https://tune-in.trade/oauth/authorize`. `GET /auth/callback` memeriksa `state`, menukar `code`, dan memanggil `/api/me` lewat jaringan Docker `edge` (`http://account`, header `Host: tune-in.trade`), jadi tidak memutar lewat Cloudflare.
+- User lokal dicari lewat `users.account_id`, lalu lewat email yang sama persis dengan `account_id` masih kosong (diikat sekali dan dicatat di log), lalu dibuat baru. `is_admin` mengikuti peran dari Akun setiap login dan setiap pemeriksaan ulang. Login lewat Akun menghapus kewajiban ganti password sementara. Email yang sudah terikat ke akun lain ditolak (`account_error=conflict`).
+- Sesi dari Akun tidak memakai "ingat saya". Token Akun disimpan terenkripsi di cache dengan id acak di sesi, supaya request paralel tidak menimpa refresh token yang baru diputar. `CentralAccountGuard` (grup `api`) bertanya ulang ke Akun paling lama tiap 10 menit (`ACCOUNT_RECHECK_MINUTES`). Kalau token dicabut ("Keluar dari semua" di Akun) atau akses hilang, sesi berakhir dengan 401 `account_session_ended`. Kalau Akun tidak bisa dihubungi, sesi tetap jalan dan dicoba lagi semenit kemudian.
+- Cara masuk (`central_account.mode`) diatur di Admin → Pengaturan → Akun tune-in.trade atau dengan `php artisan app:auth-mode local|both|central`:
+  - `local`: login lama saja (nilai awal).
+  - `both`: tombol "Masuk lewat tune-in.trade" ditambah login lama.
+  - `central`: hanya lewat Akun. Login lama, lupa password, dan reset 2FA lokal ditutup (403 `central_login_only`), dan sesi dari login lama berakhir.
+
+  Tanpa `ACCOUNT_CLIENT_ID` dan `ACCOUNT_CLIENT_SECRET` di `.env`, apa pun pilihannya yang berlaku `local`, jadi panel tidak bisa mengunci semua orang di luar.
+- Frontend: tombol di halaman login. Mode `central` langsung meneruskan ke Akun, kecuali baru keluar atau ada `account_error`. Service worker PWA tidak melayani `/auth/redirect` dan `/auth/callback`, dan Vite dev meneruskan keduanya ke backend.

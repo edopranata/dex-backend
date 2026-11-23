@@ -88,6 +88,18 @@ class SettingsRegistry
                 ],
             ],
             [
+                'key' => 'central_account',
+                'label' => 'Akun tune-in.trade',
+                'description' => 'Masuk lewat akun pusat di tune-in.trade (2FA wajib di sana). Butuh ACCOUNT_CLIENT_ID dan ACCOUNT_CLIENT_SECRET di .env, dibuat di server Akun dengan account:connect-app; selama keduanya kosong, login lama tetap dipakai apa pun pilihan di sini. Kalau Akun bermasalah, pilih "Login lama saja", atau di server: php artisan app:auth-mode local.',
+                'fields' => [
+                    ['key' => 'central_account.mode', 'label' => 'Cara masuk', 'type' => 'select', 'options' => [
+                        'local' => 'Login lama saja',
+                        'both' => 'Login lama dan tune-in.trade',
+                        'central' => 'Hanya lewat tune-in.trade',
+                    ], 'description' => '"Hanya lewat tune-in.trade" menutup login lama, lupa password, dan reset 2FA lokal, dan mengakhiri sesi yang masuk lewat login lama.'],
+                ],
+            ],
+            [
                 'key' => 'monitoring',
                 'label' => 'Monitoring eksternal',
                 'description' => 'UptimeRobot memantau https://dexsim.tune-in.trade/health dari luar dan mengirim peringatan ke Telegram; read-only API key-nya hanya untuk menampilkan status di General Information. Healthchecks.io menerima heartbeat dari server tiap 5 menit; jika heartbeat berhenti atau melapor gagal, Anda mendapat peringatan di Telegram.',
