@@ -373,6 +373,34 @@ test('the chandelier shadow trails 3x the 4h ATR under the highest high since en
     ]);
 });
 
+test('shadow positions still open are counted apart, and a second signal on a token already held is left out of one position per token', function () {
+    config(['market.analysis.shadow_atr_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_atr_multiplier' => 3.0]);
+    $fourHour = strtotime('2026-11-10 12:00:00');
+    $token = Token::factory()->create();
+    foreach (range(20, 0) as $back) {
+        Candle::query()->create(['token_id' => $token->id, 'timeframe' => '4h', 'open_time' => $fourHour - $back * 14400, 'open' => 1, 'high' => 1.01, 'low' => 0.99, 'close' => 1, 'volume' => 100]);
+    }
+    // A steady rise to 1.10 that never reaches the trailing stop (1.06 - 3 x 0.02 = 1.00 after the 16:00 close).
+    foreach ([[1.00, 1.02, 0.99, 1.02], [1.02, 1.04, 1.01, 1.04], [1.04, 1.06, 1.03, 1.06], [1.06, 1.08, 1.05, 1.08], [1.08, 1.09, 1.07, 1.09], [1.09, 1.11, 1.08, 1.10]] as $i => [$open, $high, $low, $close]) {
+        Candle::query()->create(['token_id' => $token->id, 'timeframe' => '1h', 'open_time' => $fourHour + ($i + 1) * 3600, 'open' => $open, 'high' => $high, 'low' => $low, 'close' => $close, 'volume' => 100]);
+    }
+    $first = reportSignal($token, 0.3, '2026-11-10 13:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 12:05:00']);
+    $second = reportSignal($token, 0.2, '2026-11-10 15:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 14:05:00']);
+    // Another token, closed by the trail like the real exit: neither held nor overlapping.
+    reportSignal(Token::factory()->create(), -1.0, '2026-11-10 15:00:00', ['stop_loss' => 0.9, 'entered_at' => '2026-11-10 14:05:00']);
+
+    $atr = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->assertOk()->json('shadow_exit'))->firstWhere('key', 'atr_trail_4h');
+
+    // Both still held at the 18:00 close of 1.10: 1R less 0.1R costs each.
+    expect($atr)->toMatchArray(['signals' => 3, 'actual_r' => -0.5, 'shadow_r' => 0.8, 'held' => 2, 'held_r' => 1.8, 'overlapping' => 1, 'one_per_token_r' => -0.1])
+        ->and(collect($atr['rows'])->firstWhere('id', $second->id)['overlapping'])->toBeTrue()
+        ->and(collect($atr['rows'])->firstWhere('id', $first->id)['overlapping'])->toBeFalse();
+
+    // A rule that only exits earlier keeps the real positions, which never overlap.
+    $firstCheck = collect($this->actingAs($this->user)->getJson('/api/reports/performance?version=all')->json('shadow_exit'))->firstWhere('key', 'first_check');
+    expect($firstCheck)->toMatchArray(['held' => 0, 'overlapping' => 0, 'one_per_token_r' => $firstCheck['shadow_r']]);
+});
+
 test('the chandelier shadow stops after 30 days and marks signals whose price jumped across missing hours', function () {
     config(['market.analysis.shadow_atr_since' => '2026-11-07 13:00:00', 'market.analysis.shadow_atr_max_days' => 30, 'market.analysis.shadow_gap_jump' => 0.02]);
     $this->travelTo('2026-12-20 00:00:00');

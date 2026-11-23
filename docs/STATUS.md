@@ -23,6 +23,8 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 - Bukti yang mendasarinya belum memenuhi kriteria Fase 2. Strong Buy historis +0,07R per sinyal (PF 1,14); dengan top 10 di bawah 20%, sinyal live +0,50R (n=25) dan putar ulang +0,09R (n=44). Ambang 20% dipilih dari data yang sama.
 - Seluruh data sejak 31 Okt berasal dari pasar turun: BTC dari sekitar US$81 ribu ke US$64 ribu (29 Okt - 15 Nov). Label tren SOL dan ETH di konteks pasar tidak bisa dipakai untuk periode setelah 1 Nov (SOL) dan 3 Nov (ETH): candle acuan berhenti diperbarui karena keduanya tidak pernah di Market. Diperbaiki 15 Nov; sejak itu SOL, ETH, dan BTC ikut setiap putaran candle.
 
+- **Trailing ATR di v7 (dicek 23 Nov 2026 sekitar 20.00 WIB):** +14,41R dari 9 sinyal, dibanding +6,07R sungguhan. Tapi baru 2 yang selesai (+0,90R); 7 masih terbuka (+13,51R, dinilai di close terakhir). ARIA menyumbang +11,6R lewat 4 sinyal yang tumpang-tindih, dan lima sinyal tumpang-tindih bernilai +5,90R. Sejak 7 Nov (100 sinyal): trailing ATR −32,89R dibanding −33,97R sungguhan, median per sinyal sama (−1,02R dan −1,03R). Belum ada bukti trailing ATR lebih baik. Laporan sejak 23 Nov memisahkan posisi yang masih terbuka dan menghitung satu posisi per token (lihat DOMAIN_RULES.md).
+
 ### Sedang diukur (hanya pencatatan, tidak mengubah trading)
 
 | Apa | Sejak | Dinilai | Di mana |

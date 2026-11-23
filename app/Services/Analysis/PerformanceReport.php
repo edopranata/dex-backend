@@ -548,7 +548,7 @@ class PerformanceReport
      * @param  Closure(Signal): (float|array{r: float, at: Carbon, price: float, taken: int, entry_at?: Carbon, entry_price?: float, held?: bool}|null)  $rule  The R under the
      *                                                                                                                                                          rule (a bare 0.0 = not opened; an array = closed earlier, with when and where), or null where it changes nothing.
      * @param  (Closure(Signal): bool)|null  $gappy  Whether the candles the rule reads for this signal are incomplete.
-     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, gaps: int, rows: list<array<string, mixed>>}
+     * @return array{key: string, label: string, since: string, signals: int, affected: int, actual_r: float, shadow_r: float, held: int, held_r: float, overlapping: int, one_per_token_r: float, gaps: int, rows: list<array<string, mixed>>}
      */
     private function variant(string $key, string $label, Carbon $since, Collection $observed, Closure $rule, ?Closure $gappy = null): array
     {
@@ -556,6 +556,7 @@ class PerformanceReport
         $shadow = 0.0;
         $gaps = 0;
         $rows = [];
+        $positions = [];
 
         foreach ($observed->sortByDesc('entered_at') as $signal) {
             $outcome = $signal->entry_price > $signal->stop_loss ? $rule($signal) : null;
@@ -564,6 +565,13 @@ class PerformanceReport
             $affected += $outcome === null ? 0 : 1;
             $shadow += $outcome['r'] ?? (float) $signal->net_r;
             $gaps += $isGappy ? 1 : 0;
+            $positions[$signal->id] = [
+                'token_id' => $signal->token_id,
+                'from' => ($outcome['entry_at'] ?? $signal->entered_at)->timestamp,
+                // A signal the rule would not open (a bare 0.0) holds no position.
+                'until' => $outcome === null ? $signal->closed_at->timestamp : (isset($outcome['at']) ? $outcome['at']->timestamp : null),
+                'r' => $outcome['r'] ?? (float) $signal->net_r,
+            ];
             $rows[] = [
                 'id' => $signal->id,
                 'symbol' => $signal->token->symbol,
@@ -583,6 +591,10 @@ class PerformanceReport
             ];
         }
 
+        $overlapping = $this->overlappingPositions($positions);
+        $rows = array_map(fn (array $row): array => [...$row, 'overlapping' => isset($overlapping[$row['id']])], $rows);
+        $held = collect($rows)->where('held', true);
+
         return [
             'key' => $key,
             'label' => $label,
@@ -591,9 +603,45 @@ class PerformanceReport
             'affected' => $affected,
             'actual_r' => round((float) $observed->sum('net_r'), 2),
             'shadow_r' => round($shadow, 2),
+            // Still open under the rule at the last candle, valued at its close: not a result yet.
+            'held' => $held->count(),
+            'held_r' => round((float) $held->sum('shadow_r'), 2),
+            // One position per token, as an account holds it: a signal entering while the rule still holds an earlier
+            // one on the same token would not be opened (0R).
+            'overlapping' => count($overlapping),
+            'one_per_token_r' => round((float) collect($positions)->except(array_keys($overlapping))->sum('r'), 2),
             'gaps' => $gaps,
             'rows' => $rows,
         ];
+    }
+
+    /**
+     * The signals that enter while the rule still holds an earlier signal on the same token. A skipped signal does
+     * not extend the position it overlaps.
+     *
+     * @param  array<int, array{token_id: int, from: int, until: int|null, r: float}>  $positions  By signal id.
+     * @return array<int, true>
+     */
+    private function overlappingPositions(array $positions): array
+    {
+        $overlapping = [];
+        $busyUntil = [];
+
+        uksort($positions, fn (int $a, int $b): int => [$positions[$a]['from'], $a] <=> [$positions[$b]['from'], $b]);
+
+        foreach ($positions as $id => $position) {
+            if ($position['from'] < ($busyUntil[$position['token_id']] ?? 0)) {
+                $overlapping[$id] = true;
+
+                continue;
+            }
+
+            if ($position['until'] !== null) {
+                $busyUntil[$position['token_id']] = $position['until'];
+            }
+        }
+
+        return $overlapping;
     }
 
     /**
