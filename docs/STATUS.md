@@ -55,6 +55,8 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 
 **Tersambung ke Akun tune-in.trade sejak 24 Nov 2026 10.43 WIB, cara masuk `both`** (tombol "Masuk lewat tune-in.trade" plus login lama; `ACCOUNT_INTERNAL_URL=https://tune-in.trade`, alasan di `account/backend/docs/DECISIONS.md`). Akun teman (bukan akun sistem) tidak tersambung dan tetap bisa memakai login lama selama `both`; akun sistem strategi tidak pernah login. Login pemilik lewat Akun berhasil 24 Nov 10.48 WIB (user lama terikat lewat email, tetap admin). Kembali ke login lama: `php artisan app:auth-mode local`. Sebelumnya: login lewat Akun (tahap 2) di produksi sejak 23 Nov 2026, cara masuk `local` (dicek setelah deploy: migrasi jalan, `/auth/redirect` kembali ke `/login`, log bersih). Lihat [ARCHITECTURE.md](ARCHITECTURE.md). Cara masuk tetap `local` sampai pemilik menyambungkan aplikasi ini di tahap 4 (`account:connect-app dex`, isi `.env`, lalu pilih `both`). Diuji dengan 17 tes Pest baru, dan migrasi `account_id` dicoba di MySQL 8.4.
 
+**Perbaikan 24 Nov 2026:** setiap `throttle` di route punya prefix sendiri (sebelumnya semua pembatas seorang user atau IP tamu berbagi satu counter, sehingga misalnya beberapa permintaan di satu fitur bisa membuat ganti password atau 2FA ditolak 429; tes regresi `ThrottleTest`), dan bawaan `ACCOUNT_INTERNAL_URL` menjadi `https://tune-in.trade`.
+
 ## Langkah berikutnya
 
 1. Pantau sinyal v7 pertama: penutupan saat analisa turun, pesan Telegram, dan lot auto-follow yang ikut ditutup. Cek rugi saat stop pada lot dengan ukuran baru (target 1,0x risiko, kecuali gap).

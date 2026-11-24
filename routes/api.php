@@ -31,15 +31,17 @@ use App\Http\Controllers\Api\WhaleController;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
 
+// Every throttle has its own prefix (24 Nov 2026): without one, all `throttle:N,M` of a user (or of a guest's IP)
+// share one counter, so for example a few orders could make a 2FA change or a test email return 429.
 Route::prefix('auth')->name('auth.')->group(function () {
     Route::get('options', [AuthController::class, 'options'])->name('options');
 
-    Route::middleware('throttle:10,1')->group(function () {
+    Route::middleware('throttle:10,1,login')->group(function () {
         Route::post('login', [AuthController::class, 'login'])->name('login');
         Route::post('two-factor-challenge', [AuthController::class, 'twoFactorChallenge'])->name('two-factor');
     });
 
-    Route::middleware('throttle:5,1')->group(function () {
+    Route::middleware('throttle:5,1,password-reset')->group(function () {
         Route::post('forgot-password', [PasswordResetController::class, 'forgot'])->name('password.forgot');
         Route::post('reset-password', [PasswordResetController::class, 'reset'])->name('password.reset');
         Route::post('two-factor/reset', [AuthController::class, 'resetTwoFactor'])->name('two-factor.reset');
@@ -55,24 +57,24 @@ Route::prefix('auth')->name('auth.')->group(function () {
 });
 
 // Called by Telegram's servers (no session); authenticated by the webhook secret header.
-Route::post('internal/container-metrics', [ContainerMetricController::class, 'store'])->middleware('throttle:60,1')->name('internal.container-metrics');
+Route::post('internal/container-metrics', [ContainerMetricController::class, 'store'])->middleware('throttle:60,1,internal.container-metrics')->name('internal.container-metrics');
 
-Route::post('telegram/webhook', TelegramWebhookController::class)->middleware('throttle:120,1')->name('telegram.webhook');
+Route::post('telegram/webhook', TelegramWebhookController::class)->middleware('throttle:120,1,telegram.webhook')->name('telegram.webhook');
 
 Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::get('profile', [ProfileController::class, 'show'])->name('profile.show');
     Route::put('profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::put('profile/password', [ProfileController::class, 'password'])->middleware('throttle:10,1')->name('profile.password');
+    Route::put('profile/password', [ProfileController::class, 'password'])->middleware('throttle:10,1,profile.password')->name('profile.password');
     Route::put('profile/notifications', [ProfileController::class, 'notifications'])->name('profile.notifications');
 
-    Route::post('profile/two-factor', [TwoFactorController::class, 'store'])->middleware('throttle:10,1')->name('two-factor.store');
-    Route::post('profile/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1')->name('two-factor.confirm');
-    Route::delete('profile/two-factor', [TwoFactorController::class, 'destroy'])->middleware('throttle:10,1')->name('two-factor.destroy');
-    Route::post('profile/two-factor/recovery-codes', [TwoFactorController::class, 'recoveryCodes'])->middleware('throttle:10,1')->name('two-factor.recovery-codes');
+    Route::post('profile/two-factor', [TwoFactorController::class, 'store'])->middleware('throttle:10,1,two-factor.store')->name('two-factor.store');
+    Route::post('profile/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1,two-factor.confirm')->name('two-factor.confirm');
+    Route::delete('profile/two-factor', [TwoFactorController::class, 'destroy'])->middleware('throttle:10,1,two-factor.destroy')->name('two-factor.destroy');
+    Route::post('profile/two-factor/recovery-codes', [TwoFactorController::class, 'recoveryCodes'])->middleware('throttle:10,1,two-factor.recovery-codes')->name('two-factor.recovery-codes');
 
-    Route::post('profile/telegram', [ProfileTelegramController::class, 'link'])->middleware('throttle:10,1')->name('profile.telegram.link');
+    Route::post('profile/telegram', [ProfileTelegramController::class, 'link'])->middleware('throttle:10,1,profile.telegram.link')->name('profile.telegram.link');
     Route::delete('profile/telegram', [ProfileTelegramController::class, 'destroy'])->name('profile.telegram.destroy');
-    Route::post('profile/telegram/test', [ProfileTelegramController::class, 'test'])->middleware('throttle:10,1')->name('profile.telegram.test');
+    Route::post('profile/telegram/test', [ProfileTelegramController::class, 'test'])->middleware('throttle:10,1,profile.telegram.test')->name('profile.telegram.test');
 
     Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
     Route::get('reports/performance', [ReportController::class, 'performance'])->name('reports.performance');
@@ -84,11 +86,11 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
 
     Route::get('market/overview', [MarketController::class, 'overview'])->name('market.overview');
 
-    Route::get('tokens/search', [TokenController::class, 'search'])->middleware('throttle:30,1')->name('tokens.search');
+    Route::get('tokens/search', [TokenController::class, 'search'])->middleware('throttle:30,1,tokens.search')->name('tokens.search');
     Route::get('tokens', [TokenController::class, 'index'])->name('tokens.index');
     Route::get('watchlist/events', [TokenController::class, 'events'])->name('watchlist.events');
     Route::patch('tokens/{token}/pin', [TokenController::class, 'pin'])->name('tokens.pin');
-    Route::post('tokens', [TokenController::class, 'store'])->middleware('throttle:10,1')->name('tokens.store');
+    Route::post('tokens', [TokenController::class, 'store'])->middleware('throttle:10,1,tokens.store')->name('tokens.store');
     Route::get('tokens/{token}', [TokenController::class, 'show'])->name('tokens.show');
     Route::delete('tokens/{token}', [TokenController::class, 'destroy'])->name('tokens.destroy');
     Route::get('tokens/{token}/candles', [TokenController::class, 'candles'])->name('tokens.candles');
@@ -97,7 +99,7 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::get('tokens/{token}/analyses', [TokenController::class, 'analyses'])->name('tokens.analyses');
 
     Route::get('discovery', [DiscoveryController::class, 'index'])->name('discovery.index');
-    Route::post('discovery/{candidate}/track', [DiscoveryController::class, 'track'])->middleware('throttle:10,1')->name('discovery.track');
+    Route::post('discovery/{candidate}/track', [DiscoveryController::class, 'track'])->middleware('throttle:10,1,discovery.track')->name('discovery.track');
 
     Route::get('whales', [WhaleController::class, 'index'])->name('whales.index');
     Route::get('wallets', [WalletController::class, 'index'])->name('wallets.index');
@@ -124,20 +126,20 @@ Route::middleware(['auth:sanctum', 'password.changed', 'can:admin'])->prefix('ad
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::post('settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
-    Route::post('settings/test-ai', [SettingsController::class, 'testAi'])->middleware('throttle:10,1')->name('settings.test-ai');
-    Route::post('settings/test-mail', [SettingsController::class, 'testMail'])->middleware('throttle:5,1')->name('settings.test-mail');
+    Route::post('settings/test-ai', [SettingsController::class, 'testAi'])->middleware('throttle:10,1,settings.test-ai')->name('settings.test-ai');
+    Route::post('settings/test-mail', [SettingsController::class, 'testMail'])->middleware('throttle:5,1,settings.test-mail')->name('settings.test-mail');
 
     Route::get('telegram', [TelegramController::class, 'show'])->name('telegram.show');
-    Route::post('telegram/webhook', [TelegramController::class, 'connect'])->middleware('throttle:10,1')->name('telegram.connect');
+    Route::post('telegram/webhook', [TelegramController::class, 'connect'])->middleware('throttle:10,1,telegram.connect')->name('telegram.connect');
 
     Route::get('users', [UserController::class, 'index'])->name('users.index');
     Route::post('users', [UserController::class, 'store'])->name('users.store');
     Route::patch('users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::post('users/{user}/temporary-password', [UserController::class, 'temporaryPassword'])->middleware('throttle:10,1')->name('users.temporary-password');
+    Route::post('users/{user}/temporary-password', [UserController::class, 'temporaryPassword'])->middleware('throttle:10,1,users.temporary-password')->name('users.temporary-password');
     Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
 
     Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
-    Route::post('backups', [BackupController::class, 'store'])->middleware('throttle:5,1')->name('backups.store');
+    Route::post('backups', [BackupController::class, 'store'])->middleware('throttle:5,1,backups.store')->name('backups.store');
     Route::get('backups/{name}/download', [BackupController::class, 'download'])->name('backups.download');
     Route::delete('backups/{name}', [BackupController::class, 'destroy'])->name('backups.destroy');
 
@@ -145,10 +147,10 @@ Route::middleware(['auth:sanctum', 'password.changed', 'can:admin'])->prefix('ad
     Route::get('logs/{name}/download', [LogController::class, 'download'])->name('logs.download');
 
     Route::get('tokens', [AdminTokenController::class, 'index'])->name('tokens.index');
-    Route::post('tokens/{token}/candles', [AdminTokenController::class, 'fillCandles'])->middleware('throttle:20,1')->name('tokens.candles');
+    Route::post('tokens/{token}/candles', [AdminTokenController::class, 'fillCandles'])->middleware('throttle:20,1,tokens.candles')->name('tokens.candles');
 
     Route::get('tasks', [TaskController::class, 'index'])->name('tasks.index');
-    Route::post('tasks/run', [TaskController::class, 'run'])->middleware('throttle:20,1')->name('tasks.run');
+    Route::post('tasks/run', [TaskController::class, 'run'])->middleware('throttle:20,1,tasks.run')->name('tasks.run');
 
     Route::get('system', [SystemController::class, 'index'])->name('system.index');
     Route::get('system/containers', [SystemController::class, 'containers'])->name('system.containers');

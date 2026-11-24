@@ -15,9 +15,10 @@ return [
     // Where the browser goes to log in.
     'url' => env('ACCOUNT_URL', 'https://tune-in.trade'),
 
-    // Where this server exchanges the code and calls /api/me: Account's container on the Docker `edge` network,
-    // so the request does not go out through Cloudflare. The Host header is taken from `url`.
-    'internal_url' => env('ACCOUNT_INTERNAL_URL', 'http://account'),
+    // Where this server exchanges the code and calls /api/me: the public address (through Cloudflare). Not the Docker
+    // `edge` network: joining it gives the PHP containers the alias `app` there, which every site's nginx resolves for
+    // its own PHP-FPM (account/backend/docs/DECISIONS.md, 23 Nov 2026). The Host header is taken from `url`.
+    'internal_url' => env('ACCOUNT_INTERNAL_URL', 'https://tune-in.trade'),
 
     // Made on the Account server with `php artisan account:connect-app <key>`; only in .env, never in git.
     'client_id' => env('ACCOUNT_CLIENT_ID'),
