@@ -5,7 +5,7 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 ## Sekarang
 
 - Berjalan di https://dexsim.tune-in.trade. Uang sungguhan belum ada: semua transaksi virtual.
-- Server: VPSMurah kanaka-vps (3 vCPU, 6 GB) dengan IP dedicated sejak 13 Nov, Docker, Cloudflare Tunnel. Masa sewa sampai 29 Nov 2026; pemilik memperpanjang 1-2 bulan sekaligus. Detail di `docs/INFRASTRUKTUR.md` repo bersama.
+- Server: VPSMurah kanaka-vps (4 core, 8 GB, 80 GB NVMe) dengan IP dedicated sejak 13 Nov, Docker, Cloudflare Tunnel. Masa sewa sampai 1 Mar 2027 (diperpanjang 3 bulan 24 Nov 2026). Detail di `docs/INFRASTRUKTUR.md` repo bersama.
 - Produksi per 21 Nov 10.43 WIB: backend 4094ba1, frontend 8156671 (strategi v7 `v7-a7bb4e` dan ukuran posisi dengan biaya). Diperiksa 10.58 WIB: container sehat, tanpa error log, 20 analisa pertama sudah v7, laporan v6 terbaca (3,8 detik) dengan baris dan grup bayangan baru. Sebelumnya 18 Nov 14.28 WIB: backend 71ce2ec, frontend e956a73 (bayangan konfirmasi candle 15 menit: filter dan entry tertunda; diperiksa 14.30 WIB, container sehat, tanpa error log). Sebelumnya 18 Nov 11.59 WIB: backend 11e872a, frontend 26239ac (rincian per sinyal di catatan dan sinyal bayangan dengan BTC dan Fear & Greed saat entry; BTC sebelum 15 Nov dihitung ulang dari candle; bayangan jeda setelah stop 12/24/48 jam). Diperiksa 12.00 WIB: container sehat, laporan v6 1,7 detik, tanpa error log. Sebelumnya 15 Nov: bayangan Buy dengan Fear & Greed dan acuan BTC.
 - Backup: Sejak 22 Nov 2026 backup luar VPS bisa ke Google Drive (`simulator-backup/<nama>`) dan R2 sekaligus; Drive terpasang 22 Nov 2026 18.57 WIB untuk semua aplikasi; backup manual 19.00 masuk Drive dan R2, uji restore dari Drive lolos (34/34 tabel). Langkah dan hasil di `docs/INFRASTRUKTUR.md` repo bersama.
 
@@ -65,7 +65,6 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 | Kapan | Yang dicek |
 |---|---|
 | 13 Nov pagi | Sentimen berita tidak lagi jatuh ke kamus kata (24 berita pada 11-12 Nov, sebelum perbaikan penghitung Gemini); hasil Birdeye hari kedua |
-| 23-24 Nov | Pemilik memperpanjang VPS 1-2 bulan (masa aktif sekarang sampai 29 Nov; RAM 8 GB sudah sejak 16 Nov); cek layanan bila ada reboot |
 | Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
 | Sekitar 30 sinyal v7 | Review v7: sinyal dibanding exit v6 di salinan bayangan, `high_score`, rugi saat stop dengan ukuran baru |
 | Sekitar Feb 2027, atau saat riwayat candle 4 jam >= 6 bulan untuk >= 100 token | Uji ulang strategi swing Fibonacci 4 jam (aturan akun FutureSim `swing_fib_4h`, hanya long) di token DEX. Uji 20 Nov: 30 trade dari 140 token (riwayat 4 jam median 55 hari), tanpa biaya +0,03R, dengan biaya DEX -0,10R; terlalu sedikit untuk disimpulkan (pemilik: simpan untuk nanti). Bisa dipercepat dengan mengunduh riwayat GeckoTerminal dari laptop (sekitar 280 permintaan). Bahan: `dex/review/hasil-20nov-swing-fib.md`, `swing-fib-dex.py` |
