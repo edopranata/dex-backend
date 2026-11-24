@@ -55,6 +55,8 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 
 **Tersambung ke Akun tune-in.trade sejak 24 Nov 2026 10.43 WIB, cara masuk `both`** (tombol "Masuk lewat tune-in.trade" plus login lama; `ACCOUNT_INTERNAL_URL=https://tune-in.trade`, alasan di `account/backend/docs/DECISIONS.md`). Akun teman (bukan akun sistem) tidak tersambung dan tetap bisa memakai login lama selama `both`; akun sistem strategi tidak pernah login. Login pemilik lewat Akun berhasil 24 Nov 10.48 WIB (user lama terikat lewat email, tetap admin). Kembali ke login lama: `php artisan app:auth-mode local`. Sebelumnya: login lewat Akun (tahap 2) di produksi sejak 23 Nov 2026, cara masuk `local` (dicek setelah deploy: migrasi jalan, `/auth/redirect` kembali ke `/login`, log bersih). Lihat [ARCHITECTURE.md](ARCHITECTURE.md). Cara masuk tetap `local` sampai pemilik menyambungkan aplikasi ini di tahap 4 (`account:connect-app dex`, isi `.env`, lalu pilih `both`). Diuji dengan 17 tes Pest baru, dan migrasi `account_id` dicoba di MySQL 8.4.
 
+**Pemicu pasar berbalik (24 Nov 2026, permintaan pemilik, di `dev`):** `app:market-turn-check` tiap hari 01.05 UTC menghitung keempat pemicu `docs/UJI_ULANG_PASAR_NAIK.md` repo bersama dan mengirim Telegram ke admin saat ada yang baru terpenuhi. Hanya membaca; trading tidak berubah. Lihat [ARCHITECTURE.md](ARCHITECTURE.md). Diuji dengan 3 tes Pest (`MarketTurnTest`).
+
 **Perbaikan 24 Nov 2026:** setiap `throttle` di route punya prefix sendiri (sebelumnya semua pembatas seorang user atau IP tamu berbagi satu counter, sehingga misalnya beberapa permintaan di satu fitur bisa membuat ganti password atau 2FA ditolak 429; tes regresi `ThrottleTest`), dan bawaan `ACCOUNT_INTERNAL_URL` menjadi `https://tune-in.trade`.
 
 ## Langkah berikutnya
@@ -68,7 +70,7 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 |---|---|
 | 13 Nov pagi | Sentimen berita tidak lagi jatuh ke kamus kata (24 berita pada 11-12 Nov, sebelum perbaikan penghitung Gemini); hasil Birdeye hari kedua |
 | Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
-| Sekitar 30 sinyal v7 | Review v7: sinyal dibanding exit v6 di salinan bayangan, `high_score`, rugi saat stop dengan ukuran baru |
+| Sekitar 30 sinyal v7 | Review v7: sinyal dibanding exit v6 di salinan bayangan, `high_score`, rugi saat stop dengan ukuran baru. Bahan siap dengan `bash dex/review/v7-review.sh` (hanya baca, hasil di `dex/review/hasil-v7-review-<tanggal>.md`; dicoba 24 Nov pada 12 sinyal selesai) |
 | Sekitar Feb 2027, atau saat riwayat candle 4 jam >= 6 bulan untuk >= 100 token | Uji ulang strategi swing Fibonacci 4 jam (aturan akun FutureSim `swing_fib_4h`, hanya long) di token DEX. Uji 20 Nov: 30 trade dari 140 token (riwayat 4 jam median 55 hari), tanpa biaya +0,03R, dengan biaya DEX -0,10R; terlalu sedikit untuk disimpulkan (pemilik: simpan untuk nanti). Bisa dipercepat dengan mengunduh riwayat GeckoTerminal dari laptop (sekitar 280 permintaan). Bahan: `dex/review/hasil-20nov-swing-fib.md`, `swing-fib-dex.py` |
 | 28 Des | Data whale sendiri mencapai 60 hari; uji wallet diulang tanpa wallet yang ditandai bot (`dex/review/whale-btc.py`), termasuk perbandingan saat tren BTC naik dan turun |
 

@@ -44,6 +44,10 @@ Schedule::command('market:shadow-signals')->hourlyAt(50)->withoutOverlapping();
 // requests to Birdeye, none to GeckoTerminal; skipped while no key is set.
 Schedule::command('market:trader-rankings')->dailyAt('00:35')->withoutOverlapping();
 
+// Market-turn triggers of docs/UJI_ULANG_PASAR_NAIK.md (workspace repo): two public requests (Bybit daily BTC,
+// alternative.me Fear & Greed) after the UTC day has closed; Telegram to the admins only when a trigger is newly met.
+Schedule::command('app:market-turn-check')->dailyAt('01:05')->withoutOverlapping();
+
 Schedule::command('market:watchlist')->hourlyAt(40)->withoutOverlapping();
 
 Schedule::command('market:analyze')->cron('11,26,41,56 * * * *')->withoutOverlapping();
