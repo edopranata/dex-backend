@@ -65,7 +65,7 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 
 ## Langkah berikutnya
 
-1. Pantau sinyal v7 pertama: penutupan saat analisa turun, pesan Telegram, dan lot auto-follow yang ikut ditutup. Cek rugi saat stop pada lot dengan ukuran baru (target 1,0x risiko, kecuali gap).
+1. Pantau sinyal v7 pertama: penutupan saat analisa turun, pesan Telegram, dan lot auto-follow yang ikut ditutup. Cek rugi saat stop pada lot dengan ukuran baru (target 1,0x risiko, kecuali gap). **25 Nov 2026 16.30 WIB:** belum ada lot v7 yang kena stop (16 lot ditutup, semuanya karena analisa turun). Sebagai gantinya dihitung rugi seandainya tiap lot dijual utuh di stop-nya, dengan harga fill, fee, gas, dan dampak harga seperti `TradingService` (likuiditas saat ini): 53 lot di lima akun auto-follow (akun `buy` tidak punya lot karena v7 hanya Strong Buy), rasio rugi/target 0,89-1,00, median 0,99, paling tinggi 1,001 (dulu median 1,10). Rasio di bawah 1 muncul saat fill lebih murah dari `entry_high` yang dipakai untuk menghitung ukuran (IDOL #216 0,89, SI #226 0,95). Gap di bawah stop tetap tidak tertangkap; cek ulang saat lot pertama benar-benar kena stop (bagian 6 `dex/review/v7-review.sh`). Skrip `dex/review/v7-stop-check.php` (tidak di git).
 2. S8 (beli setelah turun > 15% dalam 1 jam): uji ulang 21 Nov negatif pada data baru (ROADMAP Fase 2B); ditunda pemilik 21 Nov sampai sekitar 200 kejadian sejak token ditemukan (21 Nov: 37).
 
 ## Menunggu
