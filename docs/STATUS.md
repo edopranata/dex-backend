@@ -44,7 +44,7 @@ Terakhir diperbarui: 26 November 2026. Perbarui file ini di commit yang sama set
 | Hubungan dengan BTC per analisa (korelasi, beta, kekuatan relatif 24 jam) dan BTC di konteks pasar. A: lewati token yang ikut BTC (korelasi ≥ 0,3 dan ≥ 0,1) saat tren 4 jam BTC tidak naik. B: hanya token yang ikut BTC saat tren 4 jam BTC naik (studi `dex/review/hasil-15nov-btc.md`) | 15 Nov 19.00 WIB | A bersama review v6; B butuh fase BTC naik | Laporan → Catatan bayangan; token → Gerak terhadap BTC; Dashboard → Acuan pasar |
 | Setiap Buy sebagai sinyal bayangan (`buy_watch`), dengan Fear & Greed; di Laporan dipisah menurut tren 4 jam BTC. Untuk usulan pemilik: Buy + Strong Buy saat BTC naik, hanya Strong Buy saat turun | 15 Nov sekitar 16.30 WIB | Saat pemicu di `docs/UJI_ULANG_PASAR_NAIK.md` repo bersama terpenuhi, atau sekitar 30 trade saat BTC naik | Laporan → Sinyal bayangan |
 | Sumber discovery per putaran, termasuk Jupiter (`discovery_sightings`) | 12 Nov 11.25 WIB | Minggu depan: apakah token yang disepakati banyak sumber lebih baik | Belum ada halaman |
-| Daftar trader paling untung Birdeye, Solana dan BSC (`trader_rankings`) | 12 Nov 13.37 WIB | Sekitar 26 Nov: apakah wallet bertahan di daftar | Belum ada halaman |
+| Daftar trader paling untung Birdeye, Solana dan BSC (`trader_rankings`) | 12 Nov 13.37 WIB | **Dinilai 26 Nov: tidak lolos** (lihat ROADMAP Fase R, `dex/review/birdeye/hasil-26nov.md`); pencatatan masih jalan sampai pemilik memutuskan dihentikan atau tidak | Belum ada halaman |
 
 ### AI
 
@@ -74,7 +74,6 @@ Terakhir diperbarui: 26 November 2026. Perbarui file ini di commit yang sama set
 | Kapan | Yang dicek |
 |---|---|
 | 13 Nov pagi | Sentimen berita tidak lagi jatuh ke kamus kata (24 berita pada 11-12 Nov, sebelum perbaikan penghitung Gemini); hasil Birdeye hari kedua |
-| Sekitar 26 Nov | Uji ketahanan daftar trader Birdeye (14 hari data) |
 | Sekitar 30 sinyal v7 | Review v7: sinyal dibanding exit v6 di salinan bayangan, `high_score`, rugi saat stop dengan ukuran baru. Bahan siap dengan `bash dex/review/v7-review.sh` (hanya baca, hasil di `dex/review/hasil-v7-review-<tanggal>.md`; dicoba 24 Nov pada 12 sinyal selesai) |
 | Sekitar Feb 2027, atau saat riwayat candle 4 jam >= 6 bulan untuk >= 100 token | Uji ulang strategi swing Fibonacci 4 jam (aturan akun FutureSim `swing_fib_4h`, hanya long) di token DEX. Uji 20 Nov: 30 trade dari 140 token (riwayat 4 jam median 55 hari), tanpa biaya +0,03R, dengan biaya DEX -0,10R; terlalu sedikit untuk disimpulkan (pemilik: simpan untuk nanti). Bisa dipercepat dengan mengunduh riwayat GeckoTerminal dari laptop (sekitar 280 permintaan). Bahan: `dex/review/hasil-20nov-swing-fib.md`, `swing-fib-dex.py` |
 | 28 Des | Data whale sendiri mencapai 60 hari; uji wallet diulang tanpa wallet yang ditandai bot (`dex/review/whale-btc.py`), termasuk perbandingan saat tren BTC naik dan turun |
