@@ -3,6 +3,7 @@
 use App\Jobs\RunAdminCommand;
 use App\Models\TraderRanking;
 use App\Services\Analysis\TraderRankingCollector;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -88,4 +89,11 @@ test('the command reports a missing key and the task can be run from the admin p
     $this->artisan('market:trader-rankings')->expectsOutputToContain('Birdeye API key belum diisi')->assertSuccessful();
 
     expect(RunAdminCommand::ALLOWED)->toHaveKey('market:trader-rankings');
+});
+
+test('the daily recording is no longer scheduled after the failed test of 26 Nov 2026', function () {
+    $commands = collect(app(Schedule::class)->events())->map(fn ($event): string => (string) $event->command);
+
+    expect($commands->filter(fn (string $command): bool => str_contains($command, 'market:trader-rankings')))->toBeEmpty()
+        ->and($commands->filter(fn (string $command): bool => str_contains($command, 'market:shadow-signals')))->not->toBeEmpty();
 });

@@ -131,7 +131,7 @@ class ServiceDirectory
                         [['label' => 'Developer dashboard', 'url' => 'https://www.coingecko.com/en/developers/dashboard']],
                         filled(config('market.discovery.coingecko_key')) ? $this->status('ok', 'Demo API key') : $this->status('info', 'Publik tanpa key'),
                         'Admin → Pengaturan → Sumber data'),
-                    $this->service('birdeye', 'Birdeye', 'Daftar trader paling untung, dicatat sekali sehari (Fase R, hanya pencatatan).', 'Standard gratis: 30.000 unit per bulan',
+                    $this->service('birdeye', 'Birdeye', 'Daftar trader paling untung (Fase R). Pencatatan harian dihentikan 26 Nov 2026 setelah uji gagal; bisa dijalankan manual dari Tugas terjadwal.', 'Standard gratis: 30.000 unit per bulan',
                         [['label' => 'Dashboard', 'url' => 'https://bds.birdeye.so'], ['label' => 'Dokumentasi', 'url' => 'https://data.birdeye.so/docs']],
                         filled(config('market.birdeye.key')) ? $this->status('ok', 'API key terisi') : $this->status('off', 'Belum ada key'),
                         'Admin → Pengaturan → Sumber data'),

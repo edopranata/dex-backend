@@ -44,7 +44,7 @@ Terakhir diperbarui: 26 November 2026. Perbarui file ini di commit yang sama set
 | Hubungan dengan BTC per analisa (korelasi, beta, kekuatan relatif 24 jam) dan BTC di konteks pasar. A: lewati token yang ikut BTC (korelasi ≥ 0,3 dan ≥ 0,1) saat tren 4 jam BTC tidak naik. B: hanya token yang ikut BTC saat tren 4 jam BTC naik (studi `dex/review/hasil-15nov-btc.md`) | 15 Nov 19.00 WIB | A bersama review v6; B butuh fase BTC naik | Laporan → Catatan bayangan; token → Gerak terhadap BTC; Dashboard → Acuan pasar |
 | Setiap Buy sebagai sinyal bayangan (`buy_watch`), dengan Fear & Greed; di Laporan dipisah menurut tren 4 jam BTC. Untuk usulan pemilik: Buy + Strong Buy saat BTC naik, hanya Strong Buy saat turun | 15 Nov sekitar 16.30 WIB | Saat pemicu di `docs/UJI_ULANG_PASAR_NAIK.md` repo bersama terpenuhi, atau sekitar 30 trade saat BTC naik | Laporan → Sinyal bayangan |
 | Sumber discovery per putaran, termasuk Jupiter (`discovery_sightings`) | 12 Nov 11.25 WIB | Minggu depan: apakah token yang disepakati banyak sumber lebih baik | Belum ada halaman |
-| Daftar trader paling untung Birdeye, Solana dan BSC (`trader_rankings`) | 12 Nov 13.37 WIB | **Dinilai 26 Nov: tidak lolos** (lihat ROADMAP Fase R, `dex/review/birdeye/hasil-26nov.md`); pencatatan masih jalan sampai pemilik memutuskan dihentikan atau tidak | Belum ada halaman |
+| Daftar trader paling untung Birdeye, Solana dan BSC (`trader_rankings`) | 12 Nov 13.37 WIB | **Dinilai 26 Nov: tidak lolos** (lihat ROADMAP Fase R, `dex/review/birdeye/hasil-26nov.md`); pencatatan harian dihentikan 26 Nov (pemilik), data 12-26 Nov disimpan | Belum ada halaman |
 
 ### AI
 

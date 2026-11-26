@@ -30,7 +30,6 @@ CoinGecko, RSS, AI provider, Telegram
 | `market:shadow-signals` | Tiap jam, menit 50 | Hasil sinyal bayangan dari candle tersimpan |
 | `market:news` | Tiap jam, menit 10 | Berita dan sentimen |
 | `market:security` | Tiap 6 jam, menit 15; token di luar Market 03.35 | Cek GoPlus |
-| `market:trader-rankings` | 00.35 | Daftar trader paling untung Birdeye |
 | `app:market-turn-check` | 01.05 | Pemicu uji ulang saat pasar berubah (`docs/UJI_ULANG_PASAR_NAIK.md` repo bersama, `MarketTurn`): BTC harian di atas SMA50 (candle harian Bybit Indonesia), tren 4 jam BTC di analisa DEX, Fear & Greed (alternative.me), dan bayangan Buy saat BTC naik. Telegram ke admin hanya saat pemicu baru terpenuhi; status tersimpan di cache `market-turn:met`, sumber yang gagal dibaca mempertahankan status lama. `--dry` hanya menampilkan (dipakai audit rutin) |
 | `market:snapshots` | Tiap jam | Snapshot token |
 | `market:equity-snapshot` | Tiap 15 menit | Ekuitas akun auto-follow |

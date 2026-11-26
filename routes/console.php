@@ -40,9 +40,9 @@ Schedule::command('market:discover')->cron('12,42 * * * *')->withoutOverlapping(
 // v6 comparison: shadow signals followed on stored 15m candles; no API requests.
 Schedule::command('market:shadow-signals')->hourlyAt(50)->withoutOverlapping();
 
-// Fase R, recording only: the day's lists of most profitable traders, after the UTC day has closed. Six short
-// requests to Birdeye, none to GeckoTerminal; skipped while no key is set.
-Schedule::command('market:trader-rankings')->dailyAt('00:35')->withoutOverlapping();
+// Fase R: `market:trader-rankings` (Birdeye's most profitable traders) is no longer scheduled. The 12-26 Nov 2026
+// test failed (dex/review/birdeye/hasil-26nov.md) and the owner stopped the daily recording on 26 Nov; the command
+// stays runnable from Admin, and the stored lists are kept.
 
 // Market-turn triggers of docs/UJI_ULANG_PASAR_NAIK.md (workspace repo): two public requests (Bybit daily BTC,
 // alternative.me Fear & Greed) after the UTC day has closed; Telegram to the admins only when a trigger is newly met.
