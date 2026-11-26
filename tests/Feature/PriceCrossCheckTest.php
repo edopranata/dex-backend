@@ -169,6 +169,18 @@ test('a manual market buy far above GeckoTerminal fills at the GeckoTerminal pri
         ->market_price->toEqual(0.0113);
 });
 
+test('a sale 4.9% below GeckoTerminal fills at the GeckoTerminal price, unlike TAC on 25 Nov', function () {
+    Position::factory()->for($this->user)->for($this->token)->create(['quantity' => 1000, 'avg_price' => 0.8]);
+    fakeGeckoPool(0.8292);
+    $this->token->update(['price_usd' => 0.7882, 'price_updated_at' => now()]);
+
+    $sell = app(TradingService::class)->place($this->user, $this->token, ['side' => 'sell', 'type' => 'market', 'quantity' => 1000]);
+
+    expect(OrderFillEvidence::firstWhere('order_id', $sell->id))
+        ->source->toBe('geckoterminal')
+        ->market_price->toEqual(0.8292);
+});
+
 test('a signal does not take a target the feed alone reached, and enters at the GeckoTerminal price', function () {
     $active = Signal::withoutEvents(fn () => Signal::factory()->for($this->token)->create([
         'status' => 'active', 'entry_price' => 0.009, 'entered_at' => now(), 'stop_loss' => 0.008, 'take_profit_1' => 0.0100, 'take_profit_2' => 0.011, 'take_profit_3' => 0.012, 'max_tp_hit' => 0,

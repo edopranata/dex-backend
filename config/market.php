@@ -43,9 +43,11 @@ return [
         // GeckoTerminal (sumber grafik). Beda lebih dari tolerance_pct: yang dipakai harga GeckoTerminal.
         // Audit 10 Nov 2026: 4 dari 149 isi jauh di luar candle (STANK -12%, FLOAT +8-10%); feed hanya 4
         // digit sehingga 139 isi wajar juga memakai harga yang sama dua kali, jadi itu tidak bisa dipakai.
+        // Audit 26 Nov 2026: TAC dijual 4,9% di bawah candle karena masih di dalam 5%; dari 442 isian yang dicek
+        // sejak 1 Nov, 32 berselisih 3-5% dan di semuanya harga GeckoTerminal paling jauh 1% dari candle 15 menit.
         'cross_check' => [
             'enabled' => (bool) env('PRICE_CROSS_CHECK', true),
-            'tolerance_pct' => 5.0,
+            'tolerance_pct' => 3.0,
             // Harga pembanding dipakai ulang selama ini, supaya satu token tidak menghabiskan jatah GeckoTerminal.
             'cache_seconds' => 45,
             // Paling lama menunggu giliran request; lewat dari ini order ditahan sampai pengecekan berikutnya.

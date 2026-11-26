@@ -1,6 +1,6 @@
 # Status DEX Simulator
 
-Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
+Terakhir diperbarui: 26 November 2026. Perbarui file ini di commit yang sama setiap kali sebuah tugas selesai.
 
 ## Sekarang
 
@@ -9,6 +9,7 @@ Terakhir diperbarui: 23 November 2026. Perbarui file ini di commit yang sama set
 - Produksi per 21 Nov 10.43 WIB: backend 4094ba1, frontend 8156671 (strategi v7 `v7-a7bb4e` dan ukuran posisi dengan biaya). Diperiksa 10.58 WIB: container sehat, tanpa error log, 20 analisa pertama sudah v7, laporan v6 terbaca (3,8 detik) dengan baris dan grup bayangan baru. Sebelumnya 18 Nov 14.28 WIB: backend 71ce2ec, frontend e956a73 (bayangan konfirmasi candle 15 menit: filter dan entry tertunda; diperiksa 14.30 WIB, container sehat, tanpa error log). Sebelumnya 18 Nov 11.59 WIB: backend 11e872a, frontend 26239ac (rincian per sinyal di catatan dan sinyal bayangan dengan BTC dan Fear & Greed saat entry; BTC sebelum 15 Nov dihitung ulang dari candle; bayangan jeda setelah stop 12/24/48 jam). Diperiksa 12.00 WIB: container sehat, laporan v6 1,7 detik, tanpa error log. Sebelumnya 15 Nov: bayangan Buy dengan Fear & Greed dan acuan BTC.
 - Backup: Sejak 22 Nov 2026 backup luar VPS bisa ke Google Drive (`simulator-backup/<nama>`) dan R2 sekaligus; Drive terpasang 22 Nov 2026 18.57 WIB untuk semua aplikasi; backup manual 19.00 masuk Drive dan R2, uji restore dari Drive lolos (34/34 tabel). Langkah dan hasil di `docs/INFRASTRUKTUR.md` repo bersama.
 
+- 26 Nov 2026: toleransi cek silang harga ke GeckoTerminal turun dari 5% ke 3% (TAC 25 Nov terjual 4,9% di bawah candle; alasan di [DECISIONS.md](DECISIONS.md)). 480 tes lolos.
 - 20 Nov 2026: konfirmasi harga kini butuh dua snapshot DEX Screener yang berbeda (data DEX Screener diperbarui sekitar tiap 30 detik per pair, diukur 19 Nov). Pengecekan yang membaca snapshot sama tidak menggeser harga sebelumnya. 452 tes lolos.
 
 ### Strategi: v7 (sejak 21 Nov 2026; versi lengkap di Laporan)
