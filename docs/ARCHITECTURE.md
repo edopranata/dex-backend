@@ -25,7 +25,9 @@ CoinGecko, RSS, AI provider, Telegram
 | `market:analyze` | Menit 11, 26, 41, 56 | Analisa, rekomendasi, sinyal, dan sinyal bayangan |
 | `market:evaluate` | Menit 7, 22, 37, 52 | Harga 1, 4, dan 24 jam setelah tiap analisa |
 | `market:discover` | Menit 12, 42 | Discovery dan pencatatan sumber |
-| `app:deploy-window` | Dipanggil `deploy.sh` sebelum build | Menunggu antrean `market-data` kosong, tidak ada task admin, dan tidak ada jadwal dalam 90 detik (maks 10 menit, lalu deploy tetap lanjut). Jendela yang selalu kosong: menit 27-29 dan 57-59 |
+| `app:deploy-window` | Dipanggil `deploy.sh` sebelum build | Menunggu antrean `market-data` kosong, tidak ada task admin, dan tidak ada jadwal dalam 90 detik (maks 10 menit, lalu deploy tetap lanjut). Jendela yang selalu kosong: menit 27-29 dan 57-59. Tugas tiap 15 detik, tiap menit, dan tiap 5 menit tidak dihitung |
+| `newpairs:track` | Tiap menit (di latar belakang) | Token Baru: pool muda dari discovery, snapshot DEX Screener semua pool yang dipantau, candle 5 menit, trade kertas, satu cek GoPlus. Lihat bagian Token Baru |
+| `newpairs:discover` | Menit 20, 50 | Token Baru: GeckoTerminal `new_pools` per jaringan (antrean `market-data`) |
 | `market:watchlist` | Tiap jam, menit 40 | Market otomatis: keluarkan atau ganti token |
 | `market:shadow-signals` | Tiap jam, menit 50 | Hasil sinyal bayangan dari candle tersimpan |
 | `market:news` | Tiap jam, menit 10 | Berita dan sentimen |
@@ -34,7 +36,7 @@ CoinGecko, RSS, AI provider, Telegram
 | `market:snapshots` | Tiap jam | Snapshot token |
 | `market:equity-snapshot` | Tiap 15 menit | Ekuitas akun auto-follow |
 | `app:telegram-daily-summary`, `app:heartbeat`, `horizon:snapshot` | Tiap jam / 5 menit | Ringkasan harian, Healthchecks, statistik Horizon |
-| `model:prune`, `queue:prune-failed` | 03.00, 03.30 | Hapus data lama (analisa 90 hari kecuali yang punya sinyal, sumber discovery 60 hari, daftar trader 180 hari) dan job gagal lama |
+| `model:prune`, `queue:prune-failed` | 03.00, 03.30 | Hapus data lama (analisa 90 hari kecuali yang punya sinyal, sumber discovery 60 hari, daftar trader 180 hari, candle 5 menit Token Baru 60 hari) dan job gagal lama |
 
 Tugas penting bisa dijalankan manual dari Admin → Tugas terjadwal; daftar yang diizinkan ada di `RunAdminCommand::ALLOWED`.
 
@@ -83,3 +85,19 @@ Klien OAuth2 untuk akun pusat ([rancangan](../../../docs/RANCANGAN_AKUN_PUSAT.md
 ## Sidebar (sejak 24 Nov 2026)
 
 Di desktop (lg ke atas) sidebar punya tiga mode dari tombol di kiri toolbar (`SidebarToggle`, `useSidebar`): penuh, mini (ikon saja, nama sebagai tooltip), dan sembunyi (logo pindah ke toolbar; ringkasan ekuitas tampil di toolbar karena ringkasan portofolio di sidebar ikut tersembunyi). Pilihan disimpan di browser (`sidebar:v1`). Di layar kecil menu tetap laci geser dengan nama lengkap; semua aturan mini hanya berlaku di `lg:`.
+
+## Token Baru (sejak 26 Nov 2026, hanya pencatatan)
+
+Menu Token Baru (`/new-pairs`, `NewPairsView.vue`; API `GET /api/new-pairs`, `/api/new-pairs/summary`, `/api/new-pairs/trades`) mencatat pool berumur di bawah 24 jam untuk menilai ulang strategi New Token Hunter (`dex/new_token_hunter/`) ke depan. Terpisah dari Market: tabel sendiri (`new_pairs`, `new_pair_bars`, `new_pair_trades`), tanpa sinyal, order, atau auto-follow. Aturan dan angka di `config/market.php` → `new_pairs`; kode di `app/Services/NewPairs/`.
+
+- **Sumber.** Pair muda yang dilihat discovery Market dan ditolak karena umurnya (`token_candidates`, tanpa permintaan tambahan), dan GeckoTerminal `new_pools` Solana, BSC, Base dua kali sejam (3 permintaan, sebagian besar kurva pump.fun beberapa ribu dolar). Dicatat bila likuiditas minimal $10 ribu, belum dikenal, dan daftar pantau belum penuh (150 pool).
+- **Sampel tiap menit.** DEX Screener, satu permintaan per 30 pool per jaringan: harga, likuiditas, volume 5 menit/1 jam/24 jam, jumlah beli dan jual 5 menit. Candle 5 menit dibangun dari sampel (open/high/low/close adalah harga sampel, jadi ekor di antara sampel terlewat; volume dan transaksi angka bergulir 5 menit DEX Screener di sampel terakhir). Perubahan harga dibatasi ±1 miliar persen karena DEX Screener kadang memberi angka ekstrem di trade pertama.
+- **Keamanan.** Satu cek GoPlus per menit untuk pool tertua yang belum dicek, sampai 3 percobaan; pool tanpa data GoPlus tetap "tanpa data".
+- **Trade kertas**, satu per strategi per pool, entry di harga sampel saat umur pool 5 menit-24 jam:
+  - `first_seen`: setiap pool, di sampel pertama (pembanding).
+  - `early_liquidity` (A): dalam 1 jam sejak terlihat, likuiditas ≥ $10 ribu, volume 5 menit ≥ $2.000 dan 1 jam ≥ $10.000, ≥ 20 transaksi 5 menit, beli/jual ≥ 1,2, naik 5 menit < 30%.
+  - `breakout` (B) dan `pullback` (C): di candle 5 menit yang baru tutup, aturan uji 26 Nov (12 candle sebelumnya; breakout juga butuh beli > jual). VWAP pullback dihitung dari candle sejak pool terlihat.
+  - A, B, dan C hanya entry bila GoPlus sudah menjawab dengan skor dan bukan honeypot, dan pajak jual ≤ 10%.
+  - Exit: sepertiga di TP +20/+40/+70%, stop -15% (ke entry setelah TP1) diisi di harga sampel, maksimal 24 jam, atau likuiditas tinggal 20% dari saat entry. Hasil bersih dikurangi biaya 2% pulang-pergi.
+- **Selesai dipantau** saat umur pool lewat 24 jam dan trade-nya sudah tutup, saat likuiditas tinggal 20% dari awal tanpa trade terbuka, atau saat DEX Screener tidak memberi data 60 menit (trade terbuka ditutup di harga terakhir).
+- `newpairs:track` berjalan tiap menit di latar belakang tanpa antrean, jadi `app:deploy-window` tidak menunggunya. Bisa dimatikan dengan `NEW_PAIRS_ENABLED=false`.

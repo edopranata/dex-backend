@@ -48,6 +48,12 @@ Schedule::command('market:shadow-signals')->hourlyAt(50)->withoutOverlapping();
 // alternative.me Fear & Greed) after the UTC day has closed; Telegram to the admins only when a trigger is newly met.
 Schedule::command('app:market-turn-check')->dailyAt('01:05')->withoutOverlapping();
 
+// Token Baru (26 Nov 2026, recording only): every tracked young pool sampled on DEX Screener each minute (one request
+// per 30 pools) plus one GoPlus check; GeckoTerminal new_pools twice an hour, one request per network on the
+// market-data queue, after the :15 and :45 cycles.
+Schedule::command('newpairs:track')->everyMinute()->withoutOverlapping(5)->runInBackground();
+Schedule::command('newpairs:discover')->cron('20,50 * * * *')->withoutOverlapping();
+
 Schedule::command('market:watchlist')->hourlyAt(40)->withoutOverlapping();
 
 Schedule::command('market:analyze')->cron('11,26,41,56 * * * *')->withoutOverlapping();

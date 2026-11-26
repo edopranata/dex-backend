@@ -72,10 +72,10 @@ class DeployWindowCommand extends Command
     }
 
     /**
-     * Tasks due so often that no window avoids them, and harmless to miss once.
+     * Tasks due so often that no window avoids them, and harmless to miss once (every minute: Token Baru samples).
      */
     private static function frequent(Event $event): bool
     {
-        return ($event->repeatSeconds ?? null) !== null || $event->expression === '*/5 * * * *';
+        return ($event->repeatSeconds ?? null) !== null || in_array($event->expression, ['* * * * *', '*/5 * * * *'], true);
     }
 }

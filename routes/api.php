@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\ContainerMetricController;
 use App\Http\Controllers\Api\DiscoveryController;
 use App\Http\Controllers\Api\FeedController;
 use App\Http\Controllers\Api\MarketController;
+use App\Http\Controllers\Api\NewPairController;
 use App\Http\Controllers\Api\NewsController;
 use App\Http\Controllers\Api\OrderController;
 use App\Http\Controllers\Api\PasswordResetController;
@@ -79,6 +80,9 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::get('feed', [FeedController::class, 'index'])->name('feed.index');
     Route::get('reports/performance', [ReportController::class, 'performance'])->name('reports.performance');
     Route::get('reports/tp-coins', TpCoinController::class)->name('reports.tp-coins');
+    Route::get('new-pairs/summary', [NewPairController::class, 'summary'])->name('new-pairs.summary');
+    Route::get('new-pairs/trades', [NewPairController::class, 'trades'])->name('new-pairs.trades');
+    Route::get('new-pairs', [NewPairController::class, 'index'])->name('new-pairs.index');
     Route::get('reports/shadow-signals', [ReportController::class, 'shadowSignals'])->name('reports.shadow-signals');
     Route::get('reports/accounts/{key}/report', [ReportController::class, 'accountReport'])->whereIn('key', array_keys(User::AUTO_FOLLOW_ACCOUNTS))->name('reports.account-report');
     Route::get('reports/lots/{order}', [ReportController::class, 'lot'])->name('reports.lot');

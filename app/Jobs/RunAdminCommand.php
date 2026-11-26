@@ -32,6 +32,7 @@ class RunAdminCommand implements ShouldQueue
         'market:news' => [],
         'market:security' => [],
         'market:discover' => ['--sync' => true],
+        'newpairs:discover' => ['--sync' => true],
         'market:trader-rankings' => [],
         'market:shadow-signals' => [],
         'market:analyze' => [],

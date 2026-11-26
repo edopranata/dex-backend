@@ -627,4 +627,52 @@ return [
         'strong_buy_max_score' => (int) env('SIGNAL_STRONG_BUY_MAX_SCORE', 77),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Token Baru (26 Nov 2026, hanya pencatatan)
+    |--------------------------------------------------------------------------
+    |
+    | Pool berumur di bawah 24 jam dicatat terpisah dari Market: candle 5 menit sendiri dari snapshot DEX Screener tiap
+    | menit, dan trade kertas strategi New Token Hunter (dex/new_token_hunter/). Tidak ada sinyal, order, atau
+    | auto-follow. Uji 26 Nov pada 270 pair muda tidak menemukan keunggulan (dex/review/new-token-hunter/hasil-26nov.md);
+    | data ini untuk menilai ulang ke depan. Beban: DEX Screener 1 request per 30 pair per menit, GeckoTerminal
+    | new_pools 1 request per jaringan tiap 30 menit, GoPlus paling banyak 1 cek per menit.
+    |
+    */
+
+    'new_pairs' => [
+        'enabled' => (bool) env('NEW_PAIRS_ENABLED', true),
+        // Jaringan untuk GeckoTerminal new_pools (nama chain aplikasi). Pair muda dari discovery dicatat di semua chain.
+        'networks' => ['solana', 'bsc', 'base'],
+        'max_age_hours' => 24,
+        // Di bawah umur ini pool hanya dipantau (TOO_EARLY di dokumen), belum boleh entry.
+        'min_entry_age_minutes' => 5,
+        'min_liquidity_usd' => 10_000,
+        // Pair yang dipantau sekaligus; pair baru ditolak saat penuh.
+        'max_tracked' => (int) env('NEW_PAIRS_MAX_TRACKED', 150),
+        'bar_seconds' => 300,
+        'bars_retention_days' => 60,
+        // Tanpa data DEX Screener selama ini, pemantauan pair berhenti (trade terbuka ditutup di harga terakhir).
+        'no_data_minutes' => 60,
+        'security_attempts' => 3,
+        'max_sell_tax_pct' => 10.0,
+        // Trade kertas, seperti uji 26 Nov: TP +20/+40/+70% sepertiga tiap TP, stop 15% (ke entry setelah TP1),
+        // paling lama 24 jam, biaya pulang-pergi 2% dikurangkan dari hasil. Keluar juga bila likuiditas tinggal 20%.
+        'stop_pct' => 15.0,
+        'take_profit_pct' => [20.0, 40.0, 70.0],
+        'max_hold_hours' => 24,
+        'round_trip_cost_pct' => 2.0,
+        'liquidity_exit_ratio' => 0.2,
+        'early' => [
+            'window_minutes' => 60,
+            'min_volume_m5' => 2_000,
+            'min_volume_h1' => 10_000,
+            'min_txns_m5' => 20,
+            'min_buy_sell_ratio' => 1.2,
+            'max_change_m5_pct' => 30.0,
+        ],
+        'breakout' => ['lookback_bars' => 12, 'volume_multiplier' => 1.5, 'min_volume' => 2_000, 'max_extension' => 1.15],
+        'pullback' => ['lookback_bars' => 12, 'impulse' => 1.3, 'touch' => 1.03, 'min_volume' => 2_000],
+    ],
+
 ];

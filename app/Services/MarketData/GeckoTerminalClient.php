@@ -161,6 +161,40 @@ class GeckoTerminalClient
     }
 
     /**
+     * The 20 newest pools on one network (Token Baru). Most are pump.fun bonding curves of a few thousand dollars.
+     *
+     * @return list<array{pool_address: string, token_address: string, symbol: string, name: string, dex_id: string|null, pool_created_at: string|null, liquidity_usd: float|null}>
+     */
+    public function newPools(string $network): array
+    {
+        $response = $this->get("/networks/{$network}/new_pools", ['include' => 'base_token']);
+
+        $tokens = collect($response->json('included') ?? [])->where('type', 'token')->keyBy('id');
+
+        return collect($response->json('data') ?? [])
+            ->map(function (array $pool) use ($tokens): ?array {
+                $token = $tokens->get($pool['relationships']['base_token']['data']['id'] ?? '');
+
+                if ($token === null) {
+                    return null;
+                }
+
+                return [
+                    'pool_address' => $pool['attributes']['address'],
+                    'token_address' => $token['attributes']['address'],
+                    'symbol' => (string) $token['attributes']['symbol'],
+                    'name' => (string) $token['attributes']['name'],
+                    'dex_id' => $pool['relationships']['dex']['data']['id'] ?? null,
+                    'pool_created_at' => $pool['attributes']['pool_created_at'] ?? null,
+                    'liquidity_usd' => isset($pool['attributes']['reserve_in_usd']) ? (float) $pool['attributes']['reserve_in_usd'] : null,
+                ];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
      * @param  array<string, mixed>  $query
      */
     private function get(string $path, array $query): Response
