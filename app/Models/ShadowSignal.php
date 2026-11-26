@@ -37,6 +37,12 @@ class ShadowSignal extends Model
      */
     public const HIGH_SCORE = 'high_score';
 
+    /**
+     * v8 (26 Nov 2026): a Strong Buy whose previous analysis was not Buy or Strong Buy, which makes no signal, with its
+     * score as the metric.
+     */
+    public const FIRST_BUY = 'first_buy';
+
     public const PENDING = 'pending';
 
     /** Another one of the same rule was still open on this token, as a real signal would have been. */

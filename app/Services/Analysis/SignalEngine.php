@@ -101,9 +101,14 @@ class SignalEngine
         // shadow instead, so the rule keeps being measured.
         $tooHighScore = $levels !== [] && $this->scoreTooHigh($recommendation, $finalScore, $config);
 
+        // v8: the same for a Strong Buy that follows an analysis which was not Buy or Strong Buy.
+        $previous = $token->analyses()->latest()->first();
+        $firstBuy = $levels !== [] && ! $tooHighScore && $this->unconfirmed($recommendation, $previous, $config);
+
         $reasons = array_values(array_filter([
             $overrideReason,
             $tooHighScore ? sprintf('Skor %d di atas batas sinyal %d: Strong Buy dengan skor setinggi ini rata-rata rugi di v3, v4, dan v6, jadi tidak dijadikan sinyal (v7).', $finalScore, (int) $config['strong_buy_max_score'] - 1) : null,
+            $firstBuy ? 'Analisa sebelumnya bukan Buy atau Strong Buy: Strong Buy pertama tidak dijadikan sinyal, sinyal menunggu analisa berikutnya yang masih Strong Buy (v8).' : null,
             ...array_map(fn (string $r): string => "[Teknikal] {$r}", $technical['reasons']),
             ...array_map(fn (string $r): string => "[On-chain] {$r}", $onchain['reasons']),
             ...array_map(fn (string $r): string => "[Whale] {$r}", $whale['reasons']),
@@ -111,7 +116,6 @@ class SignalEngine
             ...array_map(fn (string $r): string => "[Fundamental] {$r}", $fundamental['reasons']),
         ]));
 
-        $previous = $token->analyses()->latest()->first();
         $summary = $this->summarizer->summarize($token, $recommendation, [
             'final_score' => $finalScore,
             'scores' => $scores,
@@ -160,7 +164,11 @@ class SignalEngine
             $this->recordShadow($token, $analysis, ShadowSignal::HIGH_SCORE, $recommendation, $levels, (float) $finalScore);
         }
 
-        if ($levels !== [] && ! $tooHighScore && in_array($recommendation->value, config('market.analysis.signal_recommendations'), true)) {
+        if ($firstBuy) {
+            $this->recordShadow($token, $analysis, ShadowSignal::FIRST_BUY, $recommendation, $levels, (float) $finalScore);
+        }
+
+        if ($levels !== [] && ! $tooHighScore && ! $firstBuy && in_array($recommendation->value, config('market.analysis.signal_recommendations'), true)) {
             $signal = $token->withMembershipLock(function () use ($token, $analysis, $recommendation, $strategyVersion, $levels): ?Signal {
                 if (! $token->isInMarket() || $token->signals()->open()->exists()) {
                     return null;
@@ -275,13 +283,32 @@ class SignalEngine
     }
 
     /**
-     * v7: the first analysis after entry that is no longer bullish closes the signal. Only for signals of the current
-     * strategy, so v6 signals still open at the switch finish with the exits they were measured by.
+     * v7: the first analysis after entry that is no longer bullish closes the signal. For signals from v7 on, so v6
+     * signals still open at the v7 switch finished with the exits they were measured by, while v7 signals still open
+     * at the v8 switch keep the v7 exit.
      */
     private function exitsOnDowngrade(Signal $signal): bool
     {
         return (bool) config('market.analysis.exit_on_downgrade')
-            && str_starts_with((string) $signal->strategy_version, config('market.analysis.strategy_version').'-');
+            && preg_match('/^v(\d+)-/', (string) $signal->strategy_version, $match) === 1
+            && (int) $match[1] >= 7;
+    }
+
+    /**
+     * v8: a signal recommendation whose previous analysis of the token (within the configured minutes) was not Buy or
+     * Strong Buy. Analyses held back as Hold by the holder or chase rules count as not Buy.
+     *
+     * @param  array<string, mixed>  $config
+     */
+    private function unconfirmed(Recommendation $recommendation, ?Analysis $previous, array $config): bool
+    {
+        $minutes = (int) ($config['previous_buy_max_minutes'] ?? 0);
+
+        if ($minutes <= 0 || ! in_array($recommendation->value, $config['signal_recommendations'], true)) {
+            return false;
+        }
+
+        return $previous === null || ! $previous->recommendation->isBullish() || $previous->created_at->lt(now()->subMinutes($minutes));
     }
 
     /**

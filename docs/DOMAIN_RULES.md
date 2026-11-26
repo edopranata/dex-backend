@@ -15,7 +15,7 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
 - Skor: whale 35%, tren 30%, keamanan 20%, perhatian 15%. Masuk Market bila skor minimal 65, whale di atas 50, keamanan minimal 60, maksimal 3 token baru per putaran.
 - Daftar Jupiter (Solana) dan setiap sumber per putaran hanya dicatat, sejak 12 Nov 2026. Belum memengaruhi skor atau pemilihan.
 
-## Analisa dan rekomendasi (berlaku, versi v7)
+## Analisa dan rekomendasi (berlaku, versi v8)
 
 - Dihitung tiap 15 menit dari candle 1 jam dan tren 4 jam. Skor akhir = teknikal 35% + on-chain 20% + whale 15% + sentimen 15% + fundamental 15%.
 - Ambang: Strong Buy 72, Buy 60, Hold 42, Sell 30.
@@ -28,6 +28,7 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
   - jarak stop di bawah 4% dari harga (biaya akan memakan hasilnya).
 - **Hanya Strong Buy yang membuat sinyal** (v5, 12 Nov 2026). Buy tetap dianalisa dan tampil sebagai pantauan.
 - **Strong Buy dengan skor 77 atau lebih tidak membuat sinyal** (v7, 21 Nov 2026). Rekomendasinya tetap Strong Buy di halaman token, dengan alasan di daftar alasan, dan diikuti sebagai sinyal bayangan `high_score` dengan skornya. Batas diatur `market.analysis.strong_buy_max_score` (0 = nonaktif).
+- **Strong Buy pertama tidak membuat sinyal** (v8, 26 Nov 2026): Strong Buy hanya menjadi sinyal bila analisa token sebelumnya, paling lama 20 menit sebelumnya, juga Buy atau Strong Buy. Analisa yang ditahan menjadi Hold oleh aturan holder atau aturan mengejar harga dihitung bukan Buy. Rekomendasinya tetap Strong Buy di halaman token, dengan alasan di daftar alasan, dan diikuti sebagai sinyal bayangan `first_buy` dengan skornya. Batas diatur `market.analysis.previous_buy_max_minutes` (0 = nonaktif).
 - Setiap analisa dan sinyal menyimpan versi strategi dan kondisi pasar saat itu.
 
 ## Sinyal (berlaku)
@@ -35,7 +36,7 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
 - Level: zona entry, stop di bawah swing low dengan jarak 1-3 ATR, target 1,5R, 2,5R, dan 4R.
 - Menunggu entry paling lama 12 jam. Kalau harga menyentuh stop sebelum masuk zona, sinyal batal.
 - Setelah entry: sepertiga posisi dijual di tiap target, stop pindah ke harga entry setelah TP1, dan sinyal ditutup paling lama 72 jam setelah entry.
-- **Keluar saat analisa turun** (v7, 21 Nov 2026): sinyal yang sudah entry ditutup di harga analisa pertama yang tidak lagi Buy atau Strong Buy (status `downgraded`), dengan target yang sudah tercapai tetap dihitung. Hanya untuk sinyal versi yang sedang berlaku; sinyal v6 yang masih terbuka saat pergantian selesai dengan exit v6. Akun auto-follow ikut menutup lot-nya seperti saat sinyal selesai. Exit lama (target, stop, 72 jam) tetap diukur pada salinan bayangan sinyal (`accepted`) dan ditampilkan sebagai catatan bayangan "Tahan sampai target, stop, atau 72 jam seperti v6". Bisa dimatikan dengan `market.analysis.exit_on_downgrade`.
+- **Keluar saat analisa turun** (v7, 21 Nov 2026): sinyal yang sudah entry ditutup di harga analisa pertama yang tidak lagi Buy atau Strong Buy (status `downgraded`), dengan target yang sudah tercapai tetap dihitung. Berlaku untuk sinyal v7 dan sesudahnya (sejak v8 26 Nov 2026; sebelumnya hanya versi yang sedang berlaku); sinyal v6 yang masih terbuka saat pergantian ke v7 selesai dengan exit v6. Akun auto-follow ikut menutup lot-nya seperti saat sinyal selesai. Exit lama (target, stop, 72 jam) tetap diukur pada salinan bayangan sinyal (`accepted`) dan ditampilkan sebagai catatan bayangan "Tahan sampai target, stop, atau 72 jam seperti v6". Bisa dimatikan dengan `market.analysis.exit_on_downgrade`.
 - Level hanya dianggap tercapai bila dua pengecekan harga berurutan setuju. Sejak 20 Nov 2026 pengecekan pertama harus berasal dari snapshot DEX Screener yang berbeda (sidik harga, harga native, volume, transaksi, dan perubahan 5 menit, serta likuiditas); snapshot yang sama dibaca ulang tidak mengonfirmasi apa pun. Bila harga DEX Screener berbeda lebih dari batas toleransi dengan pool yang sama di GeckoTerminal, harga GeckoTerminal yang dipakai (sejak 10 Nov 2026). Batasnya 3% sejak 26 Nov 2026 (sebelumnya 5%).
 - Hasil dicatat dalam R bersih: harga keluar sebenarnya, fee 0,3% per swap, dan price impact.
 

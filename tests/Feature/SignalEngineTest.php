@@ -23,9 +23,9 @@ use Illuminate\Support\Facades\Http;
 beforeEach(function () {
     Http::fake(['api.alternative.me/*' => Http::response(['data' => [['value' => '60', 'value_classification' => 'Greed', 'timestamp' => '0']]])]);
     Http::preventStrayRequests();
-    // Most tests use a tight fake stop and a fake technical score high enough to pass v7's Strong Buy score limit;
-    // both rules have their own tests.
-    config(['market.analysis.min_stop_pct' => 0.0, 'market.analysis.strong_buy_max_score' => 0]);
+    // Most tests use a tight fake stop and a fake technical score high enough to pass v7's Strong Buy score limit, and
+    // analyze a token once, so v8's previous-Buy rule is off; the three rules have their own tests.
+    config(['market.analysis.min_stop_pct' => 0.0, 'market.analysis.strong_buy_max_score' => 0, 'market.analysis.previous_buy_max_minutes' => 0]);
 });
 
 function fakeTechnical(int $score, bool $available = true): void
@@ -108,7 +108,7 @@ test('analyses and signals record the strategy version and the market around the
         ->and($context['breadth'])->toMatchArray(['tokens' => 2, 'up_24h_pct' => 50.0]);
 
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v7-');
+    expect($version)->toStartWith('v8-');
 
     config(['market.analysis.weights.technical' => 0.4]);
     expect(StrategyVersion::current())->not->toBe($version);
@@ -225,7 +225,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 
     expect(config('market.analysis.buy_min_below_high_24h_pct'))->toEqual(0.0)
         ->and(config('market.analysis.buy_max_rise_24h_pct'))->toEqual(15.0)
-        ->and(StrategyVersion::current())->toStartWith('v7-')->not->toBe($before);
+        ->and(StrategyVersion::current())->toStartWith('v8-')->not->toBe($before);
 
     $this->actingAs($admin)->putJson('/api/admin/settings', ['values' => ['market.analysis.buy_max_rise_24h_pct' => -1]])->assertUnprocessable();
 });
@@ -233,7 +233,7 @@ test('the v4 rules can be set from the admin panel, and turning one off makes a 
 test('the v4 limits are part of the strategy version', function () {
     $version = StrategyVersion::current();
 
-    expect($version)->toStartWith('v7-');
+    expect($version)->toStartWith('v8-');
 
     config(['market.analysis.buy_max_rise_24h_pct' => 20.0]);
 
@@ -335,6 +335,17 @@ test('v7 leaves a v6 signal on its own exits, and the exit can be switched off',
         ->and($v7->refresh()->status)->toBe(SignalStatus::Active);
 });
 
+test('a v7 signal still open after the v8 switch keeps the v7 exit on downgrade', function () {
+    fakeTechnical(10);
+    $token = Token::factory()->create(['price_usd' => 1.07]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+    $v7 = Signal::withoutEvents(fn () => Signal::factory()->for($token)->create(['status' => 'active', 'entry_price' => 1.0, 'entered_at' => now()->subHour(), 'strategy_version' => 'v7-a7bb4e']));
+
+    app(SignalEngine::class)->analyze($token);
+
+    expect($v7->refresh()->status)->toBe(SignalStatus::Downgraded);
+});
+
 test('v7 makes no signal from a Strong Buy at the score limit and follows it as a shadow with its score', function () {
     fakeTechnical(95);
     $tokens = Token::factory()->count(3)->create(['price_usd' => 1.0]);
@@ -407,7 +418,7 @@ test('v6 holds a buy when the top ten holders own at least the limit, and skips 
 
 test('the v6 holder limit can be switched off and is part of the strategy version', function () {
     $version = StrategyVersion::current();
-    expect($version)->toStartWith('v7-');
+    expect($version)->toStartWith('v8-');
 
     config(['market.analysis.max_top10_holder_pct' => 0.0]);
     fakeTechnical(95);
@@ -544,4 +555,50 @@ test('without a checked price the sale waits one analysis cycle, then goes ahead
 
     expect($held())->toEqual(0.0)
         ->and(OrderFillEvidence::query()->latest('id')->value('source'))->toBe(CheckedPrice::UNCHECKED);
+});
+
+test('v8 makes a signal only from a Strong Buy that follows a Buy or Strong Buy analysis', function () {
+    config(['market.analysis.previous_buy_max_minutes' => 20]);
+    fakeTechnical(95);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+
+    // The first Strong Buy stays one on the page, makes no signal, and is followed as a shadow.
+    $first = app(SignalEngine::class)->analyze($token);
+    expect($first->recommendation)->toBe(Recommendation::StrongBuy)
+        ->and($token->signals()->count())->toBe(0)
+        ->and($first->reasons[0])->toContain('(v8)')
+        ->and(ShadowSignal::query()->where('rule', ShadowSignal::FIRST_BUY)->sole())->analysis_id->toBe($first->id);
+
+    // Fifteen minutes later the next Strong Buy is confirmed and trades.
+    $this->travel(15)->minutes();
+    $second = app(SignalEngine::class)->analyze($token);
+    expect($token->signals()->sole())->analysis_id->toBe($second->id)
+        ->and(ShadowSignal::query()->where('rule', ShadowSignal::FIRST_BUY)->count())->toBe(1);
+});
+
+test('v8 does not count a Buy analysis older than the limit, or a Hold, as the confirmation', function () {
+    config(['market.analysis.previous_buy_max_minutes' => 20]);
+    fakeTechnical(95);
+    $token = Token::factory()->create(['price_usd' => 1.0]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100]);
+    Analysis::factory()->for($token)->create(['recommendation' => Recommendation::StrongBuy, 'created_at' => now()->subMinutes(45)]);
+
+    app(SignalEngine::class)->analyze($token);
+    expect($token->signals()->count())->toBe(0);
+
+    $this->travel(15)->minutes();
+    Analysis::factory()->for($token)->create(['recommendation' => Recommendation::Hold]);
+    $this->travel(1)->minutes();
+    app(SignalEngine::class)->analyze($token);
+
+    expect($token->signals()->count())->toBe(0)
+        ->and(ShadowSignal::query()->where('rule', ShadowSignal::FIRST_BUY)->count())->toBe(2);
+});
+
+test('the v8 limit is part of the strategy version', function () {
+    $version = StrategyVersion::current();
+    config(['market.analysis.previous_buy_max_minutes' => 30]);
+
+    expect(StrategyVersion::current())->not->toBe($version);
 });

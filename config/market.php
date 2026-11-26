@@ -535,7 +535,7 @@ return [
 
     'analysis' => [
         // Naikkan saat logika strategi berubah (perubahan bobot/ambang otomatis menambah hash di versi).
-        'strategy_version' => 'v7',
+        'strategy_version' => 'v8',
         'timeframe' => '1h',
         'trend_timeframe' => '4h',
         'weights' => [
@@ -625,6 +625,11 @@ return [
         // -4.31R. Retest when the market turns (docs/UJI_ULANG_PASAR_NAIK.md). 0 = no score limit.
         'exit_on_downgrade' => (bool) env('SIGNAL_EXIT_ON_DOWNGRADE', true),
         'strong_buy_max_score' => (int) env('SIGNAL_STRONG_BUY_MAX_SCORE', 77),
+        // v8 (review v7 26 Nov 2026, owner): a Strong Buy makes a signal only when the token's previous analysis, at
+        // most this many minutes earlier (analyses run every 15 minutes), was Buy or Strong Buy too. The rest is
+        // followed as shadow `first_buy`. Shadow "Hanya entry yang analisa sebelumnya juga Buy": v6 +11,36R (32
+        // signals), v7 +1,12R (31; the 16 kept +3,97R). 0 = off.
+        'previous_buy_max_minutes' => (int) env('SIGNAL_PREVIOUS_BUY_MAX_MINUTES', 20),
     ],
 
     /*
