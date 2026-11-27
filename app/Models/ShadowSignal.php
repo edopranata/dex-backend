@@ -43,6 +43,17 @@ class ShadowSignal extends Model
      */
     public const FIRST_BUY = 'first_buy';
 
+    /**
+     * v7 running beside v8 (owner, 27 Nov 2026): every Strong Buy the v7 rule would trade (trade levels, score under
+     * `market.analysis.strong_buy_max_score`), with or without the v8 confirmation, with its score as the metric.
+     * Followed with the v7 exit (the first later analysis that is not Buy or Strong Buy), so v7 and v8 are compared on
+     * the same hours.
+     */
+    public const V7_RULE = 'v7_rule';
+
+    /** Rules followed with the v7 exit on top of the stop, the targets and the time limit. */
+    public const EXITS_ON_DOWNGRADE = [self::V7_RULE];
+
     public const PENDING = 'pending';
 
     /** Another one of the same rule was still open on this token, as a real signal would have been. */
@@ -55,6 +66,9 @@ class ShadowSignal extends Model
     public const TAKE_PROFIT = 'take_profit';
 
     public const EXPIRED = 'expired';
+
+    /** Closed by the first analysis after entry that was no longer Buy or Strong Buy. */
+    public const DOWNGRADED = 'downgraded';
 
     /**
      * @return array<string, string>

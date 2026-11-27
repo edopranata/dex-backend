@@ -168,6 +168,11 @@ class SignalEngine
             $this->recordShadow($token, $analysis, ShadowSignal::FIRST_BUY, $recommendation, $levels, (float) $finalScore);
         }
 
+        // v7 beside v8: what v7 would have traded, confirmed or not (owner, 27 Nov 2026).
+        if ($levels !== [] && ! $tooHighScore && in_array($recommendation->value, $config['signal_recommendations'], true)) {
+            $this->recordShadow($token, $analysis, ShadowSignal::V7_RULE, $recommendation, $levels, (float) $finalScore);
+        }
+
         if ($levels !== [] && ! $tooHighScore && ! $firstBuy && in_array($recommendation->value, config('market.analysis.signal_recommendations'), true)) {
             $signal = $token->withMembershipLock(function () use ($token, $analysis, $recommendation, $strategyVersion, $levels): ?Signal {
                 if (! $token->isInMarket() || $token->signals()->open()->exists()) {

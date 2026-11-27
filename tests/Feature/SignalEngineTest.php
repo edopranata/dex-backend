@@ -364,7 +364,9 @@ test('v7 makes no signal from a Strong Buy at the score limit and follows it as 
         ->and($tokens[1]->signals()->count())->toBe(0)
         ->and($shadow->token_id)->toBe($tokens[1]->id)
         ->and($shadow->metric)->toEqual((float) $score)
-        ->and($tokens[2]->signals()->count())->toBe(1);
+        ->and($tokens[2]->signals()->count())->toBe(1)
+        // The v7 shadow beside v8 leaves out the same high scores.
+        ->and(ShadowSignal::query()->where('rule', ShadowSignal::V7_RULE)->orderBy('token_id')->pluck('token_id')->all())->toBe([$tokens[0]->id, $tokens[2]->id]);
 });
 
 test('v5 opens signals only for Strong Buy, and a Buy stays a watch-only analysis with its levels', function () {
@@ -441,7 +443,7 @@ test('a strong buy held by the holder rule is kept as an untraded shadow, and a 
     app(SignalEngine::class)->analyze($taken);
 
     $shadow = ShadowSignal::query()->where('token_id', $held->id)->sole();
-    $reference = ShadowSignal::query()->where('token_id', $taken->id)->sole();
+    $reference = ShadowSignal::query()->where('token_id', $taken->id)->where('rule', '!=', ShadowSignal::V7_RULE)->sole();
 
     expect($analysis->recommendation)->toBe(Recommendation::Hold)
         ->and($analysis->entry_low)->toBeNull()
@@ -574,7 +576,9 @@ test('v8 makes a signal only from a Strong Buy that follows a Buy or Strong Buy 
     $this->travel(15)->minutes();
     $second = app(SignalEngine::class)->analyze($token);
     expect($token->signals()->sole())->analysis_id->toBe($second->id)
-        ->and(ShadowSignal::query()->where('rule', ShadowSignal::FIRST_BUY)->count())->toBe(1);
+        ->and(ShadowSignal::query()->where('rule', ShadowSignal::FIRST_BUY)->count())->toBe(1)
+        // v7 runs beside v8 as a shadow: both Strong Buys are what v7 would have traded.
+        ->and(ShadowSignal::query()->where('rule', ShadowSignal::V7_RULE)->pluck('analysis_id')->all())->toBe([$first->id, $second->id]);
 });
 
 test('v8 does not count a Buy analysis older than the limit, or a Hold, as the confirmation', function () {

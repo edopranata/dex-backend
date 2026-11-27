@@ -2,6 +2,8 @@
 
 namespace App\Services\Analysis;
 
+use App\Enums\Recommendation;
+use App\Models\Analysis;
 use App\Models\Candle;
 use App\Models\ShadowSignal;
 use App\Models\Signal;
@@ -12,6 +14,10 @@ use Illuminate\Support\Collection;
  * of the entry zone within the entry window, the stop checked first in each candle, the stop moved to the entry after
  * TP1, a third sold at each target, and a close at the time limit. Like a real signal, a token has one open shadow per
  * rule at a time, so later ones while it is open count as overlap and are left out of the results.
+ *
+ * Rules in ShadowSignal::EXITS_ON_DOWNGRADE follow the v7 signal instead: entry at the analysis price when it is already
+ * inside the zone (as the live tracker enters on the next price), and a close at the price of the first later analysis
+ * that is no longer Buy or Strong Buy, unless a candle before it reached the stop or the last target.
  */
 class ShadowSignalEvaluator
 {
@@ -95,6 +101,15 @@ class ShadowSignalEvaluator
         $entry = null;
         $enteredAt = null;
         $tpHit = 0;
+        $onDowngrade = in_array($shadow->rule, ShadowSignal::EXITS_ON_DOWNGRADE, true);
+        $downgrade = null;
+        $price = $onDowngrade ? $shadow->analysis?->price : null;
+
+        if ($price !== null && $price > $shadow->stop_loss && $price <= $shadow->entry_high) {
+            $entry = (float) $price;
+            $enteredAt = $created;
+            $downgrade = $this->downgradeAfter($shadow, $enteredAt);
+        }
 
         $candles = Candle::query()->where('token_id', $shadow->token_id)->where('timeframe', '15m')
             ->where('open_time', '>=', intdiv($created, self::CANDLE) * self::CANDLE + self::CANDLE)
@@ -120,6 +135,11 @@ class ShadowSignalEvaluator
                 }
 
                 $enteredAt = (int) $candle->open_time;
+                $downgrade = $onDowngrade ? $this->downgradeAfter($shadow, $enteredAt) : null;
+            }
+
+            if ($downgrade !== null && $candle->open_time + self::CANDLE > $downgrade->created_at->timestamp) {
+                return $this->settle($shadow, ShadowSignal::DOWNGRADED, $downgrade->created_at->timestamp, $entry, $enteredAt, (float) $downgrade->price, $tpHit);
             }
 
             $stop = $tpHit > 0 ? $entry : $shadow->stop_loss;
@@ -143,12 +163,31 @@ class ShadowSignalEvaluator
             }
         }
 
+        // The downgrade is known but the candles up to it are missing (gaps, or the token left the Market).
+        if ($downgrade !== null && now()->timestamp >= $downgrade->created_at->timestamp + 2 * 3600) {
+            return $this->settle($shadow, ShadowSignal::DOWNGRADED, $downgrade->created_at->timestamp, $entry, $enteredAt, (float) $downgrade->price, $tpHit);
+        }
+
         // No entry and the window is over (candles stopped, e.g. the token left the Market).
         if ($entry === null && now()->timestamp >= $entryUntil + 2 * 3600) {
             return $this->settle($shadow, ShadowSignal::NOT_ENTERED, $entryUntil);
         }
 
         return false;
+    }
+
+    /**
+     * The first analysis of the token after the entry, within the time limit, that is no longer Buy or Strong Buy.
+     */
+    private function downgradeAfter(ShadowSignal $shadow, int $enteredAt): ?Analysis
+    {
+        return Analysis::query()
+            ->where('token_id', $shadow->token_id)
+            ->where('created_at', '>', now()->setTimestamp($enteredAt))
+            ->where('created_at', '<', now()->setTimestamp($enteredAt + (int) config('market.analysis.signal_max_hours') * 3600))
+            ->whereNotIn('recommendation', [Recommendation::StrongBuy->value, Recommendation::Buy->value])
+            ->orderBy('created_at')->orderBy('id')
+            ->first(['id', 'created_at', 'price']);
     }
 
     private function settle(ShadowSignal $shadow, string $status, int $closedAt, ?float $entry = null, ?int $enteredAt = null, ?float $exit = null, int $tpHit = 0): bool

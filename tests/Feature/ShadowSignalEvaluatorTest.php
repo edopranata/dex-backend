@@ -1,5 +1,7 @@
 <?php
 
+use App\Enums\Recommendation;
+use App\Models\Analysis;
 use App\Models\Candle;
 use App\Models\ShadowSignal;
 use App\Models\Token;
@@ -100,4 +102,65 @@ test('the report compares accepted and held shadows', function () {
 
     expect($rows['accepted'])->toMatchArray(['trades' => 1, 'wins' => 1, 'total_r' => 1.5])
         ->and($rows['top10_holders'])->toMatchArray(['recorded' => 1, 'trades' => 1, 'wins' => 0, 'avg_r' => -1.1]);
+});
+
+/**
+ * A v7_rule shadow on a Strong Buy analyzed at $at at price 0.99, inside the zone 0.98-1.00.
+ */
+function v7ShadowAt(Token $token, string $at): ShadowSignal
+{
+    $analysis = Analysis::factory()->for($token)->create(['recommendation' => Recommendation::StrongBuy, 'price' => 0.99, 'created_at' => $at]);
+    $shadow = shadowAt($token, $at, ShadowSignal::V7_RULE);
+    $shadow->update(['analysis_id' => $analysis->id]);
+
+    return $shadow;
+}
+
+test('a v7_rule shadow enters at the analysis price and closes at the first analysis that is no longer Buy', function () {
+    $shadow = v7ShadowAt($this->token, '2026-11-12 08:05:00');
+    candles15($this->token, '2026-11-12 08:15:00', array_fill(0, 4, [1.00, 1.02, 0.97, 1.00]));
+    Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::Buy, 'price' => 1.0, 'created_at' => '2026-11-12 08:35:00']);
+    Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::Hold, 'price' => 1.01, 'created_at' => '2026-11-12 08:50:00']);
+
+    app(ShadowSignalEvaluator::class)->run();
+
+    $shadow->refresh();
+    expect($shadow->status)->toBe(ShadowSignal::DOWNGRADED)
+        ->and($shadow->entry_price)->toBe(0.99)
+        ->and($shadow->entered_at->format('H:i'))->toBe('08:05')
+        ->and($shadow->exit_price)->toBe(1.01)
+        ->and($shadow->closed_at->format('H:i'))->toBe('08:50')
+        ->and($shadow->net_r)->toBeLessThan(0.2)->toBeGreaterThan(0.0);
+});
+
+test('a v7_rule shadow still takes the stop reached before the downgrade, and waits while the analysis stays Buy', function () {
+    $stopped = v7ShadowAt($this->token, '2026-11-12 08:05:00');
+    candles15($this->token, '2026-11-12 08:15:00', [[1.00, 1.01, 0.97, 0.98], [0.98, 0.98, 0.89, 0.90], [0.90, 0.95, 0.90, 0.95]]);
+    Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::Hold, 'price' => 0.95, 'created_at' => '2026-11-12 08:50:00']);
+    $other = Token::factory()->create();
+    $waiting = v7ShadowAt($other, '2026-11-12 10:05:00');
+    candles15($other, '2026-11-12 10:15:00', array_fill(0, 6, [1.00, 1.02, 0.97, 1.00]));
+
+    expect(app(ShadowSignalEvaluator::class)->run())->toBe(['evaluated' => 1, 'still_open' => 1])
+        ->and($stopped->refresh()->status)->toBe(ShadowSignal::STOP_LOSS)
+        ->and($waiting->refresh()->status)->toBe(ShadowSignal::PENDING)
+        ->and($waiting->entry_price)->toBeNull();
+});
+
+test('the backfill adds a v7_rule shadow for each Strong Buy under the score limit since v8, only once', function () {
+    config(['market.analysis.strong_buy_max_score' => 77]);
+    $kept = Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::StrongBuy, 'final_score' => 74, 'strategy_version' => 'v8-test', 'created_at' => '2026-11-27 02:00:00']);
+    Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::StrongBuy, 'final_score' => 80, 'strategy_version' => 'v8-test', 'created_at' => '2026-11-27 03:00:00']);
+    Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::StrongBuy, 'final_score' => 74, 'strategy_version' => 'v7-test', 'created_at' => '2026-11-26 15:00:00']);
+    Analysis::factory()->for($this->token)->create(['recommendation' => Recommendation::Buy, 'final_score' => 66, 'strategy_version' => 'v8-test', 'created_at' => '2026-11-27 04:00:00']);
+    $migration = require database_path('migrations/2026_11_27_164302_backfill_v7_rule_shadow_signals.php');
+
+    $migration->up();
+    $migration->up();
+
+    expect(ShadowSignal::query()->where('rule', ShadowSignal::V7_RULE)->sole())
+        ->analysis_id->toBe($kept->id)
+        ->status->toBe(ShadowSignal::PENDING)
+        ->metric->toEqual(74.0)
+        ->stop_loss->toEqual(0.95);
 });

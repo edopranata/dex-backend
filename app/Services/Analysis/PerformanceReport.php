@@ -31,7 +31,7 @@ class PerformanceReport
     public const SHADOW_PAGE = 50;
 
     /** The groups of the shadow signal table: the v6 holder rule pair, and the Buys split by the BTC 4h trend. */
-    public const SHADOW_GROUPS = [ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, ShadowSignal::HIGH_SCORE, ShadowSignal::FIRST_BUY, 'buy_btc_rising', 'buy_btc_not_rising'];
+    public const SHADOW_GROUPS = [ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, ShadowSignal::HIGH_SCORE, ShadowSignal::FIRST_BUY, ShadowSignal::V7_RULE, 'buy_btc_rising', 'buy_btc_not_rising'];
 
     /** @var array<int, array<string, mixed>> The market at entry per signal id, read once per report. */
     private array $signalMarket = [];
@@ -109,7 +109,7 @@ class PerformanceReport
      */
     private function holderFilter(): array
     {
-        $rows = collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, ShadowSignal::HIGH_SCORE, ShadowSignal::FIRST_BUY])
+        $rows = collect([ShadowSignal::ACCEPTED, ShadowSignal::HELD_BY_HOLDERS, ShadowSignal::HIGH_SCORE, ShadowSignal::FIRST_BUY, ShadowSignal::V7_RULE])
             ->map(fn (string $rule): array => $this->shadowRow($rule, ShadowSignal::query()->where('rule', $rule)->get(['token_id', 'status', 'net_r', 'entered_at', 'closed_at'])));
         $buys = ShadowSignal::query()->where('rule', ShadowSignal::BUY_WATCH)->with('analysis:id,market_context')->get(['id', 'token_id', 'analysis_id', 'status', 'net_r', 'entered_at', 'closed_at']);
 
