@@ -20,7 +20,7 @@ Aturan pasar dan strategi yang harus dipatuhi kode. Setiap bagian menyebut statu
 - Dihitung tiap 15 menit dari candle 1 jam dan tren 4 jam. Skor akhir = teknikal 35% + on-chain 20% + whale 15% + sentimen 15% + fundamental 15%.
 - Ambang: Strong Buy 72, Buy 60, Hold 42, Sell 30.
 - Rekomendasi beli dibatalkan bila:
-  - token honeypot, atau likuiditas turun lebih dari 40% dalam 24 jam;
+  - token honeypot, atau likuiditas turun lebih dari 40% dalam 24 jam (dibanding snapshot 23-30 jam lalu; tanpa snapshot seumur itu, misalnya token baru kembali ke Market, perubahan likuiditas tidak dinilai. Sama untuk perubahan jumlah holder: cek keamanan 20-36 jam lalu. Sejak 28 Nov 2026);
   - skor on-chain di bawah 40 (menjadi Avoid);
   - data candle belum cukup, atau skor teknikal di bawah 50 (menjadi Hold);
   - **10 holder teratas memegang 20% supply atau lebih** menurut cek keamanan terakhir (menjadi Hold; v6, 12 Nov 2026). Tanpa data holder aturan ini dilewati;

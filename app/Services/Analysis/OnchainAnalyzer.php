@@ -10,6 +10,16 @@ use App\Models\Token;
 class OnchainAnalyzer
 {
     /**
+     * The oldest hourly snapshot the 24-hour liquidity change may be measured against. A token back in the Market
+     * after days away has only old snapshots, and comparing with those called a slow decline over a week a rug pull
+     * (STONK, 27 Nov 2026: 19 Nov vs now, -54%). Without a snapshot from 23 to 30 hours ago the change is not scored.
+     */
+    private const LIQUIDITY_REFERENCE_MAX_HOURS = 30;
+
+    /** The same for the holder count, from security checks made every six hours: 20 to 36 hours ago. */
+    private const HOLDER_REFERENCE_MAX_HOURS = 36;
+
+    /**
      * @return array{score: int, available: bool, is_honeypot: bool, rug_alert: bool, reasons: list<string>, metrics: array<string, float|int|null>}
      */
     public function analyze(Token $token): array
@@ -89,6 +99,7 @@ class OnchainAnalyzer
 
         $previous = $token->securityChecks()
             ->where('checked_at', '<=', now()->subHours(20))
+            ->where('checked_at', '>=', now()->subHours(self::HOLDER_REFERENCE_MAX_HOURS))
             ->whereNotNull('holder_count')
             ->latest('checked_at')
             ->value('holder_count');
@@ -100,6 +111,7 @@ class OnchainAnalyzer
     {
         $previous = $token->snapshots()
             ->where('captured_at', '<=', now()->subHours(23))
+            ->where('captured_at', '>=', now()->subHours(self::LIQUIDITY_REFERENCE_MAX_HOURS))
             ->whereNotNull('liquidity_usd')
             ->latest('captured_at')
             ->value('liquidity_usd');

@@ -3,6 +3,7 @@
 use App\Jobs\CheckTokenSecurity;
 use App\Models\Token;
 use App\Models\TokenSecurityCheck;
+use App\Models\TokenSnapshot;
 use App\Services\Analysis\OnchainAnalyzer;
 use App\Services\MarketData\GoPlusRefusedException;
 use App\Services\MarketData\TokenSecurityService;
@@ -205,4 +206,26 @@ test('a dominant holder is explained and recorded in the analysis without changi
     expect($result['metrics']['top1_percent'])->toEqual(72.5)
         ->and(collect($result['reasons'])->contains(fn (string $r): bool => str_contains($r, '72.5%') && str_contains($r, 'dominan')))->toBeTrue()
         ->and($result['score'])->toBe($calm['score']);
+});
+
+test('liquidity and holder changes are measured only against a reference about a day old, not one from days ago', function () {
+    $token = Token::factory()->create(['liquidity_usd' => 870_000]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100, 'flags' => [], 'holder_count' => 1_000, 'checked_at' => now()->subDays(8)]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100, 'flags' => [], 'holder_count' => 900, 'checked_at' => now()]);
+    TokenSnapshot::factory()->for($token)->create(['liquidity_usd' => 1_900_000, 'captured_at' => now()->subDays(8)]);
+
+    // Back in the Market after eight days: only old references, so no rug alert and no holder penalty.
+    $back = app(OnchainAnalyzer::class)->analyze($token);
+
+    // A day later the references are fresh enough and a real drop is still caught.
+    TokenSnapshot::factory()->for($token)->create(['liquidity_usd' => 1_900_000, 'captured_at' => now()->subHours(25)]);
+    TokenSecurityCheck::factory()->for($token)->create(['risk_score' => 100, 'flags' => [], 'holder_count' => 1_000, 'checked_at' => now()->subHours(26)]);
+    $day = app(OnchainAnalyzer::class)->analyze($token);
+
+    expect($back)->toMatchArray(['rug_alert' => false, 'score' => 100])
+        ->and($back['metrics']['liquidity_change_24h_pct'])->toBeNull()
+        ->and($back['metrics']['holder_growth_pct'])->toBeNull()
+        ->and($day['rug_alert'])->toBeTrue()
+        ->and($day['score'])->toBe(50)
+        ->and($day['metrics']['holder_growth_pct'])->toEqual(-10.0);
 });
