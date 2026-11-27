@@ -52,6 +52,12 @@ return [
             'cache_seconds' => 45,
             // Paling lama menunggu giliran request; lewat dari ini order ditahan sampai pengecekan berikutnya.
             'max_wait_seconds' => 8,
+            // Pool yang quote-nya bukan token utama (TAC/SPX 25-26 Nov, STANK/STONK 9 Nov): DEX Screener dan
+            // GeckoTerminal menilai quote itu berbeda 3-5% ke dua arah, jadi harga GeckoTerminal (sumber candle) selalu
+            // dipakai. Bila GeckoTerminal tidak bisa ditanya, isian menunggu paling lama sekian menit, baru memakai DEX
+            // Screener (seperti jual saat analisa Sell).
+            'major_quotes' => ['SOL', 'WSOL', 'WETH', 'ETH', 'WBNB', 'BNB', 'USDC', 'USDT', 'USDS', 'DAI', 'USDBC', 'USDE', 'FDUSD', 'WBTC', 'CBBTC', 'BTCB'],
+            'minor_quote_max_wait_minutes' => 14,
         ],
     ],
 
@@ -668,6 +674,9 @@ return [
         'max_hold_hours' => 24,
         'round_trip_cost_pct' => 2.0,
         'liquidity_exit_ratio' => 0.2,
+        // Laporan saja: trade yang rugi sebesar ini atau lebih dihitung kena rug (harga jatuh di antara dua sampel,
+        // stop tidak sempat; hari pertama 27 Nov: 189 dari 212 stop keluar di -90% atau lebih buruk).
+        'rug_loss_pct' => 50.0,
         'early' => [
             'window_minutes' => 60,
             'min_volume_m5' => 2_000,

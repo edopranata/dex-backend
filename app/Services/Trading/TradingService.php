@@ -98,7 +98,9 @@ class TradingService
             $check = $token->price_usd === null ? null : $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
 
             if ($check === null) {
-                $this->reject($order, 'Harga tidak tersedia.');
+                $this->reject($order, $token->price_usd === null
+                    ? 'Harga tidak tersedia.'
+                    : 'Harga belum bisa dicek ke GeckoTerminal (pool ini memakai quote selain token utama). Coba lagi sebentar.');
             } else {
                 $this->execute($order, $check->price, $check);
             }
@@ -312,6 +314,14 @@ class TradingService
             return true;
         }
 
+        // Null only for a pool with a minor quote that GeckoTerminal cannot price right now: the lot waits for a later
+        // run rather than sell at a DEX Screener price that may be 3-5% off the candles (TAC/SPX, 26 Nov 2026).
+        $check = $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
+
+        if ($check === null) {
+            return false;
+        }
+
         $sell = Order::query()->create([
             'user_id' => $buy->user_id,
             'token_id' => $buy->token_id,
@@ -325,8 +335,7 @@ class TradingService
         ]);
 
         // Filling it cancels the lot's other exits, like any exit of a plan that ends the lot.
-        $check = $this->crossCheck->priceToActOn($token, waitWhenBusy: false);
-        $this->execute($sell, $check?->price ?? (float) $token->price_usd, $check);
+        $this->execute($sell, $check->price, $check);
 
         $exits()->update(['status' => OrderStatus::Cancelled, 'note' => "Dibatalkan otomatis: sinyal #{$signal->id} sudah selesai."]);
 

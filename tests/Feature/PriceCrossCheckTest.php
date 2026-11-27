@@ -210,3 +210,60 @@ test('a pending signal entered through GeckoTerminal takes its price as the entr
     expect($pending->refresh()->status->value)->toBe('active')
         ->and((float) $pending->entry_price)->toEqual(0.0091);
 });
+
+test('a pool quoted in a minor token fills at the GeckoTerminal price even inside the tolerance, unlike TAC/SPX on 26 Nov', function () {
+    $this->token->update(['quote_symbol' => 'SPX']);
+    $buy = Order::factory()->for($this->user, 'user')->for($this->token)->create(['side' => 'buy', 'type' => 'limit', 'status' => 'pending', 'amount_usd' => 100, 'trigger_price' => 0.9931]);
+    fakeGeckoPool(0.9549);
+
+    // 2.96% above GeckoTerminal: inside the 3% tolerance that a SOL or USDC pool gets.
+    feedTwice($this->token, 0.9832);
+
+    expect(matchOrders($this->token))->toBe(1)
+        ->and(OrderFillEvidence::firstWhere('order_id', $buy->id))
+        ->source->toBe('geckoterminal')
+        ->market_price->toEqual(0.9549);
+});
+
+test('without GeckoTerminal an order on a minor-quote pool waits up to 14 minutes, then fills at the feed price unchecked', function () {
+    $this->token->update(['quote_symbol' => 'SPX']);
+    $buy = Order::factory()->for($this->user, 'user')->for($this->token)->create(['side' => 'buy', 'type' => 'limit', 'status' => 'pending', 'amount_usd' => 100, 'trigger_price' => 0.00244]);
+    fakeGeckoPool(0, status: 500);
+
+    feedTwice($this->token, 0.00241);
+    expect(matchOrders($this->token))->toBe(0);
+
+    $this->travel(13)->minutes();
+    feedTwice($this->token, 0.00241);
+    expect(matchOrders($this->token))->toBe(0)
+        ->and($buy->refresh()->status)->toBe(OrderStatus::Pending);
+
+    $this->travel(2)->minutes();
+    feedTwice($this->token, 0.00241);
+    expect(matchOrders($this->token))->toBe(1)
+        ->and(OrderFillEvidence::firstWhere('order_id', $buy->id)->source)->toBe('dexscreener_unchecked');
+});
+
+test('a market buy on a minor-quote pool is refused while GeckoTerminal cannot price it', function () {
+    $this->token->update(['quote_symbol' => 'SPX', 'price_updated_at' => now()]);
+    fakeGeckoPool(0, status: 500);
+
+    $buy = app(TradingService::class)->place($this->user, $this->token->refresh(), ['side' => 'buy', 'type' => 'market', 'amount_usd' => 50]);
+
+    expect($buy->status)->toBe(OrderStatus::Rejected)
+        ->and($buy->note)->toContain('GeckoTerminal');
+});
+
+test('the major quote list covers the quotes of every chain, in any letter case', function () {
+    $check = app(PriceCrossCheck::class);
+
+    foreach (['SOL', 'WETH', 'ETH', 'WBNB', 'USDC', 'USDT', 'usdc'] as $quote) {
+        expect($check->hasMinorQuote(Token::factory()->make(['quote_symbol' => $quote])))->toBeFalse();
+    }
+
+    foreach (['SPX', 'STONK', 'TTWO', 'VIRTUAL'] as $quote) {
+        expect($check->hasMinorQuote(Token::factory()->make(['quote_symbol' => $quote])))->toBeTrue();
+    }
+
+    expect($check->hasMinorQuote(Token::factory()->make(['quote_symbol' => null])))->toBeFalse();
+});

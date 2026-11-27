@@ -13,6 +13,7 @@ use App\Services\Admin\SettingsStore;
 use App\Services\Analysis\SignalTracker;
 use App\Services\Trading\AutoFollowRisk;
 use App\Services\Trading\TradingService;
+use Illuminate\Support\Facades\Http;
 
 beforeEach(function () {
     app(SettingsStore::class)->set(['market.autofollow.enabled' => true, 'market.autofollow.amount_usd' => 100, 'market.autofollow.risk_pct' => 0, 'market.autofollow.max_open_positions' => 0, 'market.simulator.starting_balance' => 10_000]);
@@ -371,4 +372,23 @@ test('a chain account pays its network gas on every swap, the other accounts do 
     app(TradingService::class)->execute($sell, 2.3);
 
     expect((float) $sell->refresh()->fee_usd)->toEqualWithDelta((float) $sell->filled_quantity * 2.3 * 0.003 + 0.5, 1e-6);
+});
+
+test('a lot on a minor-quote pool waits for GeckoTerminal before it is sold, like TAC/SPX on 26 Nov', function () {
+    $this->token->update(['quote_symbol' => 'SPX']);
+    [$signal, $buy] = boughtSignal($this->token);
+    config(['market.simulator.cross_check.enabled' => true]);
+    Http::fake(['api.geckoterminal.com/*' => Http::response([], 500)]);
+
+    $signal->update(['status' => 'downgraded', 'closed_at' => now()]);
+
+    expect(app(TradingService::class)->closeFinishedSignalLots())->toBe(0)
+        ->and(Order::where('parent_id', $buy->id)->where('type', 'market')->exists())->toBeFalse()
+        ->and(Order::where('parent_id', $buy->id)->where('status', 'pending')->count())->toBe(4);
+
+    $this->travel(15)->minutes();
+    $this->token->update(['price_updated_at' => now()]);
+
+    expect(app(TradingService::class)->closeFinishedSignalLots())->toBeGreaterThan(0)
+        ->and(Order::where('parent_id', $buy->id)->where('type', 'market')->sole()->status)->toBe(OrderStatus::Filled);
 });

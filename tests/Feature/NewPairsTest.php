@@ -219,3 +219,19 @@ test('the Token Baru page reads the summary, pools and trades', function () {
     $this->actingAs($user)->getJson('/api/new-pairs/trades?strategy=pullback')->assertOk()
         ->assertJsonCount(1, 'data')->assertJsonPath('data.0.mfe_pct', 30)->assertJsonPath('data.0.mae_pct', -10);
 });
+
+test('the summary splits results per chain and counts rug pulls and pulled liquidity', function () {
+    $solana = NewPair::factory()->create(['chain_id' => 'solana']);
+    $base = NewPair::factory()->create(['chain_id' => 'base', 'status' => 'done', 'end_reason' => 'likuiditas', 'ended_at' => now()]);
+    NewPair::factory()->create(['chain_id' => 'base', 'status' => 'done', 'end_reason' => 'umur', 'ended_at' => now()]);
+    $trade = fn (NewPair $pair, float $net) => $pair->trades()->create(['strategy' => 'first_seen', 'status' => 'closed', 'entry_at' => now(), 'entry_price' => 1, 'stop_price' => 0.85, 'high_price' => 1, 'low_price' => 0.01, 'net_pct' => $net, 'exit_reason' => 'stop']);
+    $trade($solana, 20);
+    $trade($base, -101.9);
+
+    $summary = $this->actingAs(User::factory()->create())->getJson('/api/new-pairs/summary')->assertOk()->json();
+
+    expect(collect($summary['strategies'])->firstWhere('key', 'first_seen'))->toMatchArray(['closed' => 2, 'rug_rate' => 50])
+        ->and(collect($summary['by_chain'])->firstWhere('chain_id', 'base'))->toMatchArray(['strategy' => 'first_seen', 'closed' => 1, 'avg_net_pct' => -101.9, 'rug_rate' => 100])
+        ->and(collect($summary['by_chain'])->firstWhere('chain_id', 'solana'))->toMatchArray(['closed' => 1, 'rug_rate' => 0])
+        ->and(collect($summary['pairs']['chains'])->firstWhere('chain_id', 'base'))->toMatchArray(['total' => 2, 'done' => 2, 'liquidity_pulled' => 1, 'liquidity_pulled_pct' => 50]);
+});

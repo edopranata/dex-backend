@@ -23,6 +23,9 @@ class PriceCrossCheck
      * The price to act on now that the feed says a level was reached: the feed price when GeckoTerminal
      * agrees, GeckoTerminal's price when it does not, or null to wait for a later check.
      *
+     * A pool whose quote is not a major token always acts on GeckoTerminal's price, and without it waits (null) up to
+     * `minor_quote_max_wait_minutes`, whatever $waitWhenBusy says.
+     *
      * @param  bool  $waitWhenBusy  False for orders that must fill now (market orders): they take the feed
      *                              price unchecked instead of waiting.
      */
@@ -36,18 +39,20 @@ class PriceCrossCheck
         }
 
         $reference = $this->reference($token, (float) $config['max_wait_seconds'], (int) $config['cache_seconds']);
+        $minorQuote = $this->hasMinorQuote($token);
 
-        if ($reference === false) {
-            return $waitWhenBusy ? null : new CheckedPrice($feed, null, CheckedPrice::UNCHECKED);
+        if ($reference === false || $reference === null) {
+            if ($minorQuote && $this->stillWaiting($token, (int) $config['minor_quote_max_wait_minutes'])) {
+                return null;
+            }
+
+            return $reference === false && $waitWhenBusy ? null : new CheckedPrice($feed, null, CheckedPrice::UNCHECKED);
         }
 
-        if ($reference === null) {
-            return new CheckedPrice($feed, null, CheckedPrice::UNCHECKED);
-        }
-
+        Cache::forget($this->waitingKey($token));
         $gapPct = abs($feed / $reference - 1) * 100;
 
-        return $gapPct <= (float) $config['tolerance_pct']
+        return $gapPct <= ($minorQuote ? 0.0 : (float) $config['tolerance_pct'])
             ? new CheckedPrice($feed, $reference, CheckedPrice::FEED)
             : new CheckedPrice($reference, $reference, CheckedPrice::REFERENCE);
     }
@@ -89,6 +94,31 @@ class PriceCrossCheck
         Cache::put($this->cacheKey($token), ['price' => $price], $cacheSeconds);
 
         return $price;
+    }
+
+    /**
+     * Whether the pool's quote is something other than the chain's coin, a wrapped major, or a stablecoin, so the two
+     * sources can disagree on its value. An unknown quote counts as major.
+     */
+    public function hasMinorQuote(Token $token): bool
+    {
+        return $token->quote_symbol !== null
+            && ! in_array(strtoupper($token->quote_symbol), config('market.simulator.cross_check.major_quotes'), true);
+    }
+
+    /**
+     * True while the token has waited less than the limit for a GeckoTerminal price, counted from the first miss.
+     */
+    private function stillWaiting(Token $token, int $maxWaitMinutes): bool
+    {
+        Cache::add($this->waitingKey($token), now()->timestamp, now()->addHour());
+
+        return now()->timestamp - (int) Cache::get($this->waitingKey($token)) < $maxWaitMinutes * 60;
+    }
+
+    private function waitingKey(Token $token): string
+    {
+        return "price-cross-check-waiting:{$token->id}";
     }
 
     private function cacheKey(Token $token): string
