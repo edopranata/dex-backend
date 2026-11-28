@@ -11,6 +11,7 @@ use App\Models\Signal;
 use App\Models\Token;
 use App\Models\User;
 use App\Models\WatchlistEvent;
+use App\Services\Analysis\AccountSelection;
 use App\Services\Trading\PortfolioSummary;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -205,6 +206,7 @@ class TelegramNotifier
             $closed->isEmpty()
                 ? 'Sinyal selesai: 0'
                 : sprintf('Sinyal selesai: %d (menang %d) · total %s', $closed->count(), $wins, self::r((float) $closed->sum(fn (Signal $s): float => (float) ($s->net_r ?? $s->result_r)))),
+            $this->selectionLine(),
         ];
 
         foreach ($closed->sortByDesc(fn (Signal $s): float => (float) ($s->net_r ?? $s->result_r))->take(5) as $signal) {
@@ -232,6 +234,24 @@ class TelegramNotifier
         $lines[] = '<a href="'.e($this->appUrl('/signals')).'">Lihat semua sinyal</a>';
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Which auto-follow accounts pass the selection, or how far they are (Seleksi akun page).
+     */
+    private function selectionLine(): string
+    {
+        $rows = collect(app(AccountSelection::class)->build()['accounts']);
+        $active = $rows->where('status', AccountSelection::ACTIVE);
+
+        if ($active->isNotEmpty()) {
+            return 'Seleksi akun: <b>aktif '.e($active->pluck('label')->implode(', ')).'</b>';
+        }
+
+        $judged = $rows->where('status', AccountSelection::FAILED)->count();
+
+        return 'Seleksi akun: belum ada yang aktif ('.($judged > 0 ? "{$judged} tidak lolos, " : '')
+            .$rows->where('status', AccountSelection::INSUFFICIENT)->count().' belum cukup data)';
     }
 
     /**

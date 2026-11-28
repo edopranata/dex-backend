@@ -462,6 +462,16 @@ return [
     */
     // Akun sistem yang otomatis mengikuti SETIAP sinyal baru dengan nominal tetap (limit + SL/TP sinyal),
     // supaya win rate & P&L aplikasi terukur apa adanya, termasuk fee dan slippage.
+    // Seleksi akun sistem (rancangan disetujui pemilik 28 Nov 2026, docs/RANCANGAN_SELEKSI_AKUN.md di repo bersama):
+    // akun auto-follow aktif kalau lot selesai versi strategi sekarang >= min_trades, win rate >= min_win_rate %,
+    // rata-rata R per lot >= min_avg_r, dan drawdown ekuitas < max_drawdown_pct %. Bisa diubah di Admin -> Pengaturan.
+    'selection' => [
+        'min_trades' => 30,
+        'min_win_rate' => 80.0,
+        'min_avg_r' => 0.1,
+        'max_drawdown_pct' => 15.0,
+    ],
+
     'autofollow' => [
         'enabled' => (bool) env('AUTO_FOLLOW_ENABLED', true),
         // Nominal tetap saat risk_pct = 0; juga ukuran acuan biaya pada hasil R bersih sinyal.

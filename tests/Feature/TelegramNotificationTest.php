@@ -250,7 +250,8 @@ test('daily summaries go out in each user own hour with their portfolio', functi
     expect($messages)->toHaveCount(1)
         ->and($messages[0]['chat'])->toBe('1')
         ->and($messages[0]['text'])->toContain('Ekuitas: <b>$'.number_format($user->balance_usd, 2))
-        ->toContain('menang 1')->toContain('+1.50R')->toContain('BONK <code>solana</code> 77 (Strong Buy)');
+        ->toContain('menang 1')->toContain('+1.50R')->toContain('BONK <code>solana</code> 77 (Strong Buy)')
+        ->toContain('Seleksi akun: belum ada yang aktif (0 belum cukup data)');
 });
 
 test('the notify command sends operational alerts to admins immediately', function () {

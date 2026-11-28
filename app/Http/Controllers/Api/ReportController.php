@@ -10,6 +10,7 @@ use App\Http\Resources\OrderResource;
 use App\Models\Order;
 use App\Models\User;
 use App\Services\Analysis\AccountReport;
+use App\Services\Analysis\AccountSelection;
 use App\Services\Analysis\PerformanceReport;
 use App\Services\Analysis\StrategyVersion;
 use App\Services\Trading\PositionCards;
@@ -47,6 +48,14 @@ class ReportController extends Controller
     /**
      * One auto-follow account as a whole, on its own lots: criteria, funnel, exits, weeks and every lot.
      */
+    /**
+     * The auto-follow accounts against the selection limits (Seleksi akun page).
+     */
+    public function selection(AccountSelection $selection): JsonResponse
+    {
+        return response()->json($selection->build());
+    }
+
     public function accountReport(Request $request, string $key, AccountReport $report): JsonResponse
     {
         $version = $request->validate(['version' => ['sometimes', 'string', 'max:40']])['version'] ?? StrategyVersion::current();

@@ -101,3 +101,9 @@ Menu Token Baru (`/new-pairs`, `NewPairsView.vue`; API `GET /api/new-pairs`, `/a
   - Exit: sepertiga di TP +20/+40/+70%, stop -15% (ke entry setelah TP1) diisi di harga sampel, maksimal 24 jam, atau likuiditas tinggal 20% dari saat entry. Hasil bersih dikurangi biaya 2% pulang-pergi.
 - **Selesai dipantau** saat umur pool lewat 24 jam dan trade-nya sudah tutup, saat likuiditas tinggal 20% dari awal tanpa trade terbuka, atau saat DEX Screener tidak memberi data 60 menit (trade terbuka ditutup di harga terakhir).
 - `newpairs:track` berjalan tiap menit di latar belakang tanpa antrean, jadi `app:deploy-window` tidak menunggunya. Bisa dimatikan dengan `NEW_PAIRS_ENABLED=false`.
+
+## Seleksi akun (sejak 28 Nov 2026)
+
+- `AccountSelection` menilai akun auto-follow (`User::AUTO_FOLLOW_ACCOUNTS`) dengan batas `market.selection` (bisa diubah di Admin → Pengaturan) dari lot `AccountReport::lots` milik versi `StrategyVersion::current()`. Angka semua versi ikut dikirim sebagai pembanding.
+- R per lot sama dengan laporan akun. Menang > +0,05R, impas ±0,05R (tetap di pembagi win rate). Drawdown dari snapshot ekuitas akun plus ekuitas sekarang (`PerformanceReport::maxDrawdownPct`).
+- API `GET /api/reports/selection`, halaman `SelectionView` (menu Seleksi akun), baris "Seleksi akun" di ringkasan harian Telegram.

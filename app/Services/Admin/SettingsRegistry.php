@@ -163,6 +163,17 @@ class SettingsRegistry
                 ],
             ],
             [
+                'key' => 'selection',
+                'label' => 'Seleksi akun',
+                'description' => 'Batas status Aktif di halaman Seleksi akun, untuk lot akun auto-follow pada versi strategi sekarang. Dihitung setelah fee, gas, dan price impact; drawdown ekuitas memasukkan posisi yang masih terbuka.',
+                'fields' => [
+                    ['key' => 'market.selection.min_trades', 'label' => 'Lot selesai minimal', 'type' => 'int', 'min' => 1, 'max' => 1000],
+                    ['key' => 'market.selection.min_win_rate', 'label' => 'Win rate minimal (%)', 'type' => 'float', 'min' => 0, 'max' => 100, 'description' => 'Menang = hasil bersih lebih dari +0,05R. Lot impas tetap dihitung di pembagi.'],
+                    ['key' => 'market.selection.min_avg_r', 'label' => 'Rata-rata R per lot minimal', 'type' => 'float', 'min' => -5, 'max' => 5, 'step' => 0.05],
+                    ['key' => 'market.selection.max_drawdown_pct', 'label' => 'Drawdown ekuitas maksimal (%)', 'type' => 'float', 'min' => 1, 'max' => 100],
+                ],
+            ],
+            [
                 'key' => 'discovery',
                 'label' => 'Discovery',
                 'description' => 'Penemuan token otomatis dan syarat masuk Market.',

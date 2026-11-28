@@ -84,6 +84,7 @@ Route::middleware(['auth:sanctum', 'password.changed'])->group(function () {
     Route::get('new-pairs/trades', [NewPairController::class, 'trades'])->name('new-pairs.trades');
     Route::get('new-pairs', [NewPairController::class, 'index'])->name('new-pairs.index');
     Route::get('reports/shadow-signals', [ReportController::class, 'shadowSignals'])->name('reports.shadow-signals');
+    Route::get('reports/selection', [ReportController::class, 'selection'])->name('reports.selection');
     Route::get('reports/accounts/{key}/report', [ReportController::class, 'accountReport'])->whereIn('key', array_keys(User::AUTO_FOLLOW_ACCOUNTS))->name('reports.account-report');
     Route::get('reports/lots/{order}', [ReportController::class, 'lot'])->name('reports.lot');
     Route::get('reports/accounts/{key}/portfolio', [ReportController::class, 'accountPortfolio'])->whereIn('key', array_keys(User::AUTO_FOLLOW_ACCOUNTS))->name('reports.account-portfolio');
