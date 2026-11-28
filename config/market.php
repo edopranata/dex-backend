@@ -1,5 +1,21 @@
 <?php
 
+use App\Services\Strategies\Rules\EngulfingFourHour;
+use App\Services\Strategies\Rules\EthBtcTrendLong;
+use App\Services\Strategies\Rules\EthTrendLong;
+use App\Services\Strategies\Rules\HoldBtc;
+use App\Services\Strategies\Rules\IchimokuLong;
+use App\Services\Strategies\Rules\MartingaleLong;
+use App\Services\Strategies\Rules\SwingFibonacciLong;
+use App\Services\Strategies\Rules\ThreeLayerAnyMarket;
+use App\Services\Strategies\Rules\ThreeLayerTp2r;
+use App\Services\Strategies\Rules\TrendLong;
+use App\Services\Strategies\Rules\TtmSqueezeLong;
+use App\Services\Strategies\Rules\WillyMomentumBreakeven;
+use App\Services\Strategies\Rules\WillyMomentumH4;
+use App\Services\Strategies\Rules\WillyMomentumHalfBreakeven;
+use App\Services\Strategies\Rules\WillyMomentumLong;
+
 // Opsi per model untuk kedua slot Groq. GPT-OSS berpikir dulu dan token itu ikut dihitung; "low" cukup untuk
 // sentimen & ringkasan. Qwen di Groq bisa tanpa berpikir sama sekali (uji 11 Nov: 0 token berpikir, <1 detik).
 $groqRequestByModel = [
@@ -470,6 +486,48 @@ return [
         'min_win_rate' => 80.0,
         'min_avg_r' => 0.1,
         'max_drawdown_pct' => 15.0,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Akun strategi (dari FutureSim)
+    |--------------------------------------------------------------------------
+    |
+    | Strategi long FutureSim dijalankan di candle DEX sebagai akun kertas (pemilik, 28 Nov 2026): semua token yang
+    | punya candle, posisi kertas dengan biaya DEX (fee simulator, price impact, gas per jaringan). Short tidak ada
+    | (swap DEX tidak bisa short): akun tren hanya memegang saat di atas SMA50. Ukuran seperti auto-follow: rugi di
+    | stop termasuk biaya = risk_pct % ekuitas, maksimal max_position_pct % ekuitas dan max_liquidity_pct % pool;
+    | tanpa stop stopless_share x ekuitas (seperti margin_share FutureSim). Token baru dimasuki hanya bila
+    | likuiditasnya >= min_liquidity_usd dan candle jam terakhirnya sudah tersimpan.
+    |
+    */
+    'strategy_accounts' => [
+        'enabled' => (bool) env('STRATEGY_ACCOUNTS_ENABLED', true),
+        'starting_balance' => 10000.0,
+        'risk_pct' => 0.5,
+        'max_position_pct' => 25.0,
+        'max_liquidity_pct' => 0.25,
+        'stopless_share' => 0.1,
+        'max_positions' => 10,
+        'min_liquidity_usd' => 50_000,
+        'martingale' => ['tokens' => 10, 'step_pct' => 0.02, 'multiplier' => 1.5, 'adds' => 8, 'take_profit_pct' => 0.015],
+        'strategies' => [
+            'three_layer_tp2r' => ['class' => ThreeLayerTp2r::class, 'label' => 'Entry 3 lapis long, TP 2R, saat BTC > SMA50', 'kind' => 'main'],
+            'three_layer_any' => ['class' => ThreeLayerAnyMarket::class, 'label' => 'Entry 3 lapis long, TP 2R, semua kondisi BTC', 'kind' => 'shadow'],
+            'btc_trend' => ['class' => TrendLong::class, 'label' => 'BTC (cbBTC) saat close harian di atas SMA50', 'kind' => 'shadow'],
+            'eth_btc_trend' => ['class' => EthBtcTrendLong::class, 'label' => 'ETH (WETH) saat BTC di atas SMA50', 'kind' => 'shadow'],
+            'eth_trend' => ['class' => EthTrendLong::class, 'label' => 'ETH (WETH) saat ETH di atas SMA50', 'kind' => 'shadow'],
+            'engulfing_4h' => ['class' => EngulfingFourHour::class, 'label' => 'Engulfing 4 jam long + BTC di atas EMA200', 'kind' => 'experiment'],
+            'swing_fib_4h' => ['class' => SwingFibonacciLong::class, 'label' => 'Swing Fibonacci 4 jam, long saat BTC > SMA50', 'kind' => 'experiment'],
+            'ttm_squeeze_long' => ['class' => TtmSqueezeLong::class, 'label' => 'TTM squeeze 4 jam BUY + volume 2x, BTC > SMA50', 'kind' => 'experiment'],
+            'willy_momentum_long' => ['class' => WillyMomentumLong::class, 'label' => 'Willy momentum 4 jam BUY, BTC > SMA50', 'kind' => 'experiment'],
+            'willy_half_be' => ['class' => WillyMomentumHalfBreakeven::class, 'label' => 'Willy momentum, separuh di 0,5R + stop ke harga masuk', 'kind' => 'shadow'],
+            'willy_be_1r' => ['class' => WillyMomentumBreakeven::class, 'label' => 'Willy momentum, stop ke harga masuk di 1R', 'kind' => 'shadow'],
+            'willy_h4' => ['class' => WillyMomentumH4::class, 'label' => 'Willy momentum + close 4 jam di atas SMA50 4 jam', 'kind' => 'shadow'],
+            'ichimoku_4h' => ['class' => IchimokuLong::class, 'label' => 'Ichimoku 4 jam BUY (tembus awan), BTC > SMA50', 'kind' => 'experiment'],
+            'martingale_long' => ['class' => MartingaleLong::class, 'label' => 'Martingale long 2% × 1,5 × 8, TP 1,5% (10 token terlikuid)', 'kind' => 'experiment'],
+            'hold_btc' => ['class' => HoldBtc::class, 'label' => 'Tahan BTC (cbBTC, pembanding)', 'kind' => 'benchmark'],
+        ],
     ],
 
     'autofollow' => [

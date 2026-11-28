@@ -107,3 +107,25 @@ Menu Token Baru (`/new-pairs`, `NewPairsView.vue`; API `GET /api/new-pairs`, `/a
 - `AccountSelection` menilai akun auto-follow (`User::AUTO_FOLLOW_ACCOUNTS`) dengan batas `market.selection` (bisa diubah di Admin → Pengaturan) dari lot `AccountReport::lots` milik versi `StrategyVersion::current()`. Angka semua versi ikut dikirim sebagai pembanding.
 - R per lot sama dengan laporan akun. Menang > +0,05R, impas ±0,05R (tetap di pembagi win rate). Drawdown dari snapshot ekuitas akun plus ekuitas sekarang (`PerformanceReport::maxDrawdownPct`).
 - API `GET /api/reports/selection`, halaman `SelectionView` (menu Seleksi akun), baris "Seleksi akun" di ringkasan harian Telegram.
+
+## Akun strategi dari FutureSim (sejak 28 Nov 2026)
+
+- Permintaan pemilik 28 Nov 2026: strategi akun FutureSim juga ada di DEX dan masuk Seleksi akun. Pilihan pemilik: semua strategi long, semua token yang punya candle, posisi kertas dengan biaya DEX.
+- Tabel `strategy_accounts`, `strategy_positions` (pending, open, closed, cancelled), dan `strategy_snapshots`, terpisah dari pengguna dan order simulator. Daftar akun di `config/market.php` → `strategy_accounts.strategies`: 14 strategi plus `hold_btc` sebagai pembanding.
+- Rule di `app/Services/Strategies/Rules`:
+  - salinan versi long SpotSim (`ThreeLayer*`, `EngulfingFourHour`, `TtmSqueezeLong`, `Willy*`, `IchimokuLong`);
+  - salinan FutureSim (`SwingFibonacciLong` sisi long, `MartingaleLong`, `ThreeLayerAnyMarket`);
+  - akun tren long saja (`TrendLong`, `EthBtcTrendLong`, `EthTrendLong`) yang memegang cbBTC/WETH saat di atas SMA50.
+- Tidak dipasang: RSI cross SELL (short), sisi short akun tren, pantulan Fibonacci 5 menit (DEX tidak punya candle 5 menit), dan varian target volatilitas.
+- `Bars` membaca candle DEX. Candle 1h dan 4h dibangun dari 15m, dan volume dalam USD juga dipakai sebagai turnover. `Indicators` disalin dari SpotSim supaya hitungannya sama dengan sumber strategi.
+- Filter BTC > SMA50, ETH > SMA50, dan BTC di atas EMA200 4 jam memakai klines spot Bybit Indonesia (`BybitCloses`, satu permintaan per candle, di-cache), sumber yang sama dengan FutureSim dan `app:market-turn-check`. Alasannya, candle harian cbBTC baru 38 hari pada 28 Nov.
+- `strategies:run` dijadwalkan pada :08, :23, dan :38, dan `--snapshot` pada :53. `StrategyRunner` bekerja dalam dua tahap:
+  - **Posisi:** tiap candle 15m baru dicek untuk isian order limit (atau kedaluwarsa, atau target tersentuh lebih dulu), stop (diisi di stop, atau di open bila candle dibuka di bawahnya), target, dan tambahan martingale. Setelah itu dicek batas waktu, lalu exit milik rule, sekali per jam tutup.
+  - **Entry:** sekali per token per jam tutup, bila candle 1h token jam itu sudah tersimpan (dan candle 4h-nya saat penutupan 4 jam), likuiditasnya minimal `min_liquidity_usd`, dan akun masih punya slot. Token dikerjakan satu per satu supaya candle yang dimuat dipakai bersama semua akun. Token yang candle-nya datang terlambat lebih dari satu jam dilewati, tidak dimasuki terlambat.
+- `StrategyBroker`:
+  - harga masuk memakai harga live token bila segar (maksimal 10 menit), selain itu close 15m terakhir;
+  - tiap swap membayar `market.simulator.fee_rate`, `TradingService::priceImpact`, dan gas `market.autofollow.gas_usd` per jaringan;
+  - ukuran posisi dengan stop: rugi di stop termasuk biaya sama dengan `risk_pct` ekuitas, maksimal `max_position_pct` ekuitas dan `max_liquidity_pct` likuiditas pool;
+  - ukuran posisi tanpa stop: `stopless_share` × ekuitas;
+  - `state.initial_stop` dan `state.initial_risk` disimpan saat masuk.
+- API: `GET /api/reports/strategy-accounts` dan `GET /api/reports/strategy-accounts/{key}` untuk halaman Akun strategi. Seleksi akun (`/api/reports/selection`) menambahkan `strategy_accounts` (R = `net_pnl` / `initial_risk`, drawdown dari `strategy_snapshots` ditambah ekuitas sekarang, `started_at`) serta `version_started_at` untuk akun auto-follow.

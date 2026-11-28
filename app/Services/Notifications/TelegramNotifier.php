@@ -241,7 +241,8 @@ class TelegramNotifier
      */
     private function selectionLine(): string
     {
-        $rows = collect(app(AccountSelection::class)->build()['accounts']);
+        $selection = app(AccountSelection::class)->build();
+        $rows = collect([...$selection['accounts'], ...$selection['strategy_accounts']]);
         $active = $rows->where('status', AccountSelection::ACTIVE);
 
         if ($active->isNotEmpty()) {

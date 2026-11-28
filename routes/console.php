@@ -40,6 +40,11 @@ Schedule::command('market:discover')->cron('12,42 * * * *')->withoutOverlapping(
 // v6 comparison: shadow signals followed on stored 15m candles; no API requests.
 Schedule::command('market:shadow-signals')->hourlyAt(50)->withoutOverlapping();
 
+// FutureSim's long strategies as DEX paper accounts (28 Nov 2026): after each candle cycle, from stored candles only;
+// an hour's decisions wait for each token's candles of that hour, so the later runs pick up tokens that came in late.
+Schedule::command('strategies:run')->cron('8,23,38 * * * *')->withoutOverlapping(15);
+Schedule::command('strategies:run --snapshot')->hourlyAt(53)->withoutOverlapping(15);
+
 // Fase R: `market:trader-rankings` (Birdeye's most profitable traders) is no longer scheduled. The 12-26 Nov 2026
 // test failed (dex/review/birdeye/hasil-26nov.md) and the owner stopped the daily recording on 26 Nov; the command
 // stays runnable from Admin, and the stored lists are kept.

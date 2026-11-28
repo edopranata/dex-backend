@@ -8,11 +8,14 @@ use App\Enums\OrderType;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OrderResource;
 use App\Models\Order;
+use App\Models\StrategyAccount;
+use App\Models\StrategyPosition;
 use App\Models\User;
 use App\Services\Analysis\AccountReport;
 use App\Services\Analysis\AccountSelection;
 use App\Services\Analysis\PerformanceReport;
 use App\Services\Analysis\StrategyVersion;
+use App\Services\Strategies\StrategyBroker;
 use App\Services\Trading\PositionCards;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,6 +57,78 @@ class ReportController extends Controller
     public function selection(AccountSelection $selection): JsonResponse
     {
         return response()->json($selection->build());
+    }
+
+    /**
+     * The strategy accounts from FutureSim with equity and positions (Akun strategi page).
+     */
+    public function strategyAccounts(StrategyBroker $broker): JsonResponse
+    {
+        $accounts = StrategyAccount::query()->orderBy('id')->get();
+        $config = config('market.strategy_accounts.strategies');
+
+        return response()->json([
+            'enabled' => (bool) config('market.strategy_accounts.enabled'),
+            'accounts' => $accounts->map(function (StrategyAccount $account) use ($broker, $config): array {
+                $equity = $broker->equity($account);
+                $closed = StrategyPosition::query()->where('strategy_account_id', $account->id)->where('status', StrategyPosition::CLOSED);
+
+                return [
+                    'key' => $account->key,
+                    'label' => $account->label,
+                    'kind' => $account->kind,
+                    'is_active' => $account->is_active && isset($config[$account->key]),
+                    'equity' => round($equity, 2),
+                    'return_pct' => round(($equity / $account->starting_balance - 1) * 100, 2),
+                    'cash' => round($account->cash, 2),
+                    'fees_paid' => round($account->fees_paid, 2),
+                    'open' => StrategyPosition::query()->where('strategy_account_id', $account->id)->whereIn('status', [StrategyPosition::OPEN, StrategyPosition::PENDING])->count(),
+                    'closed' => (clone $closed)->count(),
+                    'wins' => (clone $closed)->where('net_pnl', '>', 0)->count(),
+                    'net_pnl' => round((float) (clone $closed)->sum('net_pnl'), 2),
+                    'started_at' => $account->started_at->toIso8601String(),
+                ];
+            })->values(),
+        ]);
+    }
+
+    /**
+     * One strategy account's positions, waiting and open first, then the last that ended.
+     */
+    public function strategyPositions(string $key, StrategyBroker $broker): JsonResponse
+    {
+        $account = StrategyAccount::query()->where('key', $key)->firstOrFail();
+        $positions = StrategyPosition::query()->where('strategy_account_id', $account->id)->with('token:id,symbol,slug,chain_id,price_usd,price_updated_at')
+            ->orderByRaw("status in ('open', 'pending') desc")->latest('opened_at')->limit(150)->get();
+
+        return response()->json([
+            'key' => $account->key,
+            'label' => $account->label,
+            'positions' => $positions->map(function (StrategyPosition $position) use ($broker): array {
+                $price = $position->status === StrategyPosition::OPEN ? $broker->lastPrice($position->token, $position->entry_price) : null;
+                $risk = (float) ($position->state['initial_risk'] ?? 0);
+
+                return [
+                    'id' => $position->id,
+                    'token' => ['symbol' => $position->token->symbol, 'slug' => $position->token->slug, 'chain' => $position->token->chain_id],
+                    'status' => $position->status,
+                    'entry_price' => $position->entry_price,
+                    'stop' => $position->stop,
+                    'initial_stop' => $position->state['initial_stop'] ?? null,
+                    'take_profit' => $position->take_profit,
+                    'amount_usd' => round($position->cost_basis, 2),
+                    'price' => $price,
+                    'unrealized_usd' => $price === null ? null : round($position->remaining * ($price - $position->entry_price) - $position->costs, 2),
+                    'net_pnl' => round($position->net_pnl, 2),
+                    'r' => $position->status === StrategyPosition::CLOSED && $risk > 0 ? round($position->net_pnl / $risk, 2) : null,
+                    'adds' => $position->state['adds_done'] ?? null,
+                    'entry_reason' => $position->entry_reason,
+                    'exit_reason' => $position->exit_reason,
+                    'opened_at' => $position->opened_at->toIso8601String(),
+                    'closed_at' => $position->closed_at?->toIso8601String(),
+                ];
+            })->values(),
+        ]);
     }
 
     public function accountReport(Request $request, string $key, AccountReport $report): JsonResponse
