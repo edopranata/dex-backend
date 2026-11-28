@@ -78,7 +78,18 @@ test('a shadow never reaching its zone is not entered, and one whose outcome is 
     expect(app(ShadowSignalEvaluator::class)->run())->toBe(['evaluated' => 1, 'still_open' => 1])
         ->and($missed->refresh()->status)->toBe('not_entered')
         ->and($missed->net_r)->toBeNull()
-        ->and($running->refresh()->status)->toBe('pending');
+        ->and($running->refresh()->status)->toBe('pending')
+        ->and($running->entry_price)->toBe(1.0)
+        ->and($running->entered_at->format('H:i'))->toBe('11:15')
+        ->and($running->closed_at)->toBeNull();
+
+    // A first target reached while running is kept too; the outcome is still open.
+    candles15($other, '2026-11-12 11:30:00', [[1.04, 1.16, 1.03, 1.10]]);
+    app(ShadowSignalEvaluator::class)->run();
+
+    expect($running->refresh()->status)->toBe('pending')
+        ->and($running->max_tp_hit)->toBe(1)
+        ->and($running->entered_at->format('H:i'))->toBe('11:15');
 });
 
 test('a later shadow on the same token while the first is open counts as overlap, but not across rules', function () {
@@ -144,7 +155,10 @@ test('a v7_rule shadow still takes the stop reached before the downgrade, and wa
     expect(app(ShadowSignalEvaluator::class)->run())->toBe(['evaluated' => 1, 'still_open' => 1])
         ->and($stopped->refresh()->status)->toBe(ShadowSignal::STOP_LOSS)
         ->and($waiting->refresh()->status)->toBe(ShadowSignal::PENDING)
-        ->and($waiting->entry_price)->toBeNull();
+        // Running, so its entry is already shown.
+        ->and($waiting->entry_price)->toBe(0.99)
+        ->and($waiting->entered_at->format('H:i'))->toBe('10:05')
+        ->and($waiting->net_r)->toBeNull();
 });
 
 test('the backfill adds a v7_rule shadow for each Strong Buy under the score limit since v8, only once', function () {

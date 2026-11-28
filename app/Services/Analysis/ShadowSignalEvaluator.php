@@ -173,6 +173,12 @@ class ShadowSignalEvaluator
             return $this->settle($shadow, ShadowSignal::NOT_ENTERED, $entryUntil);
         }
 
+        // Entered and still running: the entry and the targets so far are kept, so the list shows it as running
+        // rather than waiting for an entry. The status stays pending until the outcome is known.
+        if ($entry !== null && ($shadow->entered_at?->timestamp !== $enteredAt || $shadow->max_tp_hit !== $tpHit)) {
+            $shadow->update(['entry_price' => $entry, 'entered_at' => now()->setTimestamp($enteredAt), 'max_tp_hit' => $tpHit]);
+        }
+
         return false;
     }
 
