@@ -115,6 +115,7 @@ Menu Token Baru (`/new-pairs`, `NewPairsView.vue`; API `GET /api/new-pairs`, `/a
 - Rule di `app/Services/Strategies/Rules`:
   - salinan versi long SpotSim (`ThreeLayer*`, `EngulfingFourHour`, `TtmSqueezeLong`, `Willy*`, `IchimokuLong`);
   - salinan FutureSim (`SwingFibonacciLong` sisi long, `MartingaleLong`, `ThreeLayerAnyMarket`);
+  - `MartingaleLong` memilih 10 token paling likuid di luar `martingale.exclude_chains` (Ethereum sejak 28 Nov, karena gasnya lebih besar dari target ronde);
   - akun tren long saja (`TrendLong`, `EthBtcTrendLong`, `EthTrendLong`) yang memegang cbBTC/WETH saat di atas SMA50.
 - Tidak dipasang: RSI cross SELL (short), sisi short akun tren, pantulan Fibonacci 5 menit (DEX tidak punya candle 5 menit), dan varian target volatilitas.
 - `Bars` membaca candle DEX. Candle 1h dan 4h dibangun dari 15m, dan volume dalam USD juga dipakai sebagai turnover. `Indicators` disalin dari SpotSim supaya hitungannya sama dengan sumber strategi.

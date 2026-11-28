@@ -12,7 +12,7 @@ use App\Services\Strategies\StrategyContext;
  * adds every step_pct below the first price with each add multiplier times the one before, up to `adds`, and sells
  * everything at take_profit_pct above the average; the next round opens at the next hour. No stop. A round's orders
  * together are 1/tokens of equity. DEX tokens have no fixed contract list, so a new round goes to the most liquid
- * eligible tokens, at most `tokens` rounds at a time. The runner places the adds (nextAdd) on 15m candles.
+ * eligible tokens outside exclude_chains (Ethereum: gas above the target), at most `tokens` rounds at a time. The runner places the adds (nextAdd) on 15m candles.
  */
 class MartingaleLong extends BaseStrategy
 {
@@ -23,6 +23,8 @@ class MartingaleLong extends BaseStrategy
 
     public function tokens(array $eligible, StrategyContext $context): array
     {
+        $excluded = (array) config('market.strategy_accounts.martingale.exclude_chains', []);
+        $eligible = array_values(array_filter($eligible, fn (Token $token): bool => ! in_array($token->chain_id, $excluded, true)));
         usort($eligible, fn (Token $a, Token $b): int => $b->liquidity_usd <=> $a->liquidity_usd);
 
         return array_slice($eligible, 0, (int) config('market.strategy_accounts.martingale.tokens'));

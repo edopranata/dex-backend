@@ -180,6 +180,21 @@ test('a martingale round adds 1.5 times more 2% lower and sells everything 1.5% 
         ->and($position->gross_pnl)->toBeGreaterThan(0);
 });
 
+test('martingale rounds skip Ethereum tokens, and the next most liquid token takes the slot', function () {
+    config([
+        'market.strategy_accounts.strategies' => ['martingale_long' => ['class' => MartingaleLong::class, 'label' => 'Martingale', 'kind' => 'experiment']],
+        'market.strategy_accounts.martingale' => ['tokens' => 2, 'step_pct' => 0.02, 'multiplier' => 1.5, 'adds' => 8, 'take_profit_pct' => 0.015, 'exclude_chains' => ['ethereum']],
+    ]);
+    $ethereum = Token::factory()->create(['chain_id' => 'ethereum', 'price_usd' => 1.0, 'price_updated_at' => now(), 'liquidity_usd' => 50_000_000]);
+    $base = Token::factory()->create(['chain_id' => 'base', 'price_usd' => 1.0, 'price_updated_at' => now(), 'liquidity_usd' => 1_000_000]);
+    hourCandles($ethereum);
+    hourCandles($base);
+
+    app(StrategyRunner::class)->run();
+
+    expect(StrategyPosition::query()->pluck('token_id')->sort()->values()->all())->toBe(collect([$this->token->id, $base->id])->sort()->values()->all());
+});
+
 /**
  * Bybit spot daily klines of BTCUSDT (newest first, as the API returns them): 50 days up to `lastDay` closing at
  * `closes`, plus the day still running.

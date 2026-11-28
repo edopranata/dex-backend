@@ -510,7 +510,8 @@ return [
         'stopless_share' => 0.1,
         'max_positions' => 10,
         'min_liquidity_usd' => 50_000,
-        'martingale' => ['tokens' => 10, 'step_pct' => 0.02, 'multiplier' => 1.5, 'adds' => 8, 'take_profit_pct' => 0.015],
+        // Without Ethereum (owner, 28 Nov): its gas of 0.25 USD per swap is more than the 1.5% target on a first order of ~13 USD.
+        'martingale' => ['tokens' => 10, 'step_pct' => 0.02, 'multiplier' => 1.5, 'adds' => 8, 'take_profit_pct' => 0.015, 'exclude_chains' => ['ethereum']],
         'strategies' => [
             'three_layer_tp2r' => ['class' => ThreeLayerTp2r::class, 'label' => 'Entry 3 lapis long, TP 2R, saat BTC > SMA50', 'kind' => 'main'],
             'three_layer_any' => ['class' => ThreeLayerAnyMarket::class, 'label' => 'Entry 3 lapis long, TP 2R, semua kondisi BTC', 'kind' => 'shadow'],
