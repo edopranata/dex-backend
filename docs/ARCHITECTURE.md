@@ -25,7 +25,7 @@ CoinGecko, RSS, AI provider, Telegram
 | `market:analyze` | Menit 11, 26, 41, 56 | Analisa, rekomendasi, sinyal, dan sinyal bayangan |
 | `market:evaluate` | Menit 7, 22, 37, 52 | Harga 1, 4, dan 24 jam setelah tiap analisa |
 | `market:discover` | Menit 12, 42 | Discovery dan pencatatan sumber |
-| `app:deploy-window` | Dipanggil `deploy.sh` sebelum build | Menunggu antrean `market-data` kosong, tidak ada task admin, dan tidak ada jadwal dalam 90 detik (maks 10 menit, lalu deploy tetap lanjut). Jendela yang selalu kosong: menit 27-29 dan 57-59. Tugas tiap 15 detik, tiap menit, dan tiap 5 menit tidak dihitung |
+| `app:deploy-window` | Dipanggil `deploy.sh` sebelum build | Menunggu tidak ada task admin dan tidak ada jadwal dalam 90 detik (maks 10 menit, lalu deploy tetap lanjut). Antrean `market-data` boleh berisi sejak 28 Nov: job menunggu di Redis selama horizon diganti. Celah jadwal per jam: menit 01-05, 13, 16-18, 27-28, 31-35, 43, 46-48, 57-58. Tugas tiap 15 detik, tiap menit, dan tiap 5 menit tidak dihitung |
 | `newpairs:track` | Tiap menit (di latar belakang) | Token Baru: pool muda dari discovery, snapshot DEX Screener semua pool yang dipantau, candle 5 menit, trade kertas, satu cek GoPlus. Lihat bagian Token Baru |
 | `newpairs:discover` | Menit 20, 50 | Token Baru: GeckoTerminal `new_pools` per jaringan (antrean `market-data`) |
 | `market:watchlist` | Tiap jam, menit 40 | Market otomatis: keluarkan atau ganti token |

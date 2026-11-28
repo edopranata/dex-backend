@@ -13,13 +13,17 @@ use Illuminate\Support\Facades\Queue;
 
 /**
  * Called by deploy.sh before it builds and replaces containers (16 Nov 2026, owner's request): waits for a quiet
- * moment, so a deploy never stops the queue worker in the middle of a GeckoTerminal cycle or the scheduler right
- * when a task is due. Quiet means the market-data queue is empty, no admin task is running, and no scheduled task
- * other than the frequent ones (every 15 s or 5 minutes) is due within the margin. Gives up after --wait seconds
- * so a deploy is delayed, never blocked.
+ * moment, so the scheduler is never replaced right when a task is due. Quiet means no admin task is running and no
+ * scheduled task other than the frequent ones (every 15 s or 5 minutes) is due within the margin. Gives up after
+ * --wait seconds so a deploy is delayed, never blocked.
+ *
+ * Since 28 Nov 2026 the market-data queue no longer has to be empty: GeckoTerminal's limit keeps it busy about 14 of
+ * every 15 minutes (measured 28 Nov: one quiet moment of 30-45 s in 16 minutes), so every deploy waited the full
+ * 10 minutes. Waiting jobs stay in Redis, and horizon is replaced last with a 90 s stop grace period, so the job
+ * running then finishes and the cycle resumes a few seconds later.
  */
 #[Signature('app:deploy-window {--wait=600 : Paling lama menunggu sekian detik} {--margin=90 : Tidak ada jadwal penting dalam sekian detik ke depan}')]
-#[Description('Tunggu celah sepi (antrean kosong, tidak ada jadwal dekat) sebelum deploy')]
+#[Description('Tunggu celah sepi (tidak ada task admin, tidak ada jadwal dekat) sebelum deploy')]
 class DeployWindowCommand extends Command
 {
     public function handle(Schedule $schedule): int
@@ -31,7 +35,8 @@ class DeployWindowCommand extends Command
             $reason = $this->busy($schedule, $margin);
 
             if ($reason === null) {
-                $this->components->info('Celah deploy: antrean kosong dan tidak ada jadwal dekat.');
+                $queued = Queue::size((string) config('market.market_data_queue'));
+                $this->components->info("Celah deploy: tidak ada jadwal dekat ({$queued} job di antrean market-data, lanjut setelah horizon diganti).");
 
                 return self::SUCCESS;
             }
@@ -51,12 +56,6 @@ class DeployWindowCommand extends Command
      */
     public function busy(Schedule $schedule, int $margin): ?string
     {
-        $queued = Queue::size((string) config('market.market_data_queue'));
-
-        if ($queued > 0) {
-            return "{$queued} job di antrean market-data";
-        }
-
         if (TaskRun::query()->where('status', 'running')->exists()) {
             return 'ada task admin berjalan';
         }

@@ -5,7 +5,7 @@ use App\Models\TaskRun;
 use App\Models\Token;
 use Illuminate\Support\Facades\Queue;
 
-test('a deploy waits for an empty market-data queue, no running task and no schedule due soon', function () {
+test('a deploy waits for no running task and no schedule due soon, and goes ahead while the market-data queue holds jobs', function () {
     Queue::fake();
     $this->travelTo('2026-11-16 10:28:00');   // the next task due is the :30 cycle, 2 minutes away
 
@@ -14,9 +14,10 @@ test('a deploy waits for an empty market-data queue, no running task and no sche
     $this->travelTo('2026-11-16 10:29:00');   // the :30 cycle is due within the 90 s margin
     $this->artisan('app:deploy-window', ['--wait' => 0])->assertFailed();
 
+    // GeckoTerminal keeps the queue busy most of every 15 minutes; waiting jobs stay in Redis during the deploy.
     $this->travelTo('2026-11-16 10:28:00');
     SyncTokenCandles::dispatch(Token::factory()->create(), []);
-    $this->artisan('app:deploy-window', ['--wait' => 0])->assertFailed();
+    $this->artisan('app:deploy-window', ['--wait' => 0])->assertSuccessful();
 });
 
 test('a running admin task also delays the deploy', function () {
