@@ -82,6 +82,6 @@ test('a losing account fails on its R, and a drawdown in the equity history keep
         ->and($row['drawdown_pct'])->toEqual(25)
         ->and($row['reasons'])->toHaveCount(3)
         ->and($row['reasons'][0])->toBe('Win rate 25% di bawah 50%')
-        ->and($row['reasons'][1])->toStartWith('Rata-rata -0.0')
+        ->and($row['reasons'][1])->toStartWith('Rata-rata −0,0')
         ->and($row['reasons'][2])->toBe('Drawdown 25% tidak di bawah 15%');
 });

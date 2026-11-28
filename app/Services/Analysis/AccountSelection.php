@@ -84,17 +84,17 @@ class AccountSelection
             $reasons[] = "Baru {$closed} dari {$limits['min_trades']} lot selesai di versi ini";
         } else {
             if ($current['win_rate'] < $limits['min_win_rate']) {
-                $reasons[] = "Win rate {$current['win_rate']}% di bawah {$limits['min_win_rate']}%";
+                $reasons[] = 'Win rate '.self::decimal($current['win_rate']).'% di bawah '.self::decimal($limits['min_win_rate']).'%';
             }
 
             if ($current['avg_r'] === null) {
                 $reasons[] = 'R per lot tidak bisa dihitung';
             } elseif ($current['avg_r'] < $limits['min_avg_r']) {
-                $reasons[] = sprintf('Rata-rata %+.2fR di bawah %+.2fR', $current['avg_r'], $limits['min_avg_r']);
+                $reasons[] = 'Rata-rata '.self::signedR($current['avg_r']).' di bawah '.self::signedR($limits['min_avg_r']);
             }
 
             if ($drawdown >= $limits['max_drawdown_pct']) {
-                $reasons[] = "Drawdown {$drawdown}% tidak di bawah {$limits['max_drawdown_pct']}%";
+                $reasons[] = 'Drawdown '.self::decimal($drawdown).'% tidak di bawah '.self::decimal($limits['max_drawdown_pct']).'%';
             }
 
             $status = $reasons === [] ? self::ACTIVE : self::FAILED;
@@ -159,5 +159,18 @@ class AccountSelection
             ->push(new EquitySnapshot(['equity_usd' => $portfolio['equity_usd']]));
 
         return PerformanceReport::maxDrawdownPct($snapshots, (float) $portfolio['starting_balance']) ?? 0.0;
+    }
+
+    /**
+     * A number the Indonesian way for the reasons: decimal comma, no trailing zeros (48,9; 80; 15,54).
+     */
+    private static function decimal(float $value): string
+    {
+        return rtrim(rtrim(number_format($value, 2, ',', '.'), '0'), ',');
+    }
+
+    private static function signedR(float $value): string
+    {
+        return ($value >= 0 ? '+' : '−').number_format(abs($value), 2, ',', '.').'R';
     }
 }
